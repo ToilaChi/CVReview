@@ -1,0 +1,32 @@
+spring:
+  application:
+    name: api-gateway
+  cloud:
+    gateway:
+      server:
+        webflux:
+          routes:
+            - id: auth-service
+              uri: http://localhost:8080
+              predicates:
+                - Path=/auth/**
+              filters:
+                -name: CircuitBreaker
+                args:
+                  name: authServiceCircuitBreaker
+                  fallbackUri: forward:/fallback
+
+server:
+  port: 8443
+  address: 0.0.0.0
+
+jwt:
+  secret: LJ8WPZjFNSfnoD5g+JZXSFiQaMY6gfNvBfR8w9HwT9OI0yEg2RfH2t9mpR7C2Ij7
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+
