@@ -33,13 +33,21 @@ public class AuthService {
     @Transactional
     public LoginResponse login(LoginRequest loginRequest) {
         try {
+            if(loginRequest.getPhone() == null || loginRequest.getPhone().trim().isEmpty()) {
+                return new LoginResponse(null, "Phone is required");
+            }
+
+            if(loginRequest.getPassword() == null || loginRequest.getPassword().trim().isEmpty()) {
+                return new LoginResponse(null, "Password is required");
+            }
+
             Users phone = userRepository.findByPhone(loginRequest.getPhone());
             if(phone == null) {
-                return new LoginResponse(null, "Số điện thoại sai. Vui lòng nhập lại!!!");
+                return new LoginResponse(null, "Phone is incorrect. Please enter again");
             }
 
             if(!isPasswordValid(phone, loginRequest.getPassword())) {
-                return new LoginResponse(null, "Mật khẩu không đúng!!!");
+                return new LoginResponse(null, "Password is incorrect");
             }
 
             if(isPasswordValid(phone, loginRequest.getPassword())) {
@@ -73,17 +81,17 @@ public class AuthService {
                         accountInfo
                 );
 
-                return new LoginResponse(dataInfo, "Đăng nhập thành công!!!");
+                return new LoginResponse(dataInfo, "Welcome to CV Review System");
             }
             else {
-                System.out.println("Lỗi mật khẩu!!!");
-                throw new RuntimeException("Lỗi mật khẩu!!!");
+                System.out.println("Error password");
+                throw new RuntimeException("Error password");
             }
         }
         catch (Exception e) {
-            System.err.println("Đăng nhập lỗi: " + e.getMessage());
+            System.err.println("Login failed: " + e.getMessage());
             e.printStackTrace();
-            throw new RuntimeException("Đăng nhập thất bại: " + e.getMessage(), e);
+            throw new RuntimeException("Login failed: " + e.getMessage(), e);
         }
     }
 
@@ -98,12 +106,12 @@ public class AuthService {
                     tokenBlackListService.addBlacklistToken(accessToken);
                 }
                 refreshTokenService.deleteByToken(refreshToken.getToken());
-                return new LogoutResponse("Logout thành công!!!");
+                return new LogoutResponse("Goodbye");
             }
-            return new LogoutResponse("Refresh token không tìm thấy");
+            return new LogoutResponse("Refresh token is not found");
         }
         catch (Exception e) {
-            return new LogoutResponse("Logout thất bại: " + e.getMessage());
+            return new LogoutResponse("Logout failed: " + e.getMessage());
         }
     }
 

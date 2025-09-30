@@ -56,7 +56,7 @@ public class JwtUtil {
     public String extractRole(String token) {
         Claims claims = extractAllClaims(token);
 
-        String role = claims.get("role", String.class);
+        String role = claims.get("Role", String.class);
         if (role == null || role.isEmpty()) {
             throw new JwtException("Token không hợp lệ: thiếu thông tin role");
         }
@@ -83,7 +83,7 @@ public class JwtUtil {
 
             // Check required claims
             if (claims.get("Phone", String.class) == null ||
-                    claims.get("role", String.class) == null) {
+                    claims.get("Role", String.class) == null) {
                 System.out.println("Missing required claims");
                 return false;
             }
