@@ -1,14 +1,16 @@
 package org.example.authservice.services;
 
 import jakarta.transaction.Transactional;
-import org.example.authservice.dto.LoginRequest;
-import org.example.authservice.dto.LoginResponse;
-import org.example.authservice.dto.LogoutRequest;
-import org.example.authservice.dto.LogoutResponse;
+import org.example.authservice.dto.request.LoginRequest;
+import org.example.authservice.dto.response.LoginData;
+import org.example.authservice.dto.request.LogoutRequest;
+import org.example.authservice.dto.response.LogoutData;
 import org.example.authservice.models.RefreshToken;
 import org.example.authservice.models.Users;
 import org.example.authservice.repository.UserRepository;
 import org.example.authservice.security.JwtUtil;
+import org.example.commonlibrary.ApiResponse;
+import org.example.commonlibrary.ErrorCode;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -31,23 +33,23 @@ public class AuthService {
     private RefreshTokenService refreshTokenService;
 
     @Transactional
-    public LoginResponse login(LoginRequest loginRequest) {
+    public ApiResponse<LoginData> login(LoginRequest loginRequest) {
         try {
-            if(loginRequest.getPhone() == null || loginRequest.getPhone().trim().isEmpty()) {
-                return new LoginResponse(null, "Phone is required");
+            if (loginRequest.getPhone() == null || loginRequest.getPhone().trim().isEmpty()) {
+                return new ApiResponse<>(ErrorCode.INVALID_CREDENTIALS.getCode(), "Phone is required", null);
             }
 
-            if(loginRequest.getPassword() == null || loginRequest.getPassword().trim().isEmpty()) {
-                return new LoginResponse(null, "Password is required");
+            if (loginRequest.getPassword() == null || loginRequest.getPassword().trim().isEmpty()) {
+                return new ApiResponse<>(ErrorCode.INVALID_CREDENTIALS.getCode(), "Password is required", null);
             }
 
             Users phone = userRepository.findByPhone(loginRequest.getPhone());
-            if(phone == null) {
-                return new LoginResponse(null, "Phone is incorrect. Please enter again");
+            if (phone == null) {
+                return new ApiResponse<>(ErrorCode.USER_NOT_FOUND.getCode(), "Phone is incorrect. Please enter again", null);
             }
 
-            if(!isPasswordValid(phone, loginRequest.getPassword())) {
-                return new LoginResponse(null, "Password is incorrect");
+            if (!isPasswordValid(phone, loginRequest.getPassword())) {
+                return new ApiResponse<>(ErrorCode.INVALID_CREDENTIALS.getCode(), "Password is incorrect", null);
             }
 
             if(isPasswordValid(phone, loginRequest.getPassword())) {
@@ -64,24 +66,24 @@ public class AuthService {
                 RefreshToken refreshToken = refreshTokenService.createRefreshToken(phone);
                 String refreshTokenString = refreshToken.getToken();
 
-                if(accessToken == null) {
+                if (accessToken == null) {
                     System.err.println("accessToken is null");
-                    throw new Exception("Failed to generate access token");
+                    return new ApiResponse<>(ErrorCode.UNAUTHORIZED.getCode(), "Failed to generate access token", null);
                 }
 
-                LoginResponse.AccountInfo accountInfo = new LoginResponse.AccountInfo(
+                LoginData.AccountInfo accountInfo = new LoginData.AccountInfo(
                         phone.getId(),
                         phone.getName(),
                         phone.getRole()
                 );
 
-                LoginResponse.DataInfo dataInfo = new LoginResponse.DataInfo(
+                LoginData loginData = new LoginData(
                         accessToken,
                         refreshTokenString,
                         accountInfo
                 );
 
-                return new LoginResponse(dataInfo, "Welcome to CV Review System");
+                return new ApiResponse<>(ErrorCode.SUCCESS.getCode(), "Welcome to CV Review System", loginData);
             }
             else {
                 System.out.println("Error password");
@@ -96,24 +98,26 @@ public class AuthService {
     }
 
     @Transactional
-    public LogoutResponse logout(LogoutRequest logoutRequest) {
+    public ApiResponse<LogoutData> logout(LogoutRequest logoutRequest) {
         try {
-            if(logoutRequest.getRefreshToken() != null) {
+            if (logoutRequest.getRefreshToken() != null) {
                 RefreshToken refreshToken = refreshTokenService.findByToken(logoutRequest.getRefreshToken());
 
                 String accessToken = logoutRequest.getAccessToken();
                 if (accessToken != null && !accessToken.isEmpty()) {
                     tokenBlackListService.addBlacklistToken(accessToken);
                 }
+
                 refreshTokenService.deleteByToken(refreshToken.getToken());
-                return new LogoutResponse("Goodbye");
+                return new ApiResponse<>(ErrorCode.SUCCESS.getCode(), "Logout successful", new LogoutData("Goodbye"));
             }
-            return new LogoutResponse("Refresh token is not found");
-        }
-        catch (Exception e) {
-            return new LogoutResponse("Logout failed: " + e.getMessage());
+
+            return new ApiResponse<>(400, "Refresh token is not found", new LogoutData("Invalid request"));
+        } catch (Exception e) {
+            return new ApiResponse<>(500, "Logout failed", new LogoutData(e.getMessage()));
         }
     }
+
 
     private boolean isPasswordValid(Users user, String rawPassword) {
         if (user.getPassword().startsWith("$2a$") ||

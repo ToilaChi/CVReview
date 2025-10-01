@@ -1,4 +1,4 @@
-package org.example.authservice.dto;
+package org.example.authservice.dto.response;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;
