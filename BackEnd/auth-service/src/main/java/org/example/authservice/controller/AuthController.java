@@ -1,12 +1,18 @@
 package org.example.authservice.controller;
 
-import org.example.authservice.dto.*;
+import org.example.authservice.dto.request.LoginRequest;
+import org.example.authservice.dto.request.LogoutRequest;
+import org.example.authservice.dto.request.RefreshTokenRequest;
+import org.example.authservice.dto.response.LoginData;
+import org.example.authservice.dto.response.LogoutData;
+import org.example.authservice.dto.response.RefreshTokenResponse;
 import org.example.authservice.models.RefreshToken;
 import org.example.authservice.models.Users;
 import org.example.authservice.security.JwtUtil;
 import org.example.authservice.services.AuthService;
 import org.example.authservice.services.RefreshTokenService;
-import org.example.authservice.utils.ApiResponse;
+import org.example.commonlibrary.ApiResponse;
+import org.example.commonlibrary.ErrorCode;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -27,30 +33,38 @@ public class AuthController {
     }
 
     @PostMapping("/login")
-    public LoginResponse login(@RequestBody LoginRequest loginRequest) {
+    public ApiResponse<LoginData> login(@RequestBody LoginRequest loginRequest) {
         return authService.login(loginRequest);
     }
 
     @PostMapping("/logout")
-    public LogoutResponse logout(@RequestBody LogoutRequest logoutRequest) {
+    public ApiResponse<LogoutData> logout(@RequestBody LogoutRequest logoutRequest) {
         return authService.logout(logoutRequest);
     }
 
     @PostMapping("/refresh-token")
-    public ResponseEntity<ApiResponse<RefreshTokenResponse>> refreshToken(@RequestBody RefreshTokenRequest refreshTokenRequest) {
+    public ResponseEntity<ApiResponse<RefreshTokenResponse>> refreshToken(
+            @RequestBody RefreshTokenRequest refreshTokenRequest) {
         try {
             RefreshToken refreshToken = refreshTokenService.findByToken(refreshTokenRequest.getRefreshToken());
             refreshTokenService.verifyExpiration(refreshToken);
 
-            //Create new accessToken
+            // Create new access token
             Users user = refreshToken.getUser();
             String newAccessToken = jwtUtil.generateAccessToken(user.getPhone(), user.getRole());
 
-            return ResponseEntity.ok(new ApiResponse<>
-                    ("", new RefreshTokenResponse(refreshToken.getToken(), newAccessToken)));
-        }
-        catch (Exception e) {
-            return ResponseEntity.badRequest().build();
+            RefreshTokenResponse responseData =
+                    new RefreshTokenResponse(refreshToken.getToken(), newAccessToken);
+
+            ApiResponse<RefreshTokenResponse> apiResponse =
+                    new ApiResponse<>(ErrorCode.SUCCESS.getCode(), "Token refreshed successfully", responseData);
+
+            return ResponseEntity.ok(apiResponse);
+        } catch (Exception e) {
+            ApiResponse<RefreshTokenResponse> errorResponse =
+                    new ApiResponse<>(400, "Failed to refresh token: " + e.getMessage(), null);
+
+            return ResponseEntity.badRequest().body(errorResponse);
         }
     }
 }
