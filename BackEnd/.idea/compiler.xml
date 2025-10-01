@@ -13,7 +13,7 @@
         </processorPath>
         <module name="common-library" />
       </profile>
-      <profile name="Annotation profile for api-gateway" enabled="true">
+      <profile name="Annotation profile for recruitment-service" enabled="true">
         <sourceOutputDir name="target/generated-sources/annotations" />
         <sourceTestOutputDir name="target/generated-test-sources/test-annotations" />
         <outputRelativeToContentRoot value="true" />
@@ -21,6 +21,7 @@
           <entry name="$MAVEN_REPOSITORY$/org/projectlombok/lombok/1.18.40/lombok-1.18.40.jar" />
         </processorPath>
         <module name="api-gateway" />
+        <module name="recruitment-service" />
         <module name="auth-service" />
       </profile>
     </annotationProcessing>
@@ -30,6 +31,7 @@
       <module name="api-gateway" options="-parameters" />
       <module name="auth-service" options="-parameters" />
       <module name="common-library" options="-parameters" />
+      <module name="recruitment-service" options="-parameters" />
     </option>
   </component>
 </project>

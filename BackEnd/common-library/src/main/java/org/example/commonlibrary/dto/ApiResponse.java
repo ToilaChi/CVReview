@@ -1,4 +1,4 @@
-package org.example.commonlibrary;
+package org.example.commonlibrary.dto;
 
 import lombok.*;
 
