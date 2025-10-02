@@ -23,6 +23,9 @@ public enum ErrorCode {
     // Position errors
     POSITION_NOT_FOUND(3001, "Position not found", HttpStatus.NOT_FOUND),
     DUPLICATE_POSITION(3002, "Position already exists", HttpStatus.CONFLICT),
+    FILE_NOT_FOUND(3003, "File not found", HttpStatus.NOT_FOUND),
+    FILE_PARSE_FAILED(3004, "Failed to parse JD", HttpStatus.BAD_REQUEST),
+    FAILED_SAVE_FILE(3005, "Failed to save file", HttpStatus.INTERNAL_SERVER_ERROR),
 
     // Review errors
     REVIEW_FAILED(4001, "AI review failed", HttpStatus.INTERNAL_SERVER_ERROR);

@@ -10,6 +10,7 @@ import org.example.recruitmentservice.models.Positions;
 import org.example.recruitmentservice.repository.PositionRepository;
 import org.springframework.stereotype.Service;
 
+import java.nio.file.Paths;
 import java.time.LocalDateTime;
 import java.util.Optional;
 
@@ -37,8 +38,13 @@ public class PositionService {
             throw new CustomException(ErrorCode.DUPLICATE_POSITION);
         }
 
-        // Upload file CloudFlare
-        String jdPath = storageService.uploadFile(positionsRequest.getFile(), "jd");
+        // Upload file
+        String jdPath = storageService.uploadFile(
+                positionsRequest.getFile(),
+                positionsRequest.getName(),
+                positionsRequest.getLanguage(),
+                positionsRequest.getLevel()
+        );
 
         // Parse file by LlamaParse
         String jdText;
