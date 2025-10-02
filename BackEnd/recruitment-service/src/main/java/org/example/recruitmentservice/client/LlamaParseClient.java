@@ -1,5 +1,7 @@
 package org.example.recruitmentservice.client;
 
+import org.example.commonlibrary.dto.ErrorCode;
+import org.example.commonlibrary.exception.CustomException;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.http.*;
@@ -24,11 +26,11 @@ public class LlamaParseClient {
             System.out.println("API Key: " + (apiKey != null ? "exists" : "null"));
             System.out.println("File path: " + filePath);
 
-            // Step 1: Upload file
+            // Upload file
             String jobId = uploadFile(filePath);
             System.out.println("Job ID: " + jobId);
 
-            // Step 2: Poll result
+            // Poll result
             String parsedText = pollResult(jobId);
             System.out.println("Parse completed!");
 
@@ -37,14 +39,14 @@ public class LlamaParseClient {
         } catch (Exception e) {
             System.err.println("Parse failed: " + e.getMessage());
             e.printStackTrace();
-            throw new RuntimeException("Failed to parse file", e);
+            throw new CustomException(ErrorCode.FILE_PARSE_FAILED);
         }
     }
 
     private String uploadFile(String filePath) {
         File file = new File(filePath);
         if (!file.exists()) {
-            throw new RuntimeException("File not found: " + filePath);
+            throw new CustomException(ErrorCode.FILE_NOT_FOUND);
         }
 
         HttpHeaders headers = new HttpHeaders();
@@ -62,6 +64,7 @@ public class LlamaParseClient {
                 Map.class
         );
 
+        assert response.getBody() != null;
         return (String) response.getBody().get("id");
     }
 
@@ -76,7 +79,7 @@ public class LlamaParseClient {
         // Poll mỗi 2s, tối đa 60s
         for (int i = 0; i < 30; i++) {
             try {
-                // Bước 1: Check status
+                // Check status
                 ResponseEntity<Map> statusResponse = restTemplate.exchange(
                         statusUrl,
                         HttpMethod.GET,
@@ -85,11 +88,12 @@ public class LlamaParseClient {
                 );
 
                 Map<String, Object> statusBody = statusResponse.getBody();
+                assert statusBody != null;
                 String status = (String) statusBody.get("status");
-                System.out.println("📡 Poll #" + (i + 1) + " - Status: " + status);
+                System.out.println("Poll #" + (i + 1) + " - Status: " + status);
 
                 if ("SUCCESS".equals(status)) {
-                    // Bước 2: Lấy kết quả
+                    // Get result
                     ResponseEntity<Map> resultResponse = restTemplate.exchange(
                             resultUrl,
                             HttpMethod.GET,
@@ -104,7 +108,7 @@ public class LlamaParseClient {
                         return markdown;
                     }
                 } else if ("ERROR".equals(status)) {
-                    throw new RuntimeException("Parse job failed with status ERROR");
+                    throw new CustomException(ErrorCode.FILE_PARSE_FAILED);
                 }
                 // Nếu PENDING hoặc PROCESSING → tiếp tục poll
 
@@ -115,6 +119,6 @@ public class LlamaParseClient {
             Thread.sleep(2000);
         }
 
-        throw new RuntimeException("Parse timeout after 60 seconds");
+        throw new CustomException(ErrorCode.FILE_PARSE_FAILED);
     }
 }

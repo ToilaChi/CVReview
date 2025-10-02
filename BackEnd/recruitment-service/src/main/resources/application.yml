@@ -38,7 +38,7 @@ r2:
 
 storage:
   local:
-    base-path: ./uploads
+    base-path: uploads
 
 #LLamaParse
 llama-parse:

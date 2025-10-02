@@ -1,5 +1,7 @@
 package org.example.recruitmentservice.services;
 
+import org.example.commonlibrary.dto.ErrorCode;
+import org.example.commonlibrary.exception.CustomException;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
@@ -70,29 +72,44 @@ public class StorageService {
     @Value("${storage.local.base-path}")
     private String basePath;
 
-    @Value("${server.port}")
-    private String serverPort;
-
-    public String uploadFile(MultipartFile file, String folder) {
+    public String uploadFile(MultipartFile file, String name, String language, String level) {
         try {
-            // Tạo thư mục nếu chưa có
-            Path folderPath = Paths.get(basePath, folder);
+//            // Normalize folder name
+//            String safeName = sanitize(name);
+//            String safeLanguage = sanitize(language);
+//            String safeLevel = sanitize(level);
+
+            // Build relative path: name/language/level
+            Path relativePath = Paths.get(
+                    name,
+                    language != null ? language : "",
+                    level != null ? level : ""
+            ).normalize();
+
+            // Build absolute folder path
+            Path folderPath = Paths.get(basePath, relativePath.toString()).normalize();
+
             Files.createDirectories(folderPath);
 
-            // Tạo tên file unique
+            // Create file name unique
             String fileName = UUID.randomUUID() + "-" + file.getOriginalFilename();
             Path filePath = folderPath.resolve(fileName);
 
-            // Lưu file
+            // Save file
             Files.copy(file.getInputStream(), filePath, StandardCopyOption.REPLACE_EXISTING);
 
             System.out.println("File saved to: " + filePath.toAbsolutePath());
 
-            // Trả về absolute path để LlamaParse đọc file local
-            return filePath.toAbsolutePath().toString();
+            return filePath.toAbsolutePath().toString().replace("\\", "/");
 
         } catch (IOException e) {
-            throw new RuntimeException("Failed to save file locally", e);
+            throw new CustomException(ErrorCode.FAILED_SAVE_FILE);
         }
     }
+
+//    // Helper method
+//    private String sanitize(String input) {
+//        if (input == null || input.trim().isEmpty()) return null;
+//        return input.replaceAll("[^a-zA-Z0-9]", "_");
+//    }
 }
