@@ -21,21 +21,21 @@ public class LlamaParseClient {
 
     public String parseFile(String filePath) {
         try {
-            System.out.println("🔑 API Key: " + (apiKey != null ? "✅ exists" : "❌ null"));
-            System.out.println("📄 File path: " + filePath);
+            System.out.println("API Key: " + (apiKey != null ? "exists" : "null"));
+            System.out.println("File path: " + filePath);
 
             // Step 1: Upload file
             String jobId = uploadFile(filePath);
-            System.out.println("📤 Job ID: " + jobId);
+            System.out.println("Job ID: " + jobId);
 
             // Step 2: Poll result
             String parsedText = pollResult(jobId);
-            System.out.println("✅ Parse completed!");
+            System.out.println("Parse completed!");
 
             return parsedText;
 
         } catch (Exception e) {
-            System.err.println("❌ Parse failed: " + e.getMessage());
+            System.err.println("Parse failed: " + e.getMessage());
             e.printStackTrace();
             throw new RuntimeException("Failed to parse file", e);
         }
@@ -70,45 +70,46 @@ public class LlamaParseClient {
         headers.set("Authorization", "Bearer " + apiKey);
         HttpEntity<Void> request = new HttpEntity<>(headers);
 
-        // Thử các endpoint khác nhau
-        String[] endpoints = {
-                "https://api.cloud.llamaindex.ai/api/parsing/job/" + jobId + "/result/markdown",
-                "https://api.cloud.llamaindex.ai/api/parsing/job/" + jobId + "/result",
-                "https://api.cloud.llamaindex.ai/api/parsing/job/" + jobId
-        };
+        String statusUrl = "https://api.cloud.llamaindex.ai/api/parsing/job/" + jobId;
+        String resultUrl = "https://api.cloud.llamaindex.ai/api/parsing/job/" + jobId + "/result/markdown";
 
         // Poll mỗi 2s, tối đa 60s
         for (int i = 0; i < 30; i++) {
-            for (String url : endpoints) {
-                try {
-                    ResponseEntity<Map> response = restTemplate.exchange(
-                            url,
+            try {
+                // Bước 1: Check status
+                ResponseEntity<Map> statusResponse = restTemplate.exchange(
+                        statusUrl,
+                        HttpMethod.GET,
+                        request,
+                        Map.class
+                );
+
+                Map<String, Object> statusBody = statusResponse.getBody();
+                String status = (String) statusBody.get("status");
+                System.out.println("📡 Poll #" + (i + 1) + " - Status: " + status);
+
+                if ("SUCCESS".equals(status)) {
+                    // Bước 2: Lấy kết quả
+                    ResponseEntity<Map> resultResponse = restTemplate.exchange(
+                            resultUrl,
                             HttpMethod.GET,
                             request,
                             Map.class
                     );
 
-                    Map<String, Object> body = response.getBody();
-                    System.out.println("📡 Response from " + url + ": " + body);
-
-                    String status = (String) body.get("status");
-
-                    if ("SUCCESS".equals(status)) {
-                        // Thử lấy text từ các field khác nhau
-                        if (body.containsKey("markdown")) {
-                            return (String) body.get("markdown");
-                        } else if (body.containsKey("text")) {
-                            return (String) body.get("text");
-                        } else if (body.containsKey("result")) {
-                            return body.get("result").toString();
-                        }
-                    } else if ("ERROR".equals(status)) {
-                        throw new RuntimeException("Parse job failed");
+                    Map<String, Object> resultBody = resultResponse.getBody();
+                    if (resultBody.containsKey("markdown")) {
+                        String markdown = (String) resultBody.get("markdown");
+                        System.out.println("Parse completed! Text length: " + markdown.length());
+                        return markdown;
                     }
-
-                } catch (Exception e) {
-                    System.out.println("⚠️ Failed endpoint: " + url + " - " + e.getMessage());
+                } else if ("ERROR".equals(status)) {
+                    throw new RuntimeException("Parse job failed with status ERROR");
                 }
+                // Nếu PENDING hoặc PROCESSING → tiếp tục poll
+
+            } catch (Exception e) {
+                System.err.println("⚠️ Poll error: " + e.getMessage());
             }
 
             Thread.sleep(2000);

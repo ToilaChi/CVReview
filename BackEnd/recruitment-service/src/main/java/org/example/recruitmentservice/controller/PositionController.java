@@ -4,9 +4,9 @@ import org.example.commonlibrary.dto.ApiResponse;
 import org.example.recruitmentservice.dto.request.PositionsRequest;
 import org.example.recruitmentservice.dto.response.PositionsResponse;
 import org.example.recruitmentservice.services.PositionService;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/positions")
@@ -17,8 +17,9 @@ public class PositionController {
         this.positionService = positionService;
     }
 
-    @PostMapping
-    public ApiResponse<PositionsResponse> createPosition(PositionsRequest positionsRequest) {
-        return positionService.createPosition(positionsRequest);
+    @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<ApiResponse<PositionsResponse>> createPosition(
+            @ModelAttribute PositionsRequest positionsRequest) {
+        return ResponseEntity.ok(positionService.createPosition(positionsRequest));
     }
 }
