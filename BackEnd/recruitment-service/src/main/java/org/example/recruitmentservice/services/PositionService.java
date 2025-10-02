@@ -11,6 +11,7 @@ import org.example.recruitmentservice.repository.PositionRepository;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.util.Optional;
 
 @Service
 public class PositionService {
@@ -26,11 +27,15 @@ public class PositionService {
 
     public ApiResponse<PositionsResponse> createPosition(PositionsRequest positionsRequest) {
         //Check duplicate
-        positionRepository.findByNameAndLanguageAndLevel(positionsRequest.getName(),
-                positionsRequest.getLanguage(), positionsRequest.getLevel())
-                .ifPresent(p -> {
-                    throw new CustomException(ErrorCode.DUPLICATE_POSITION);
-                });
+        Optional<Positions> existing = positionRepository.findByNameAndLanguageAndLevel(
+                positionsRequest.getName(),
+                positionsRequest.getLanguage(),
+                positionsRequest.getLevel()
+        );
+
+        if (existing.isPresent()) {
+            throw new CustomException(ErrorCode.DUPLICATE_POSITION);
+        }
 
         // Upload file CloudFlare
         String jdPath = storageService.uploadFile(positionsRequest.getFile(), "jd");
@@ -40,7 +45,7 @@ public class PositionService {
         try {
             jdText = llamaParseClient.parseFile(jdPath);
         } catch (Exception e) {
-            System.err.println("❌ Parse error details: " + e.getMessage());
+            System.err.println("Parse error details: " + e.getMessage());
             e.printStackTrace(); // In full stack trace
             throw new CustomException(ErrorCode.CV_PARSE_FAILED);
         }

@@ -86,7 +86,7 @@ public class StorageService {
             // Lưu file
             Files.copy(file.getInputStream(), filePath, StandardCopyOption.REPLACE_EXISTING);
 
-            System.out.println("✅ File saved to: " + filePath.toAbsolutePath());
+            System.out.println("File saved to: " + filePath.toAbsolutePath());
 
             // Trả về absolute path để LlamaParse đọc file local
             return filePath.toAbsolutePath().toString();
