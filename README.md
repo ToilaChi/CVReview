@@ -13,7 +13,7 @@ The project will be composed of the following microservices:
 - **Login**
   - **Name:** `/login` 
   - Endpoint: /auth/login
-  - Method: Post
+  - Method: POST
   - Description: Authenticates the user and returns an accessToken and refreshToken on success.
   - Request body:
     ```json
@@ -55,13 +55,12 @@ The project will be composed of the following microservices:
 - **Refresh Token**
 - **Name:** `/refresh-token` 
   - Endpoint: /auth/refresh-token
-  - Method: Post
+  - Method: POST
   - Description: Refresh access token when it expires using refresh token.
   - Header:
-    ```json
-        Content-type: application/json
-        Header: Bearer {{refreshToken}}
-    ```
+    | Key            | Value                     | Required |
+    |----------------|---------------------------|----------|
+    | Authorization  | Bearer <accessToken> | Yes      |
   - Request body:
     ```json
         {
@@ -83,7 +82,7 @@ The project will be composed of the following microservices:
 - **Create Position**
   - **Name:** `/positions` 
   - Endpoint: /positions
-  - Method: Post
+  - Method: POST
   - Description: Create position with attached JD.
   - Content-Type:  `multipart/form-data`
 
@@ -154,7 +153,7 @@ The project will be composed of the following microservices:
 - **Filter Position**
   - **Name:** `/positions` 
   - Endpoint: /positions
-  - Method: Get
+  - Method: GET
   - Description: Get position follow name, language, level.
   - Header:
     | Key            | Value                     | Required |
@@ -208,7 +207,7 @@ The project will be composed of the following microservices:
 - **Search Position**
   - **Name:** `/positions/search` 
   - Endpoint: /positions/search?keyword={{position}}
-  - Method: Get
+  - Method: GET
   - Description: Get position follow name, language, level.
   - Header:
     | Key            | Value                     | Required |
@@ -256,7 +255,110 @@ The project will be composed of the following microservices:
             "data": null,
             "timestamp": "2025-10-02T17:15:29.8681381"  
         }
+    ```
+- **Update Position**
+  - **Name:** `/positions` 
+  - Endpoint: /positions/{{positionId}}
+  - Method: PATCH
+  - Description: Update position.
+  - Header:
+    | Key            | Value                     | Required |
+    |----------------|---------------------------|----------|
+    | Authorization  | Bearer <accessToken> | Yes      |
+  - Query Parameters
+    | Key   | Type   | Required | Value |
+    |-------|--------|----------|---------|
+    | name  | Text | No      | Dev     |
+    | language  | Text | No      | Java     |
+    | level  | Text | No      | Intern     |
+    | file  | File | No      | abc.pdf     |
+  - Response:
+    - Success:
+    ```json
+    {
+        "statusCode": 200,
+        "message": "Updated successfully",
+        "data": null,
+        "timestamp": "2025-10-02T15:19:56.363315"
+    }
+    ```
+    - Fail:
+     - Position not found:
+    ```json
+        {
+            "statusCode": 3001,
+            "message": "Position not found",
+            "data": null,
+            "timestamp": "2025-10-02T17:15:29.8681381"  
+        }
     ``` 
+     - Duplicate position:
+    ```json
+        {
+            "statusCode": 3002,
+            "message": "Position already exists",
+            "data": null,
+            "timestamp": "2025-10-02T17:15:29.8681381"  
+        }
+    ``` 
+     - File parse fail
+    ```json
+        {
+            "statusCode": 3004,
+            "message": "Failed to parse JD",
+            "data": null,
+            "timestamp": "2025-10-02T17:15:29.8681381"  
+        }
+    ``` 
+     - Fail save file
+    ```json
+        {
+            "statusCode": 3005,
+            "message": "Failed to save file",
+            "data": null,
+            "timestamp": "2025-10-02T17:15:29.8681381"  
+        }
+    ``` 
+- **Delete Position**
+  - **Name:** `/positions` 
+  - Endpoint: /positions/{{positionId}}
+  - Method: DELETE
+  - Description: Delete position.
+  - Content-Type:  `multipart/form-data`
+  - Header:
+    | Key            | Value                     | Required |
+    |----------------|---------------------------|----------|
+    | Authorization  | Bearer <accessToken> | Yes      |
+  - Response:
+    - Success: 
+    ```json
+        {
+            "statusCode": 200,
+            "message": "Deleted successfully",
+            "data": null,
+            "timestamp": "2025-10-06T15:03:04.0501693"
+        }
+    ```
+    - Fail:
+     - Position not found:
+    ```json
+        {
+            "statusCode": 3001,
+            "message": "Position not found",
+            "data": null,
+            "timestamp": "2025-10-02T17:15:29.8681381"  
+        }
+    ``` 
+     - Fail save file
+    ```json
+        {
+            "statusCode": 3005,
+            "message": "Failed to save file",
+            "data": null,
+            "timestamp": "2025-10-02T17:15:29.8681381"  
+        }
+    ``` 
+    
     
 
  
