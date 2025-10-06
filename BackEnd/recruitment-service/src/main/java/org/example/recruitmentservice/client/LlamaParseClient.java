@@ -113,7 +113,10 @@ public class LlamaParseClient {
                 // Nếu PENDING hoặc PROCESSING → tiếp tục poll
 
             } catch (Exception e) {
-                System.err.println("⚠️ Poll error: " + e.getMessage());
+                System.err.println("Poll error: " + e.getMessage());
+                if (e instanceof IllegalArgumentException || e instanceof NullPointerException) {
+                    throw new CustomException(ErrorCode.FILE_PARSE_FAILED);
+                }
             }
 
             Thread.sleep(2000);

@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Optional;
 
 public interface PositionRepository extends JpaRepository<Positions, Integer> {
+    Positions findById(int positionId);
     Optional<Positions> findByNameAndLanguageAndLevel(String name, String language, String level);
     @Query("SELECT p FROM Positions p " +
             "WHERE (:name IS NULL OR p.name = :name) " +

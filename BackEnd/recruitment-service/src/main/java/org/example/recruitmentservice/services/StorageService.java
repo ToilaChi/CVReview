@@ -5,66 +5,13 @@ import org.example.commonlibrary.exception.CustomException;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
-import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
-import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
-import software.amazon.awssdk.core.sync.RequestBody;
-import software.amazon.awssdk.regions.Region;
-import software.amazon.awssdk.services.s3.S3Client;
-import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 
 import java.io.IOException;
-import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.util.UUID;
-
-//@Service
-//public class StorageService {
-//
-//    private final S3Client s3Client;
-//
-//    @Value("${r2.bucket-name}")
-//    private String bucketName;
-//
-//    @Value("${r2.public-url}")
-//    private String publicUrl; // https://<accountid>.r2.cloudflarestorage.com/<bucket>
-//
-//    public StorageService(
-//            @Value("${r2.account-id}") String accountId,
-//            @Value("${r2.access-key}") String accessKey,
-//            @Value("${r2.secret-key}") String secretKey,
-//            @Value("${r2.region}") String region
-//    ) {
-//        AwsBasicCredentials credentials = AwsBasicCredentials.create(accessKey, secretKey);
-//        this.s3Client = S3Client.builder()
-//                .region(Region.of(region))
-//                .endpointOverride(URI.create("https://" + accountId + ".r2.cloudflarestorage.com"))
-//                .credentialsProvider(StaticCredentialsProvider.create(credentials))
-//                .build();
-//    }
-//
-//    public String uploadFile(MultipartFile file, String folder) {
-//        try {
-//            String key = folder + "/" + UUID.randomUUID() + "-" + file.getOriginalFilename();
-//
-//            PutObjectRequest putRequest = PutObjectRequest.builder()
-//                    .bucket(bucketName)
-//                    .key(key)
-//                    .contentType(file.getContentType())
-//                    .build();
-//
-//            s3Client.putObject(putRequest, RequestBody.fromBytes(file.getBytes()));
-//
-//            // Trả về public URL
-//            return publicUrl + "/" + key;
-//
-//        } catch (IOException e) {
-//            throw new RuntimeException("Failed to upload file to R2", e);
-//        }
-//    }
-//}
 
 @Service
 public class StorageService {
@@ -74,12 +21,10 @@ public class StorageService {
 
     public String uploadFile(MultipartFile file, String name, String language, String level) {
         try {
-//            // Normalize folder name
-//            String safeName = sanitize(name);
-//            String safeLanguage = sanitize(language);
-//            String safeLevel = sanitize(level);
+            if (file == null || file.isEmpty()) {
+                throw new CustomException(ErrorCode.FAILED_SAVE_FILE);
+            }
 
-            // Build relative path: name/language/level
             Path relativePath = Paths.get(
                     name,
                     language != null ? language : "",
@@ -88,7 +33,6 @@ public class StorageService {
 
             // Build absolute folder path
             Path folderPath = Paths.get(basePath, relativePath.toString()).normalize();
-
             Files.createDirectories(folderPath);
 
             // Create file name unique
@@ -98,18 +42,49 @@ public class StorageService {
             // Save file
             Files.copy(file.getInputStream(), filePath, StandardCopyOption.REPLACE_EXISTING);
 
-            System.out.println("File saved to: " + filePath.toAbsolutePath());
-
-            return filePath.toAbsolutePath().toString().replace("\\", "/");
-
+            return relativePath.resolve(fileName).toString().replace("\\", "/");
         } catch (IOException e) {
+            System.err.println("IOException: " + e.getMessage());
+            e.printStackTrace();
+            throw new CustomException(ErrorCode.FAILED_SAVE_FILE);
+        } catch (Exception e) {
+            System.err.println("Exception: " + e.getMessage());
+            e.printStackTrace();
             throw new CustomException(ErrorCode.FAILED_SAVE_FILE);
         }
     }
 
-//    // Helper method
-//    private String sanitize(String input) {
-//        if (input == null || input.trim().isEmpty()) return null;
-//        return input.replaceAll("[^a-zA-Z0-9]", "_");
-//    }
+    // Get absolute path from relative path
+    public String getAbsolutePath(String relativePath) {
+        if (relativePath == null || relativePath.isEmpty()) {
+            throw new CustomException(ErrorCode.FILE_NOT_FOUND);
+        }
+        return Paths.get(basePath, relativePath).toAbsolutePath().toString();
+    }
+
+    public void deleteFile(String filePath) {
+        try {
+            if (filePath == null || filePath.isEmpty()) {
+                throw new CustomException(ErrorCode.FILE_NOT_FOUND);
+            }
+
+            Path pathToDelete;
+
+            if (filePath.matches("^[A-Za-z]:.*") || filePath.startsWith("/") || Paths.get(filePath).isAbsolute()) {
+                pathToDelete = Paths.get(filePath).normalize();
+            } else {
+                pathToDelete = Paths.get(basePath, filePath).normalize();
+            }
+
+            if (Files.exists(pathToDelete)) {
+                Files.delete(pathToDelete);
+                System.out.println("Deleted old JD file: " + pathToDelete);
+            } else {
+                System.err.println("File not found for deletion: " + pathToDelete);
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+            throw new CustomException(ErrorCode.FILE_DELETE_FAILED);
+        }
+    }
 }

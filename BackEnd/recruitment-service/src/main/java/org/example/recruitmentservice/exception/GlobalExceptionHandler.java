@@ -24,6 +24,8 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponse<Object>> handleGenericException(Exception ex) {
+        ex.printStackTrace();
+
         ApiResponse<Object> response = new ApiResponse<>(
                 5000,
                 "Internal server error",
