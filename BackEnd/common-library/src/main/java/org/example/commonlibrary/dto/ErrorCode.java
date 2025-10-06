@@ -20,6 +20,7 @@ public enum ErrorCode {
     CV_PARSE_FAILED(2002, "Failed to parse CV", HttpStatus.BAD_REQUEST),
     DUPLICATE_CV(2003, "Duplicate CV upload", HttpStatus.CONFLICT),
 
+
     // Position errors
     POSITION_NOT_FOUND(3001, "Position not found", HttpStatus.NOT_FOUND),
     DUPLICATE_POSITION(3002, "Position already exists", HttpStatus.CONFLICT),
@@ -28,7 +29,10 @@ public enum ErrorCode {
     FAILED_SAVE_FILE(3005, "Failed to save file", HttpStatus.INTERNAL_SERVER_ERROR),
 
     // Review errors
-    REVIEW_FAILED(4001, "AI review failed", HttpStatus.INTERNAL_SERVER_ERROR);
+    REVIEW_FAILED(4001, "AI review failed", HttpStatus.INTERNAL_SERVER_ERROR),
+
+    // File errors
+    FILE_DELETE_FAILED(5001, "File can not delete", HttpStatus.INTERNAL_SERVER_ERROR);
 
     private final int code;
     private final String message;
