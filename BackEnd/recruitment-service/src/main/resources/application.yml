@@ -3,6 +3,7 @@ spring:
     name: recruitment-service
   config:
     import: optional:classpath:.env[.properties]
+  # Database
   datasource:
     url: "${DB_URL}"
     username: "${DB_USERNAME}"
@@ -27,7 +28,15 @@ spring:
     generate-ddl: true
     defer-datasource-initialization: true
 
-#CloudFlare
+  # RabbitMQ
+  rabbitmq:
+    host: localhost
+    port: "${RABBITMQ_PORT}"
+    username: "${RABBITMQ_USERNAME}"
+    password: "${RABBITMQ_PASSWORD}"
+
+
+# CloudFlare
 r2:
   account-id: ${R2_ACCOUNT_ID}
   access-key: ${R2_ACCESS_KEY}
@@ -36,11 +45,12 @@ r2:
   region: auto
   public-url: https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com/${R2_BUCKET_NAME}
 
+# Local storage
 storage:
   local:
     base-path: uploads
 
-#LLamaParse
+# LLamaParse
 llama-parse:
   api-key: ${LLAMAPARSE_API_KEY}
 

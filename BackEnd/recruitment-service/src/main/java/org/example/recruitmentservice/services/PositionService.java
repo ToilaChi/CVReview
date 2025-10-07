@@ -13,9 +13,6 @@ import org.example.recruitmentservice.repository.PositionRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.io.File;
-import java.io.IOException;
-import java.nio.file.Paths;
 import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.List;
@@ -42,7 +39,7 @@ public class PositionService {
         }
 
         // Upload file
-        String jdPath = storageService.uploadFile(
+        String jdPath = storageService.uploadJD(
                 positionsRequest.getFile(),
                 positionsRequest.getName(),
                 positionsRequest.getLanguage(),
@@ -53,7 +50,7 @@ public class PositionService {
         String jdText;
         try {
             String absolutePath = storageService.getAbsolutePath(jdPath);
-            jdText = llamaParseClient.parseFile(absolutePath);
+            jdText = llamaParseClient.parseJD(absolutePath);
         } catch (Exception e) {
             System.err.println("Parse error details: " + e.getMessage());
             e.printStackTrace(); // In full stack trace
@@ -162,7 +159,7 @@ public class PositionService {
         boolean isJDUpdated = (file != null && !file.isEmpty());
 
         if(isJDUpdated) {
-            String newFilePath = storageService.uploadFile(
+            String newFilePath = storageService.uploadJD(
                     file,
                     finalName,
                     finalLang,
@@ -172,7 +169,7 @@ public class PositionService {
             // Parse file by LlamaParse
             try {
                 String absolutePath = storageService.getAbsolutePath(newFilePath);
-                String jdText = llamaParseClient.parseFile(absolutePath);
+                String jdText = llamaParseClient.parseJD(absolutePath);
 
                 if(jdText == null || jdText.isEmpty()) {
                     storageService.deleteFile(newFilePath);
