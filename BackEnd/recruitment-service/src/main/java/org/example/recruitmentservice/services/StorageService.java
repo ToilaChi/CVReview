@@ -7,6 +7,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -19,7 +20,7 @@ public class StorageService {
     @Value("${storage.local.base-path}")
     private String basePath;
 
-    public String uploadFile(MultipartFile file, String name, String language, String level) {
+    public String uploadJD(MultipartFile file, String name, String language, String level) {
         try {
             if (file == null || file.isEmpty()) {
                 throw new CustomException(ErrorCode.FAILED_SAVE_FILE);
@@ -45,16 +46,54 @@ public class StorageService {
             return relativePath.resolve(fileName).toString().replace("\\", "/");
         } catch (IOException e) {
             System.err.println("IOException: " + e.getMessage());
-            e.printStackTrace();
             throw new CustomException(ErrorCode.FAILED_SAVE_FILE);
-        } catch (Exception e) {
-            System.err.println("Exception: " + e.getMessage());
+        }
+    }
+
+    public void saveFile(MultipartFile file, String relativePath) {
+        System.out.println("\n--- StorageService.saveFile() ---");
+        System.out.println("Input relativePath: " + relativePath);
+
+        try {
+            if (file == null || file.isEmpty()) {
+                System.err.println("File is null or empty");
+                throw new CustomException(ErrorCode.FAILED_SAVE_FILE);
+            }
+
+            Path normalizedPath = Paths.get(relativePath).normalize();
+            System.out.println("Normalized path: " + normalizedPath);
+
+            if (normalizedPath.isAbsolute() || normalizedPath.startsWith("..")) {
+                System.err.println("Path traversal detected!");
+                throw new CustomException(ErrorCode.FAILED_SAVE_FILE);
+            }
+
+            Path target = Paths.get(basePath, normalizedPath.toString()).normalize();
+            System.out.println("Target path: " + target);
+            System.out.println("Base path: " + basePath);
+
+            if (!target.startsWith(Paths.get(basePath).normalize())) {
+                System.err.println("Target outside base path!");
+                throw new CustomException(ErrorCode.FAILED_SAVE_FILE);
+            }
+
+            Path parent = target.getParent();
+            if (parent != null) {
+                Files.createDirectories(parent);
+                System.out.println("Directory created: " + parent);
+            }
+
+            try (InputStream in = file.getInputStream()) {
+                Files.copy(in, target, StandardCopyOption.REPLACE_EXISTING);
+                System.out.println("File copied successfully!");
+            }
+        } catch (IOException e) {
+            System.err.println("IOException: " + e.getMessage());
             e.printStackTrace();
             throw new CustomException(ErrorCode.FAILED_SAVE_FILE);
         }
     }
 
-    // Get absolute path from relative path
     public String getAbsolutePath(String relativePath) {
         if (relativePath == null || relativePath.isEmpty()) {
             throw new CustomException(ErrorCode.FILE_NOT_FOUND);

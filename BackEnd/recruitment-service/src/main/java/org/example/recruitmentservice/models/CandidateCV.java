@@ -20,19 +20,29 @@ public class CandidateCV {
     @JoinColumn(name = "position_id", nullable = false)
     private Positions position;
 
-    @Column(nullable = false)
+    @Column
     private String email;
 
-    @Column(nullable = false)
+    @Column
     private String name;
 
     @Column(nullable = false)
     private String cvPath;
 
     @Lob
-    @Column(columnDefinition = "TEXT", nullable = false)
+    @Column(columnDefinition = "TEXT")
     private String cvContent;
 
     @Column(nullable = false)
     private LocalDateTime updatedAt;
+
+    @Column
+    @Enumerated(EnumType.STRING)
+    private CVStatus cvStatus;
+
+    @Column
+    private LocalDateTime parsedAt;
+
+    @Column
+    private LocalDateTime scoredAt;
 }
