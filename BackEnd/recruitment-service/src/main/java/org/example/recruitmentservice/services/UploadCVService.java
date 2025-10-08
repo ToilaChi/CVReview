@@ -44,7 +44,8 @@ public class UploadCVService {
             String baseDir = jdPath.substring(0, jdPath.lastIndexOf("/"));
             String cvDir = baseDir + "/CV";
 
-            String fileName = UUID.randomUUID() + "-" + file.getOriginalFilename();
+            String fileName = UUID.randomUUID() + "-" +
+                    file.getOriginalFilename();
             String filePath = cvDir + "/" + fileName;
 
             storageService.saveFile(file, filePath);
@@ -88,14 +89,21 @@ public class UploadCVService {
     public ApiResponse<List<CandidateCVResponse>> uploadMultipleCVs(
             List<MultipartFile> files,
             Integer positionId) {
+        Positions position = positionRepository.findById(positionId)
+                .orElseThrow(() -> new CustomException(ErrorCode.POSITION_NOT_FOUND));
+
         List<CandidateCVResponse> responses = new ArrayList<>();
-        List<String> errors = new ArrayList<>();
 
         for (int i = 0; i < files.size(); i++) {
             MultipartFile file = files.get(i);
             System.out.println("\n--- Processing file " + (i+1) + "/" + files.size() + " ---");
 
             try {
+                if (file == null || file.isEmpty()) {
+                System.err.println("File is null or empty!");
+                throw new CustomException(ErrorCode.FILE_NOT_FOUND);
+                }
+
                 // Call back existing CV upload method
                 ApiResponse<CandidateCVResponse> result = uploadSingleCV(file, positionId);
                 responses.add(result.getData());
@@ -103,7 +111,7 @@ public class UploadCVService {
 
             } catch (Exception e) {
                 System.err.println("File " + (i+1) + " failed: " + e.getMessage());
-                errors.add(file.getOriginalFilename() + ": " + e.getMessage());
+                throw new CustomException(ErrorCode.FAILED_SAVE_FILE);
             }
         }
 
@@ -112,10 +120,6 @@ public class UploadCVService {
                 responses.size(),
                 files.size()
         );
-
-        if (!errors.isEmpty()) {
-            message += ". Errors: " + String.join("; ", errors);
-        }
 
         return new ApiResponse<>(ErrorCode.SUCCESS.getCode(), message, responses);
     }

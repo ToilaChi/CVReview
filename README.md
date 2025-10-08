@@ -358,6 +358,74 @@ The project will be composed of the following microservices:
             "timestamp": "2025-10-02T17:15:29.8681381"  
         }
     ``` 
+- **Upload CV**
+  - **Name:** `/cv` 
+  - Endpoint: /cv/upload
+  - Method: POST
+  - Description: Upload CV to store in database
+  - Content-Type:  `multipart/form-data`
+  - Header:
+    | Key            | Value                     | Required |
+    |----------------|---------------------------|----------|
+    | Authorization  | Bearer <accessToken> | Yes      |
+  - Response:
+    - Success: 
+    ```json
+        {
+            "statusCode": 200,
+            "message": "Uploaded 9/9 CVs successfully",
+            "data": [
+            {
+                "cvId": 23,
+                "positionId": 11,
+                "email": null,
+                "name": null,
+                "fileName": "1c74f5c7-9917-4da7-bf20-3744b4623e87-CV_Pham_Intern_Developer.pdf",
+                "filePath": "BackEnd/Java/Senior/CV/1c74f5c7-9917-4da7-bf20-3744b4623e87-CV_Pham_Intern_Developer.pdf",
+                "status": "UPLOADED",
+                "updatedAt": "2025-10-08T14:30:09.6209691",
+                "parsedAt": null
+            },
+            .....
+            {
+                "cvId": 31,
+                "positionId": 11,
+                "email": null,
+                "name": null,
+                "fileName": "ca96d33c-54f1-4105-9d4c-a0a5a4324e2c-ReviewCV.drawio.pdf",
+                "filePath": "BackEnd/Java/Senior/CV/ca96d33c-54f1-4105-9d4c-a0a5a4324e2c-ReviewCV.drawio.pdf",
+                "status": "UPLOADED",
+                "updatedAt": "2025-10-08T14:30:12.7436079",
+                "parsedAt": null
+            }
+        ],
+            "timestamp": "2025-10-08T14:30:12.8960694"
+        }
+    ```
+    - Fail:
+     - Position not found:
+    ```json
+        {
+            "statusCode": 3001,
+            "message": "Position not found",
+            "data": null,
+            "timestamp": "2025-10-02T17:15:29.8681381"  
+        }
+    ``` 
+     - Fail save file
+    ```json
+        {
+            "statusCode": 3005,
+            "message": "Failed to save file",
+            "data": null,
+            "timestamp": "2025-10-02T17:15:29.8681381"  
+        }
+    ``` 
+    
+    
+
+ 
+   
     
     
 
