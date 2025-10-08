@@ -13,6 +13,8 @@ import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.http.*;
+import org.springframework.retry.annotation.Backoff;
+import org.springframework.retry.annotation.Retryable;
 import org.springframework.stereotype.Component;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
@@ -35,7 +37,6 @@ public class LlamaParseClient {
     private final CandidateCVRepository candidateCVRepository;
     private final StorageService storageService;
 
-    // LlamaParse for JD
     public String parseJD(String filePath) {
         try {
             System.out.println("API Key: " + (apiKey != null ? "exists" : "null"));
@@ -58,13 +59,14 @@ public class LlamaParseClient {
         }
     }
 
-    @RabbitListener(queues = RabbitMQConfig.CV_UPLOAD_QUEUE)
+    @RabbitListener(queues = RabbitMQConfig.CV_UPLOAD_QUEUE, containerFactory = "rabbitListenerContainerFactory")
+    @Retryable(
+            value = {RuntimeException.class},
+            maxAttempts = 3,
+            backoff = @Backoff(delay = 2000, multiplier = 2, maxDelay = 10000),
+            exclude = {IllegalArgumentException.class}
+    )
     public void parseCV(CVUploadEvent event) {
-        System.out.println("\n========== RABBITMQ RECEIVED ==========");
-        System.out.println("CV ID: " + event.getCvId());
-        System.out.println("File Path: " + event.getFilePath());
-        System.out.println("Position ID: " + event.getPositionId());
-
         int cvId = event.getCvId();
 
         CandidateCV cv = candidateCVRepository.findById(cvId)

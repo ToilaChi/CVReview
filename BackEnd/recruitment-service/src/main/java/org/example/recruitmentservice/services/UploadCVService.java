@@ -25,16 +25,11 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class UploadCVService {
     private final RabbitTemplate rabbitTemplate;
-    private final CandidateCVRepository cvRepository;
+    private final CandidateCVRepository candidateCVRepository;
     private final StorageService storageService;
     private final PositionRepository positionRepository;
 
-    public ApiResponse<CandidateCVResponse> uploadCV(MultipartFile file, Integer positionId) {
-        System.out.println("\n========== START UPLOAD CV ==========");
-        System.out.println("File: " + (file != null ? file.getOriginalFilename() : "NULL"));
-        System.out.println("Size: " + (file != null ? file.getSize() + " bytes" : "NULL"));
-        System.out.println("Position ID: " + positionId);
-
+    public ApiResponse<CandidateCVResponse> uploadSingleCV(MultipartFile file, Integer positionId) {
         try {
             if (file == null || file.isEmpty()) {
                 System.err.println("File is null or empty!");
@@ -43,38 +38,26 @@ public class UploadCVService {
 
             Positions position = positionRepository.findById(positionId)
                     .orElseThrow(() -> new CustomException(ErrorCode.POSITION_NOT_FOUND));
-            System.out.println("Position found: " + position.getName());
 
             String jdPath = position.getJdPath();
-            System.out.println("JD Path: " + jdPath);
 
             String baseDir = jdPath.substring(0, jdPath.lastIndexOf("/"));
             String cvDir = baseDir + "/CV";
-            System.out.println("CV Dir: " + cvDir);
 
-            String fileName = UUID.randomUUID() + "-Candidate_CV.pdf";
+            String fileName = UUID.randomUUID() + "-" + file.getOriginalFilename();
             String filePath = cvDir + "/" + fileName;
-            System.out.println("Saving to: " + filePath);
 
             storageService.saveFile(file, filePath);
-            System.out.println("File saved successfully!");
 
-            System.out.println("Creating CandidateCV entity...");
             CandidateCV cv = new CandidateCV();
             cv.setPosition(position);
             cv.setCvPath(filePath);
             cv.setCvStatus(CVStatus.UPLOADED);
             cv.setUpdatedAt(LocalDateTime.now());
 
-            System.out.println("CV Content: " + cv.getCvContent());
+            candidateCVRepository.save(cv);
 
-            System.out.println("Saving to database...");
-            cvRepository.save(cv);
-            System.out.println("Saved to DB - CV ID: " + cv.getId());
-
-            System.out.println("Publishing event to RabbitMQ...");
             CVUploadEvent event = new CVUploadEvent(cv.getId(), filePath, positionId);
-            System.out.println("Event: cvId=" + event.getCvId() + ", path=" + event.getFilePath());
 
             rabbitTemplate.convertAndSend(
                     RabbitMQConfig.CV_UPLOAD_QUEUE,
@@ -91,7 +74,6 @@ public class UploadCVService {
                     .updatedAt(cv.getUpdatedAt())
                     .build();
 
-            System.out.println("========== UPLOAD SUCCESS ==========\n");
             return new ApiResponse<>(200, "CV uploaded successfully", response);
         } catch (CustomException e) {
             System.err.println("CustomException: " + e.getMessage());
@@ -106,11 +88,6 @@ public class UploadCVService {
     public ApiResponse<List<CandidateCVResponse>> uploadMultipleCVs(
             List<MultipartFile> files,
             Integer positionId) {
-
-        System.out.println("\n========== START BULK UPLOAD ==========");
-        System.out.println("Number of files: " + files.size());
-        System.out.println("Position ID: " + positionId);
-
         List<CandidateCVResponse> responses = new ArrayList<>();
         List<String> errors = new ArrayList<>();
 
@@ -119,8 +96,8 @@ public class UploadCVService {
             System.out.println("\n--- Processing file " + (i+1) + "/" + files.size() + " ---");
 
             try {
-                // Gọi lại method uploadCV đã có
-                ApiResponse<CandidateCVResponse> result = uploadCV(file, positionId);
+                // Call back existing CV upload method
+                ApiResponse<CandidateCVResponse> result = uploadSingleCV(file, positionId);
                 responses.add(result.getData());
                 System.out.println("File " + (i+1) + " uploaded successfully");
 
@@ -129,10 +106,6 @@ public class UploadCVService {
                 errors.add(file.getOriginalFilename() + ": " + e.getMessage());
             }
         }
-
-        System.out.println("\n========== BULK UPLOAD COMPLETED ==========");
-        System.out.println("Success: " + responses.size());
-        System.out.println("Failed: " + errors.size());
 
         String message = String.format(
                 "Uploaded %d/%d CVs successfully",
@@ -144,6 +117,6 @@ public class UploadCVService {
             message += ". Errors: " + String.join("; ", errors);
         }
 
-        return new ApiResponse<>(200, message, responses);
+        return new ApiResponse<>(ErrorCode.SUCCESS.getCode(), message, responses);
     }
 }
