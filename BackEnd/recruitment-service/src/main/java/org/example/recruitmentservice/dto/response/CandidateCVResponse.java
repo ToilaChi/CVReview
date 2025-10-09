@@ -1,17 +1,17 @@
 package org.example.recruitmentservice.dto.response;
 
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Data;
-import lombok.NoArgsConstructor;
+import com.fasterxml.jackson.annotation.JsonInclude;
+import lombok.*;
 import org.example.recruitmentservice.models.CVStatus;
 
 import java.time.LocalDateTime;
 
-@Data
-@Builder
-@NoArgsConstructor
+@Getter
+@Setter
 @AllArgsConstructor
+@NoArgsConstructor
+@JsonInclude(JsonInclude.Include.NON_NULL)
+@Builder
 public class CandidateCVResponse {
     private int cvId;
     private int positionId;

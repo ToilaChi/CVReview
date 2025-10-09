@@ -3,6 +3,7 @@ package org.example.recruitmentservice.controller;
 import lombok.RequiredArgsConstructor;
 import org.example.commonlibrary.dto.ApiResponse;
 import org.example.commonlibrary.dto.ErrorCode;
+import org.example.commonlibrary.dto.PageResponse;
 import org.example.recruitmentservice.dto.request.PositionsRequest;
 import org.example.recruitmentservice.dto.response.PositionsResponse;
 import org.example.recruitmentservice.services.PositionService;
@@ -32,6 +33,14 @@ public class PositionController {
             @RequestParam(required = false) String level
     ) {
         return ResponseEntity.ok(positionService.getPositions(name, language, level));
+    }
+
+    @GetMapping("/all")
+    public ApiResponse<PageResponse<PositionsResponse>> getAllPositions(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size
+    ) {
+        return positionService.getAllPositions(page, size);
     }
 
     @GetMapping("/search")

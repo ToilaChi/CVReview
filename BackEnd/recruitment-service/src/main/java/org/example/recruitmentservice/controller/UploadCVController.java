@@ -11,12 +11,12 @@ import org.springframework.web.multipart.MultipartFile;
 import java.util.List;
 
 @RestController
-@RequestMapping("/cv")
+@RequestMapping("/upload")
 @RequiredArgsConstructor
 public class UploadCVController {
     private final UploadCVService uploadCVService;
 
-    @PostMapping("/upload")
+    @PostMapping("cv")
     public ResponseEntity<ApiResponse<List<CandidateCVResponse>>> uploadCV(
             @RequestParam(value = "file") List<MultipartFile> file,
             @RequestParam int positionId) {
