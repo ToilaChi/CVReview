@@ -190,23 +190,61 @@ public class LlamaParseClient {
 
     // Regex extract email
     private String extractEmail(String text) {
-        Pattern emailPattern = Pattern.compile("[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\\.[a-zA-Z0-9-.]+");
-        Matcher matcher = emailPattern.matcher(text);
-        return matcher.find() ? matcher.group() : null;
-    }
+        if (text == null || text.isEmpty()) return null;
 
-    // Regex extract name
-    private String extractName(String text) {
-        Pattern namePattern = Pattern.compile("(?i)(?:name|full name)[:\\s]+([A-ZĐ][a-zA-ZĐđ\\s]+)");
-        Matcher matcher = namePattern.matcher(text);
+        Pattern emailPattern = Pattern.compile(
+                "(?i)(?:email|mail)[:\\s]*([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,})"
+        );
+        Matcher matcher = emailPattern.matcher(text);
         if (matcher.find()) {
             return matcher.group(1).trim();
         }
 
-        String[] lines = text.split("\\r?\\n");
-        if (lines.length > 0 && lines[0].length() < 50) {
-            return lines[0].trim();
+        // Fallback — bắt mọi email trong text (phòng khi không có label “Email:”)
+        matcher = Pattern.compile("([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,})").matcher(text);
+        if (matcher.find()) {
+            return matcher.group(1).trim();
         }
+
+        return null;
+    }
+
+    // Regex extract name
+    private String extractName(String text) {
+        if (text == null || text.isEmpty()) return null;
+
+        // Regex chính — tìm các dạng "Name:", "Full Name:", "Họ tên:", "Fullname:"
+        Pattern namePattern = Pattern.compile(
+                "(?i)(?:^|\\b)(?:name|full name|họ tên)[:\\s]+([A-ZĐ][a-zA-ZĐđ\\s]+?)(?=\\b(?:date|dob|birth|email|phone|address|\\r?\\n|$))"
+        );
+        Matcher matcher = namePattern.matcher(text);
+        if (matcher.find()) {
+            String name = matcher.group(1).trim();
+
+            // Loại bỏ các phần thừa (nếu có)
+            name = name.replaceAll("(?i)\\b(date of birth|dob|email|phone|address).*", "").trim();
+
+            // Giới hạn độ dài hợp lý (tránh match quá dài)
+            if (name.length() > 50) name = name.substring(0, 50).trim();
+            return name;
+        }
+
+        // Fallback #1: Dòng đầu tiên
+        String[] lines = text.split("\\r?\\n");
+        if (lines.length > 0) {
+            String firstLine = lines[0].trim();
+            // Chỉ nhận nếu dòng đầu ngắn và không chứa ký hiệu email/số/địa chỉ
+            if (firstLine.length() <= 40 && !firstLine.matches(".*[@0-9,.:/].*")) {
+                return firstLine;
+            }
+        }
+
+        // Fallback #2: Dòng nào đó có dạng chữ
+        Matcher fallbackMatcher = Pattern.compile("\\b([A-ZĐ][a-zA-ZĐđ]+\\s+[A-ZĐ][a-zA-ZĐđ]+(?:\\s+[A-ZĐ][a-zA-ZĐđ]+)?)\\b").matcher(text);
+        if (fallbackMatcher.find()) {
+            return fallbackMatcher.group(1).trim();
+        }
+
         return null;
     }
 }

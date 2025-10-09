@@ -163,7 +163,6 @@ The project will be composed of the following microservices:
     | Key      | Value   |   
     |----------|--------|
     | name     | Dev |    
-    | language | Java |      
     | level    | Intern |   
   - Response:
     - Success:
@@ -359,8 +358,8 @@ The project will be composed of the following microservices:
         }
     ``` 
 - **Upload CV**
-  - **Name:** `/cv` 
-  - Endpoint: /cv/upload
+  - **Name:** `/upload` 
+  - Endpoint: /upload/cv
   - Method: POST
   - Description: Upload CV to store in database
   - Content-Type:  `multipart/form-data`
@@ -421,8 +420,107 @@ The project will be composed of the following microservices:
             "timestamp": "2025-10-02T17:15:29.8681381"  
         }
     ``` 
-    
-    
+- **Get All Position**
+  - **Name:** `/positions` 
+  - Endpoint: /positions/all
+  - Method: GET
+  - Description: Get all position.
+  - Content-Type:  `multipart/form-data`
+  - Header:
+    | Key            | Value                     | Required |
+    |----------------|---------------------------|----------|
+    | Authorization  | Bearer <accessToken> | Yes      |
+  - Response:
+    - Success: 
+    ```json
+        {
+            "statusCode": 200,
+            "message": "Fetched all positions successfully",
+            "data": {
+                "content": [
+                    {
+                        "id": 14,
+                        "name": "FrontEnd",
+                        "language": "JavaScript",
+                        "level": "Senior",
+                        "jdPath": "FrontEnd/JavaScript/Senior/d9ee3f55-632d-4423-ada1-a2b4c0aa461b-CV_Pham_Intern_Developer.pdf",
+                        "createdAt": "2025-10-09T11:00:38.298548"
+                    }
+                    ...
+                    {
+                        "id": 5,
+                        "name": "Developer",
+                        "language": "Java",
+                        "level": "Intern",
+                        "jdPath": "Developer/Java/Intern/c568cce1-aa51-4a10-a0b2-066240c417f8-CV_Pham_Intern_Developer.pdf",
+                        "createdAt": "2025-10-02T14:07:23.751569"
+                    }
+                ],
+                "pageNumber": 0,
+                "pageSize": 10,
+                "totalElements": 8,
+                "totalPages": 1,
+                "last": true
+        },
+            "timestamp": 2025-10-02T17:15:29.8681381
+        }
+    ```
+- **Get CVs for specific position**
+  - **Name:** `/cv` 
+  - Endpoint: /cv/position/{{positionId}}
+  - Method: GET
+  - Description: Get all position.
+  - Content-Type:  `multipart/form-data`
+  - Header:
+    | Key            | Value                     | Required |
+    |----------------|---------------------------|----------|
+    | Authorization  | Bearer <accessToken> | Yes      |
+  - Response:
+    - Success: 
+    ```json
+        {
+            "statusCode": 200,
+            "message": "Fetched all CVs for position: Tester Python Fresher",
+            "data": {
+                "content": [
+                    {
+                        "cvId": 32,
+                        "positionId": 9,
+                        "email": "chi12345pham@gmail.com",
+                        "name": "Pham Minh Chi",
+                        "filePath": "Tester/Python/Fresher/CV/40b1c39b-3975-40d2-bb30-b048c43a1e16-CV_Pham_Intern_Developer.pdf",
+                        "status": "PARSED",
+                        "updatedAt": "2025-10-09T15:06:15.270665"
+                    }
+                    ...
+                    {
+                        "cvId": 8,
+                        "positionId": 9,
+                        "name": "",
+                        "filePath": "Tester/Python/Fresher/CV/6252061e-9969-40f6-b8e2-a8042a7e3286-Candidate_CV.pdf",
+                        "status": "PARSED",
+                        "updatedAt": "2025-10-08T14:08:11.816049"
+                    }
+                ],
+                "pageNumber": 0,
+                "pageSize": 10,
+                "totalElements": 7,
+                "totalPages": 1,
+                "last": true
+        },
+            "timestamp": 2025-10-02T17:15:29.8681381
+        }
+    ```
+    - Fail:
+     - Position not found:
+    ```json
+        {
+            "statusCode": 3001,
+            "message": "Position not found",
+            "data": null,
+            "timestamp": "2025-10-02T17:15:29.8681381"  
+        }
+    ```  
 
  
    

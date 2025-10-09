@@ -4,12 +4,15 @@ import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.example.commonlibrary.dto.ApiResponse;
 import org.example.commonlibrary.dto.ErrorCode;
+import org.example.commonlibrary.dto.PageResponse;
 import org.example.commonlibrary.exception.CustomException;
+import org.example.commonlibrary.utils.PageUtil;
 import org.example.recruitmentservice.client.LlamaParseClient;
 import org.example.recruitmentservice.dto.request.PositionsRequest;
 import org.example.recruitmentservice.dto.response.PositionsResponse;
 import org.example.recruitmentservice.models.Positions;
 import org.example.recruitmentservice.repository.PositionRepository;
+import org.springframework.data.domain.*;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -102,6 +105,29 @@ public class PositionService {
                 ErrorCode.SUCCESS.getMessage(),
                 response
         );
+    }
+
+    public ApiResponse<PageResponse<PositionsResponse>> getAllPositions(int page, int size) {
+        Pageable pageable = PageRequest.of(page, size, Sort.by("createdAt").descending());
+        Page<Positions> positionPage = positionRepository.findAll(pageable);
+
+        Page<PositionsResponse> mappedPage = positionPage.map(position ->
+                PositionsResponse.builder()
+                        .id(position.getId())
+                        .name(position.getName())
+                        .language(position.getLanguage())
+                        .level(position.getLevel())
+                        .jdPath(position.getJdPath())
+                        .createdAt(position.getCreatedAt())
+                        .build()
+        );
+
+        return ApiResponse.<PageResponse<PositionsResponse>>builder()
+                .statusCode(ErrorCode.SUCCESS.getCode())
+                .message("Fetched all positions successfully")
+                .data(PageUtil.toPageResponse(mappedPage))
+                .timestamp(LocalDateTime.now())
+                .build();
     }
 
     public ApiResponse<List<PositionsResponse>> searchPositions(String keyword) {
