@@ -104,6 +104,7 @@ public class LlamaParseClient {
             cv.setCvStatus(CVStatus.FAILED);
             cv.setUpdatedAt(LocalDateTime.now());
             candidateCVRepository.save(cv);
+            throw new CustomException(ErrorCode.CV_PARSE_FAILED);
         }
     }
 

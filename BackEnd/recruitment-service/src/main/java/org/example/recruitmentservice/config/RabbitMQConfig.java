@@ -71,8 +71,8 @@ public class RabbitMQConfig {
         factory.setMessageConverter(messageConverter);
 
         // Concurrency
-        factory.setConcurrentConsumers(3);
-        factory.setMaxConcurrentConsumers(5);
+        factory.setConcurrentConsumers(2);
+        factory.setMaxConcurrentConsumers(3);
 
         // Receive 2 messages at the same time
         factory.setPrefetchCount(2);

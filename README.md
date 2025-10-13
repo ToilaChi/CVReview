@@ -205,7 +205,7 @@ The project will be composed of the following microservices:
     ``` 
 - **Search Position**
   - **Name:** `/positions/search` 
-  - Endpoint: /positions/search?keyword={{position}}
+  - Endpoint: /positions/search?keyword={position}
   - Method: GET
   - Description: Get position follow name, language, level.
   - Header:
@@ -257,7 +257,7 @@ The project will be composed of the following microservices:
     ```
 - **Update Position**
   - **Name:** `/positions` 
-  - Endpoint: /positions/{{positionId}}
+  - Endpoint: /positions/{positionId}
   - Method: PATCH
   - Description: Update position.
   - Header:
@@ -320,7 +320,7 @@ The project will be composed of the following microservices:
     ``` 
 - **Delete Position**
   - **Name:** `/positions` 
-  - Endpoint: /positions/{{positionId}}
+  - Endpoint: /positions/{positionId}
   - Method: DELETE
   - Description: Delete position.
   - Content-Type:  `multipart/form-data`
@@ -467,7 +467,7 @@ The project will be composed of the following microservices:
     ```
 - **Get CVs for specific position**
   - **Name:** `/cv` 
-  - Endpoint: /cv/position/{{positionId}}
+  - Endpoint: /cv/position/{positionId}
   - Method: GET
   - Description: Get all position.
   - Content-Type:  `multipart/form-data`
@@ -521,7 +521,90 @@ The project will be composed of the following microservices:
             "timestamp": "2025-10-02T17:15:29.8681381"  
         }
     ```  
-
+- **Update Candidate CV**
+  - **Name:** `/cv` 
+  - Endpoint: /cv/{cvId}
+  - Method: POST
+  - Description: Update candidate CV (name, email or CV file).
+  - Content-Type:  `multipart/form-data`
+  - Header:
+    | Key            | Value                     | Required |
+    |----------------|---------------------------|----------|
+    | Authorization  | Bearer <accessToken> | Yes      |
+  - Query Parameters
+    | Key   | Type   | Required | Value |
+    |-------|--------|----------|---------|
+    | name  | Text | No      | Pham Minh Chi     |
+    | email  | Text | No      | phamminhchi@gmail.com     |
+    | file  | File | No      | abc.pdf     |
+  - Response:
+    - Success: 
+    ```json
+        {
+            "statusCode": 200,
+            "message": "Updated Candidate CV successfully",
+            "data": null,
+            "timestamp": "2025-10-13T13:52:06.2765845"
+        }
+    ```
+    - Fail:
+     - CV not found:
+    ```json
+        {
+            "statusCode": 2001,
+            "message": "CV not found",
+            "data": null,
+            "timestamp": "2025-10-13T13:59:43.5713966"
+        }
+    ``` 
+     - Fail save file
+    ```json
+        {
+            "statusCode": 3005,
+            "message": "Failed to save file",
+            "data": null,
+            "timestamp": "2025-10-02T17:15:29.8681381"  
+        }
+    ``` 
+- **Delete Candidate CV**
+  - **Name:** `/cv` 
+  - Endpoint: /cv/{cvId}
+  - Method: DELETE
+  - Description: Delete candidate CV.
+  - Content-Type:  `multipart/form-data`
+  - Header:
+    | Key            | Value                     | Required |
+    |----------------|---------------------------|----------|
+    | Authorization  | Bearer <accessToken> | Yes      |
+  - Response:
+    - Success: 
+    ```json
+        {
+            "statusCode": 200,
+            "message": "Deleted Candidate CV successfully",
+            "data": null,
+            "timestamp": "2025-10-13T13:53:53.9001019"
+        }
+    ```
+    - Fail:
+     - Position not found:
+    ```json
+        {
+            "statusCode": 2001,
+            "message": "CV not found",
+            "data": null,
+            "timestamp": "2025-10-13T13:59:43.5713966"
+        }
+    ``` 
+     - File delete fail
+    ```json
+        {
+            "statusCode": 5001,
+            "message": "File can not delete",
+            "data": null,
+            "timestamp": "2025-10-13T13:59:43.5713966"
+        }
+    ``` 
  
    
     
