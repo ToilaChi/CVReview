@@ -33,7 +33,7 @@ public class UploadCVService {
         try {
             if (file == null || file.isEmpty()) {
                 System.err.println("File is null or empty!");
-                throw new CustomException(ErrorCode.FAILED_SAVE_FILE);
+                throw new CustomException(ErrorCode.FILE_NOT_FOUND);
             }
 
             Positions position = positionRepository.findById(positionId)

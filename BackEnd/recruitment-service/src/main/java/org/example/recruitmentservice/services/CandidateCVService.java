@@ -1,28 +1,35 @@
 package org.example.recruitmentservice.services;
 
+import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.example.commonlibrary.dto.ApiResponse;
 import org.example.commonlibrary.dto.ErrorCode;
 import org.example.commonlibrary.dto.PageResponse;
 import org.example.commonlibrary.exception.CustomException;
 import org.example.commonlibrary.utils.PageUtil;
+import org.example.recruitmentservice.config.RabbitMQConfig;
+import org.example.recruitmentservice.dto.request.CVUploadEvent;
 import org.example.recruitmentservice.dto.response.CandidateCVResponse;
-import org.example.recruitmentservice.dto.response.PositionsResponse;
 import org.example.recruitmentservice.models.CVStatus;
 import org.example.recruitmentservice.models.CandidateCV;
 import org.example.recruitmentservice.models.Positions;
 import org.example.recruitmentservice.repository.CandidateCVRepository;
 import org.example.recruitmentservice.repository.PositionRepository;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.data.domain.*;
 import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
 public class CandidateCVService {
     private final CandidateCVRepository candidateCVRepository;
     private final PositionRepository positionRepository;
+    private final StorageService storageService;
+    private final RabbitTemplate rabbitTemplate;
 
     public ApiResponse<PageResponse<CandidateCVResponse>> getAllCVsByPositionId(int positionId, int page, int size) {
         Positions position = positionRepository.findById(positionId);
@@ -51,5 +58,79 @@ public class CandidateCVService {
                 .data(PageUtil.toPageResponse(mappedPage))
                 .timestamp(LocalDateTime.now())
                 .build();
+    }
+
+    @Transactional
+    public void updateCV(int cvId, MultipartFile newFile, String name, String email) {
+        CandidateCV cv = candidateCVRepository.findById(cvId)
+                .orElseThrow(() -> new CustomException(ErrorCode.CV_NOT_FOUND));
+
+        // If just update name and mail
+        if (newFile == null || newFile.isEmpty()) {
+            if (name != null && !name.trim().isEmpty()) {
+                cv.setName(name.trim());
+            }
+            if (email != null && !email.trim().isEmpty()) {
+                cv.setEmail(email.trim());
+            }
+
+            cv.setUpdatedAt(LocalDateTime.now());
+            candidateCVRepository.save(cv);
+            return;
+        }
+
+        // Upload new file
+        try {
+            String oldFilePath = cv.getCvPath();
+            if (oldFilePath != null && !oldFilePath.isEmpty()) {
+                storageService.deleteFile(oldFilePath);
+            }
+
+            Positions position = cv.getPosition();
+            if (position == null) {
+                throw new CustomException(ErrorCode.POSITION_NOT_FOUND);
+            }
+
+            String jdPath = position.getJdPath();
+            String baseDir = jdPath.substring(0, jdPath.lastIndexOf("/"));
+            String cvDir = baseDir + "/CV";
+
+            String newFileName = UUID.randomUUID() + "-" + newFile.getOriginalFilename();
+            String newFilePath = cvDir + "/" + newFileName;
+
+            storageService.saveFile(newFile, newFilePath);
+
+            cv.setCvPath(newFilePath);
+            cv.setCvStatus(CVStatus.UPLOADED);
+            cv.setName(null);
+            cv.setEmail(null);
+            cv.setCvContent(null);
+            cv.setUpdatedAt(LocalDateTime.now());
+            candidateCVRepository.save(cv);
+
+            CVUploadEvent event = new CVUploadEvent(cv.getId(), newFilePath, position.getId());
+            rabbitTemplate.convertAndSend(RabbitMQConfig.CV_UPLOAD_QUEUE, event);
+        } catch (CustomException e) {
+            System.err.println("CustomException while updating CV: " + e.getMessage());
+            throw e;
+        } catch (Exception e) {
+            System.err.println("Unexpected error while updating CV: " + e.getMessage());
+            e.printStackTrace();
+            throw new CustomException(ErrorCode.FAILED_SAVE_FILE);
+        }
+    }
+
+    @Transactional
+    public void deleteCandidateCV(int cvId) {
+        CandidateCV cv = candidateCVRepository.findById(cvId)
+                .orElseThrow(() -> new CustomException(ErrorCode.CV_NOT_FOUND));
+
+        try {
+            storageService.deleteFile(cv.getCvPath());
+        } catch (Exception e) {
+            throw new CustomException(ErrorCode.FILE_DELETE_FAILED);
+        }
+
+        candidateCVRepository.delete(cv);
     }
 }
