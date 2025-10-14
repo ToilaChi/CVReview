@@ -1,7 +1,7 @@
 package org.example.recruitmentservice.client;
 
 import lombok.RequiredArgsConstructor;
-import org.example.commonlibrary.dto.ErrorCode;
+import org.example.commonlibrary.dto.response.ErrorCode;
 import org.example.commonlibrary.exception.CustomException;
 import org.example.recruitmentservice.config.RabbitMQConfig;
 import org.example.recruitmentservice.dto.request.CVUploadEvent;

@@ -18,43 +18,125 @@ import java.util.Map;
 @Configuration
 @EnableRabbit
 public class RabbitMQConfig {
+    // ====== UPLOAD FLOW ======
     public static final String CV_UPLOAD_QUEUE  = "cv.upload.queue";
-    public static final String DLQ_QUEUE = "cv.upload.queue.dlq";
-    public static final String EXCHANGE = "cv.upload.exchange";
-    public static final String ROUTING_KEY = "cv.upload";
+    public static final String CV_UPLOAD_DLQ = "cv.upload.queue.dlq";
+    public static final String CV_UPLOAD_EXCHANGE = "cv.upload.exchange.dlx";
+    public static final String CV_UPLOAD_DLQ_ROUTING_KEY = "cv.upload.dlq";
 
+    // ====== Analysis FLOW ======
+    public static final String AI_EXCHANGE = "cv.analysis.exchange";
+    public static final String AI_EXCHANGE_DLX = "cv.analysis.exchange.dlx";
+
+    public static final String CV_ANALYZE_QUEUE = "cv.analyze.queue";
+    public static final String CV_ANALYZE_DLQ = "cv.analyze.queue.dlq";
+    public static final String CV_ANALYZE_ROUTING_KEY = "cv.analyze";
+    public static final String CV_ANALYZE_DLQ_ROUTING_KEY = "cv.analyze.dlq";
+
+    public static final String CV_ANALYSIS_RESULT_QUEUE = "cv.analysis.result.queue";
+    public static final String CV_ANALYSIS_RESULT_DLQ = "cv.analysis.result.queue.dlq";
+    public static final String CV_ANALYSIS_RESULT_ROUTING_KEY = "cv.analysis.result";
+    public static final String CV_ANALYSIS_RESULT_DLQ_ROUTING_KEY = "cv.analysis.result.dlq";
+
+    // ====== UPLOAD QUEUE + DLQ ======
     @Bean
     public Queue mainQueue() {
         return QueueBuilder.durable(CV_UPLOAD_QUEUE)
-                .withArgument("x-dead-letter-exchange", EXCHANGE + ".dlx")
-                .withArgument("x-dead-letter-routing-key", ROUTING_KEY + ".dlq")
+                .withArgument("x-dead-letter-exchange", CV_UPLOAD_EXCHANGE)
+                .withArgument("x-dead-letter-routing-key", CV_UPLOAD_DLQ_ROUTING_KEY)
                 .build();
     }
 
     @Bean
     public Queue deadLetterQueue() {
-        return QueueBuilder.durable(DLQ_QUEUE).build();
+        return QueueBuilder.durable(CV_UPLOAD_DLQ).build();
     }
 
     @Bean
     public DirectExchange mainExchange() {
-        return new DirectExchange(EXCHANGE);
+        return new DirectExchange(CV_UPLOAD_EXCHANGE);
     }
 
     @Bean
     public DirectExchange deadLetterExchange() {
-        return new DirectExchange(EXCHANGE + ".dlx");
+        return new DirectExchange(CV_UPLOAD_EXCHANGE);
     }
 
     @Bean
     public Binding mainBinding(Queue mainQueue, DirectExchange mainExchange) {
-        return BindingBuilder.bind(mainQueue).to(mainExchange).with(ROUTING_KEY);
+        return BindingBuilder.bind(mainQueue).to(mainExchange).with(CV_UPLOAD_DLQ_ROUTING_KEY);
     }
 
     @Bean
     public Binding deadLetterBinding(Queue deadLetterQueue, DirectExchange deadLetterExchange) {
-        return BindingBuilder.bind(deadLetterQueue).to(deadLetterExchange).with(ROUTING_KEY + ".dlq");
+        return BindingBuilder.bind(deadLetterQueue).to(deadLetterExchange).with(CV_UPLOAD_DLQ_ROUTING_KEY + ".dlq");
     }
+
+
+    // ====== AI QUEUE + DLQ ======
+
+    // Main exchange
+    @Bean
+    public DirectExchange aiExchange() {
+        return new DirectExchange(AI_EXCHANGE);
+    }
+
+    // DLX for AI
+    @Bean
+    public DirectExchange aiDeadLetterExchange() {
+        return new DirectExchange(AI_EXCHANGE_DLX);
+    }
+
+    // ---- analyze queue ----
+    @Bean
+    public Queue cvAnalyzeQueue() {
+        return QueueBuilder.durable(CV_ANALYZE_QUEUE)
+                .withArgument("x-dead-letter-exchange", AI_EXCHANGE_DLX)
+                .withArgument("x-dead-letter-routing-key", CV_ANALYZE_DLQ_ROUTING_KEY)
+                .build();
+    }
+
+    @Bean
+    public Queue cvAnalyzeDlqQueue() {
+        return QueueBuilder.durable(CV_ANALYZE_DLQ).build();
+    }
+
+    @Bean
+    public Binding cvAnalyzeBinding(Queue cvAnalyzeQueue, DirectExchange aiExchange) {
+        return BindingBuilder.bind(cvAnalyzeQueue).to(aiExchange).with(CV_ANALYZE_ROUTING_KEY);
+    }
+
+    @Bean
+    public Binding cvAnalyzeDlqBinding(Queue cvAnalyzeDlqQueue, DirectExchange aiDeadLetterExchange) {
+        return BindingBuilder.bind(cvAnalyzeDlqQueue).to(aiDeadLetterExchange).with(CV_ANALYZE_DLQ_ROUTING_KEY);
+    }
+
+    // ---- analysis result queue ----
+    @Bean
+    public Queue cvAnalysisResultQueue() {
+        return QueueBuilder.durable(CV_ANALYSIS_RESULT_QUEUE)
+                .withArgument("x-dead-letter-exchange", AI_EXCHANGE_DLX)
+                .withArgument("x-dead-letter-routing-key", CV_ANALYSIS_RESULT_DLQ_ROUTING_KEY)
+                .build();
+    }
+
+    @Bean
+    public Queue cvAnalysisResultDlqQueue() {
+        return QueueBuilder.durable(CV_ANALYSIS_RESULT_DLQ).build();
+    }
+
+    @Bean
+    public Binding cvAnalysisResultBinding(Queue cvAnalysisResultQueue, DirectExchange aiExchange) {
+        return BindingBuilder.bind(cvAnalysisResultQueue).to(aiExchange).with(CV_ANALYSIS_RESULT_ROUTING_KEY);
+    }
+
+    @Bean
+    public Binding cvAnalysisResultDlqBinding(Queue cvAnalysisResultDlqQueue, DirectExchange aiDeadLetterExchange) {
+        return BindingBuilder.bind(cvAnalysisResultDlqQueue).to(aiDeadLetterExchange).with(CV_ANALYSIS_RESULT_DLQ_ROUTING_KEY);
+    }
+
+
+    // ====== COMMON SETTINGS ======
 
     @Bean
     public Jackson2JsonMessageConverter messageConverter() {
@@ -70,14 +152,10 @@ public class RabbitMQConfig {
         factory.setConnectionFactory(connectionFactory);
         factory.setMessageConverter(messageConverter);
 
-        // Concurrency
         factory.setConcurrentConsumers(2);
         factory.setMaxConcurrentConsumers(3);
-
-        // Receive 2 messages at the same time
         factory.setPrefetchCount(2);
 
-        // If handler throws exception after retry -> reject message (send to DLQ)
         factory.setDefaultRequeueRejected(false);
 
         return factory;
@@ -85,10 +163,6 @@ public class RabbitMQConfig {
 
     @Bean
     public RetryTemplate retryTemplate() {
-        return createRetryTemplate();
-    }
-
-    private RetryTemplate createRetryTemplate() {
         RetryTemplate retryTemplate = new RetryTemplate();
 
         ExponentialBackOffPolicy backOffPolicy = new ExponentialBackOffPolicy();
@@ -97,7 +171,6 @@ public class RabbitMQConfig {
         backOffPolicy.setMaxInterval(10000);
         retryTemplate.setBackOffPolicy(backOffPolicy);
 
-        // Policy retry maximum 3 times
         Map<Class<? extends Throwable>, Boolean> retryableExceptions = new HashMap<>();
         retryableExceptions.put(RuntimeException.class, true);
         retryableExceptions.put(IllegalArgumentException.class, false);

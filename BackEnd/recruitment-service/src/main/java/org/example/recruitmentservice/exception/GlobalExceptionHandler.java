@@ -1,7 +1,7 @@
 package org.example.recruitmentservice.exception;
 
-import org.example.commonlibrary.dto.ApiResponse;
-import org.example.commonlibrary.dto.ErrorCode;
+import org.example.commonlibrary.dto.response.ApiResponse;
+import org.example.commonlibrary.dto.response.ErrorCode;
 import org.example.commonlibrary.exception.CustomException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;

@@ -54,6 +54,9 @@ storage:
 llama-parse:
   api-key: ${LLAMAPARSE_API_KEY}
 
+analysis:
+  batch-size: 20
+
 server:
   address: 0.0.0.0
   port: 8081

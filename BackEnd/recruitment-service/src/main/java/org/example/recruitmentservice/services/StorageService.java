@@ -1,6 +1,6 @@
 package org.example.recruitmentservice.services;
 
-import org.example.commonlibrary.dto.ErrorCode;
+import org.example.commonlibrary.dto.response.ErrorCode;
 import org.example.commonlibrary.exception.CustomException;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;

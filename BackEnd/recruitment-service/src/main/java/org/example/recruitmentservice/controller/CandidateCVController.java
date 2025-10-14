@@ -1,9 +1,9 @@
 package org.example.recruitmentservice.controller;
 
 import lombok.RequiredArgsConstructor;
-import org.example.commonlibrary.dto.ApiResponse;
-import org.example.commonlibrary.dto.ErrorCode;
-import org.example.commonlibrary.dto.PageResponse;
+import org.example.commonlibrary.dto.response.ApiResponse;
+import org.example.commonlibrary.dto.response.ErrorCode;
+import org.example.commonlibrary.dto.response.PageResponse;
 import org.example.recruitmentservice.dto.response.CandidateCVResponse;
 import org.example.recruitmentservice.services.CandidateCVService;
 import org.springframework.http.ResponseEntity;

@@ -1,7 +1,7 @@
 package org.example.recruitmentservice.controller;
 
 import lombok.RequiredArgsConstructor;
-import org.example.commonlibrary.dto.ApiResponse;
+import org.example.commonlibrary.dto.response.ApiResponse;
 import org.example.recruitmentservice.dto.response.CandidateCVResponse;
 import org.example.recruitmentservice.services.UploadCVService;
 import org.springframework.http.ResponseEntity;
