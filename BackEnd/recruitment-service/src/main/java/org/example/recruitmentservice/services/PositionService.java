@@ -2,9 +2,9 @@ package org.example.recruitmentservice.services;
 
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
-import org.example.commonlibrary.dto.ApiResponse;
-import org.example.commonlibrary.dto.ErrorCode;
-import org.example.commonlibrary.dto.PageResponse;
+import org.example.commonlibrary.dto.response.ApiResponse;
+import org.example.commonlibrary.dto.response.ErrorCode;
+import org.example.commonlibrary.dto.response.PageResponse;
 import org.example.commonlibrary.exception.CustomException;
 import org.example.commonlibrary.utils.PageUtil;
 import org.example.recruitmentservice.client.LlamaParseClient;

@@ -20,6 +20,9 @@ public class CandidateCV {
     @JoinColumn(name = "position_id", nullable = false)
     private Positions position;
 
+    @OneToOne(mappedBy = "candidateCV", cascade = CascadeType.ALL)
+    private CVAnalysis analysis;
+
     @Column
     private String email;
 
