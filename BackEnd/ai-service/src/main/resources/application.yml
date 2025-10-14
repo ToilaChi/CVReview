@@ -1,0 +1,13 @@
+spring:
+  application:
+    name: ai-service
+  # RabbitMQ
+  rabbitmq:
+    host: localhost
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USERNAME:guest}
+    password: ${RABBITMQ_PASSWORD:guest}
+
+server:
+  address: 0.0.0.0
+  port: 8082
