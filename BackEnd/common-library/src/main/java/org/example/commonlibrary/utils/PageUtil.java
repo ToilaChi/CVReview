@@ -1,6 +1,6 @@
 package org.example.commonlibrary.utils;
 
-import org.example.commonlibrary.dto.PageResponse;
+import org.example.commonlibrary.dto.response.PageResponse;
 import org.springframework.data.domain.Page;
 
 public class PageUtil {

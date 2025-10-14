@@ -1,7 +1,7 @@
 package org.example.commonlibrary.exception;
 
 import lombok.Getter;
-import org.example.commonlibrary.dto.ErrorCode;
+import org.example.commonlibrary.dto.response.ErrorCode;
 
 @Getter
 public class CustomException extends RuntimeException {

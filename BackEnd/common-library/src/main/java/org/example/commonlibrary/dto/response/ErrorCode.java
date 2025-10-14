@@ -1,4 +1,4 @@
-package org.example.commonlibrary.dto;
+package org.example.commonlibrary.dto.response;
 
 import lombok.AllArgsConstructor;
 import lombok.Getter;
