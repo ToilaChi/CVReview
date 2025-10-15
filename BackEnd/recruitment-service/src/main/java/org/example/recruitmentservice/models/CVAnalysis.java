@@ -22,6 +22,12 @@ public class CVAnalysis {
     @JoinColumn(name = "cv_id", nullable = false)
     private CandidateCV candidateCV;
 
+    @Column
+    private Integer positionId;
+
+    @Column
+    private String positionName;
+
     private Double score;
 
     @Column(columnDefinition = "TEXT")

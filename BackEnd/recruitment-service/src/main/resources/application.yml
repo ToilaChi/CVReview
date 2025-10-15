@@ -1,6 +1,7 @@
 spring:
   application:
     name: recruitment-service
+  # Read .env
   config:
     import: optional:classpath:.env[.properties]
   # Database

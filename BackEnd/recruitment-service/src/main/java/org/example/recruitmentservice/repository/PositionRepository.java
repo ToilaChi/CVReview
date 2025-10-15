@@ -24,4 +24,6 @@ public interface PositionRepository extends JpaRepository<Positions, Integer> {
             "   OR LOWER(p.language) LIKE LOWER(CONCAT('%', :keyword, '%')) " +
             "   OR LOWER(p.level) LIKE LOWER(CONCAT('%', :keyword, '%'))")
     List<Positions> searchByKeyword(@Param("keyword") String keyword);
+    @Query("SELECT p FROM Positions p JOIN p.candidateCVs c WHERE c.id = :cvId")
+    Positions findByCandidateCVId(@Param("cvId") int cvId);
 }

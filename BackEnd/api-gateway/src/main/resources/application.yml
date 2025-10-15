@@ -18,7 +18,7 @@ spring:
             - id: recruitment-service
               uri: http://localhost:8081
               predicates:
-                - Path=/positions/**, /cv/**, /upload/**
+                - Path=/positions/**, /cv/**, /upload/**, /analysis/**
               filters:
                 -name: CircuitBreaker
                 args:
