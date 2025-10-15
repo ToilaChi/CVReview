@@ -1,12 +1,18 @@
 spring:
   application:
     name: ai-service
+  # Read .env
+  config:
+    import: optional:classpath:.env[.properties]
   # RabbitMQ
   rabbitmq:
     host: localhost
-    port: ${RABBITMQ_PORT:5672}
-    username: ${RABBITMQ_USERNAME:guest}
-    password: ${RABBITMQ_PASSWORD:guest}
+    port: ${RABBITMQ_PORT}
+    username: ${RABBITMQ_USERNAME}
+    password: ${RABBITMQ_PASSWORD}
+
+gemini:
+  api-key: ${GEMINI_API_KEY}
 
 server:
   address: 0.0.0.0

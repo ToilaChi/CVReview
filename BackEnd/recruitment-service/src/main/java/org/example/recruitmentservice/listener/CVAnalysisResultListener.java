@@ -9,13 +9,16 @@ import org.example.recruitmentservice.config.RabbitMQConfig;
 import org.example.recruitmentservice.models.CVAnalysis;
 import org.example.recruitmentservice.models.CVStatus;
 import org.example.recruitmentservice.models.CandidateCV;
+import org.example.recruitmentservice.models.Positions;
 import org.example.recruitmentservice.repository.CVAnalysisRepository;
 import org.example.recruitmentservice.repository.CandidateCVRepository;
+import org.example.recruitmentservice.repository.PositionRepository;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
+import java.util.Optional;
 
 @Slf4j
 @Component
@@ -23,6 +26,7 @@ import java.time.LocalDateTime;
 public class CVAnalysisResultListener {
     private final CVAnalysisRepository cvAnalysisRepository;
     private final CandidateCVRepository candidateCVRepository;
+    private final PositionRepository positionRepository;
 
     @RabbitListener(queues = RabbitMQConfig.CV_ANALYSIS_RESULT_QUEUE)
     public void handleAnalysisResult(@Payload CVAnalysisResult result) {
@@ -33,8 +37,12 @@ public class CVAnalysisResultListener {
             CandidateCV cv = candidateCVRepository.findById(result.getCvId())
                     .orElseThrow(() -> new CustomException(ErrorCode.CV_NOT_FOUND));
 
+            Positions positions = positionRepository.findByCandidateCVId(result.getCvId());
+
             CVAnalysis cvAnalysis = new CVAnalysis();
             cvAnalysis.setCandidateCV(cv);
+            cvAnalysis.setPositionId(positions.getId());
+            cvAnalysis.setPositionName(positions.getName() + " " + positions.getLanguage() + " " + positions.getLevel());
             cvAnalysis.setScore(result.getScore());
             cvAnalysis.setFeedback(result.getFeedback());
             cvAnalysis.setSkillMatch(String.join(", ", result.getSkillMatch()));

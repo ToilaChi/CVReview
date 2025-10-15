@@ -89,7 +89,7 @@ public class AnalysisService {
         log.info("[AI_ANALYSIS] Completed publishing CV batch for Position {} | batchId={}", positionId, batchId);
         return new ApiResponse<>(
                 ErrorCode.SUCCESS.getCode(),
-                ErrorCode.SUCCESS.getMessage(),
+                "Please wait a moment!",
                 batchId,
                 LocalDateTime.now()
                 );

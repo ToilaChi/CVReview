@@ -1,6 +1,7 @@
 spring:
   application:
     name: auth-service
+  # Read .env
   config:
     import: optional:classpath:.env[.properties]
   datasource:
@@ -33,6 +34,6 @@ server:
 
 #JWT
 jwt:
-  secret: LJ8WPZjFNSfnoD5g+JZXSFiQaMY6gfNvBfR8w9HwT9OI0yEg2RfH2t9mpR7C2Ij7
+  secret: "${JWT_SECRET}"
   expiration: 1800000
   refresh-expiration: 604800000
