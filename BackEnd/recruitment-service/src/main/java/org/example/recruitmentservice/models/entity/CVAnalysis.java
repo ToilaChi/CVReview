@@ -1,4 +1,4 @@
-package org.example.recruitmentservice.models;
+package org.example.recruitmentservice.models.entity;
 
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;

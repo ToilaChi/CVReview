@@ -1,6 +1,6 @@
 package org.example.recruitmentservice.repository;
 
-import org.example.recruitmentservice.models.Positions;
+import org.example.recruitmentservice.models.entity.Positions;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;

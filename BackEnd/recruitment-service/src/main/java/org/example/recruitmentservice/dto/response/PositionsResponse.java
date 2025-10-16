@@ -2,7 +2,7 @@ package org.example.recruitmentservice.dto.response;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.*;
-import org.example.recruitmentservice.models.Positions;
+import org.example.recruitmentservice.models.entity.Positions;
 
 import java.time.LocalDateTime;
 

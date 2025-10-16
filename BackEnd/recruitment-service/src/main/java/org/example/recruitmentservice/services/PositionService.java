@@ -10,7 +10,7 @@ import org.example.commonlibrary.utils.PageUtil;
 import org.example.recruitmentservice.client.LlamaParseClient;
 import org.example.recruitmentservice.dto.request.PositionsRequest;
 import org.example.recruitmentservice.dto.response.PositionsResponse;
-import org.example.recruitmentservice.models.Positions;
+import org.example.recruitmentservice.models.entity.Positions;
 import org.example.recruitmentservice.repository.PositionRepository;
 import org.springframework.data.domain.*;
 import org.springframework.stereotype.Service;

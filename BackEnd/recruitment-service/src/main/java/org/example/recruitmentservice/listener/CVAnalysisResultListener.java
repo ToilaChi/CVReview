@@ -6,10 +6,10 @@ import org.example.commonlibrary.dto.response.CVAnalysisResult;
 import org.example.commonlibrary.dto.response.ErrorCode;
 import org.example.commonlibrary.exception.CustomException;
 import org.example.recruitmentservice.config.RabbitMQConfig;
-import org.example.recruitmentservice.models.CVAnalysis;
-import org.example.recruitmentservice.models.CVStatus;
-import org.example.recruitmentservice.models.CandidateCV;
-import org.example.recruitmentservice.models.Positions;
+import org.example.recruitmentservice.models.entity.CVAnalysis;
+import org.example.recruitmentservice.models.enums.CVStatus;
+import org.example.recruitmentservice.models.entity.CandidateCV;
+import org.example.recruitmentservice.models.entity.Positions;
 import org.example.recruitmentservice.repository.CVAnalysisRepository;
 import org.example.recruitmentservice.repository.CandidateCVRepository;
 import org.example.recruitmentservice.repository.PositionRepository;
@@ -18,7 +18,6 @@ import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
-import java.util.Optional;
 
 @Slf4j
 @Component
