@@ -1,4 +1,4 @@
-package org.example.recruitmentservice.models;
+package org.example.recruitmentservice.models.enums;
 
 public enum CVStatus {
     UPLOADED,

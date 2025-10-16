@@ -1,7 +1,7 @@
 package org.example.recruitmentservice.repository;
 
-import org.example.recruitmentservice.models.CVStatus;
-import org.example.recruitmentservice.models.CandidateCV;
+import org.example.recruitmentservice.models.enums.CVStatus;
+import org.example.recruitmentservice.models.entity.CandidateCV;
 import org.springframework.data.domain.*;
 import org.springframework.data.jpa.repository.JpaRepository;
 

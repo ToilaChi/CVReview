@@ -1,7 +1,8 @@
-package org.example.recruitmentservice.models;
+package org.example.recruitmentservice.models.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
+import org.example.recruitmentservice.models.enums.CVStatus;
 
 import java.time.LocalDateTime;
 

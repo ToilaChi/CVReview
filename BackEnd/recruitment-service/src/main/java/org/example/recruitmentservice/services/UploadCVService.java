@@ -7,9 +7,9 @@ import org.example.commonlibrary.exception.CustomException;
 import org.example.recruitmentservice.config.RabbitMQConfig;
 import org.example.recruitmentservice.dto.request.CVUploadEvent;
 import org.example.recruitmentservice.dto.response.CandidateCVResponse;
-import org.example.recruitmentservice.models.CVStatus;
-import org.example.recruitmentservice.models.CandidateCV;
-import org.example.recruitmentservice.models.Positions;
+import org.example.recruitmentservice.models.enums.CVStatus;
+import org.example.recruitmentservice.models.entity.CandidateCV;
+import org.example.recruitmentservice.models.entity.Positions;
 import org.example.recruitmentservice.repository.CandidateCVRepository;
 import org.example.recruitmentservice.repository.PositionRepository;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
@@ -29,7 +29,7 @@ public class UploadCVService {
     private final StorageService storageService;
     private final PositionRepository positionRepository;
 
-    public ApiResponse<CandidateCVResponse> uploadSingleCV(MultipartFile file, Integer positionId) {
+    public CandidateCVResponse uploadSingleCV(MultipartFile file, Integer positionId) {
         try {
             if (file == null || file.isEmpty()) {
                 System.err.println("File is null or empty!");
@@ -66,7 +66,7 @@ public class UploadCVService {
             );
             System.out.println("Event published to RabbitMQ - CV ID: " + cv.getId());
 
-            CandidateCVResponse response = CandidateCVResponse.builder()
+            return CandidateCVResponse.builder()
                     .cvId(cv.getId())
                     .positionId(positionId)
                     .fileName(fileName)
@@ -75,7 +75,6 @@ public class UploadCVService {
                     .updatedAt(cv.getUpdatedAt())
                     .build();
 
-            return new ApiResponse<>(200, "CV uploaded successfully", response);
         } catch (CustomException e) {
             System.err.println("CustomException: " + e.getMessage());
             throw e;
@@ -105,8 +104,8 @@ public class UploadCVService {
                 }
 
                 // Call back existing CV upload method
-                ApiResponse<CandidateCVResponse> result = uploadSingleCV(file, positionId);
-                responses.add(result.getData());
+                CandidateCVResponse result = uploadSingleCV(file, positionId);
+                responses.add(result);
                 System.out.println("File " + (i+1) + " uploaded successfully");
 
             } catch (Exception e) {
