@@ -24,10 +24,10 @@ public class AIAnalysisListener {
 
     @RabbitListener(queues = RabbitMQConfig.CV_ANALYZE_QUEUE, containerFactory = "rabbitListenerContainerFactory")
     @Retryable(
-            value = {RuntimeException.class},
+//            value = {RuntimeException.class},
             maxAttempts = 3,
-            backoff = @Backoff(delay = 2000, multiplier = 2, maxDelay = 10000),
-            exclude = {IllegalArgumentException.class}
+            backoff = @Backoff(delay = 2000, multiplier = 2, maxDelay = 10000)
+//            exclude = {IllegalArgumentException.class}
     )
     public void handleAnalyzeRequest(@Payload CVAnalysisRequest request) {
         String batchId = request.getBatchId();

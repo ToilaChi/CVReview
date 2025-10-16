@@ -61,10 +61,10 @@ public class LlamaParseClient {
 
     @RabbitListener(queues = RabbitMQConfig.CV_UPLOAD_QUEUE, containerFactory = "rabbitListenerContainerFactory")
     @Retryable(
-            value = {RuntimeException.class},
+//            value = {RuntimeException.class},
             maxAttempts = 3,
-            backoff = @Backoff(delay = 2000, multiplier = 2, maxDelay = 10000),
-            exclude = {IllegalArgumentException.class}
+            backoff = @Backoff(delay = 2000, multiplier = 2, maxDelay = 10000)
+//            exclude = {IllegalArgumentException.class}
     )
     public void parseCV(CVUploadEvent event) {
         int cvId = event.getCvId();
