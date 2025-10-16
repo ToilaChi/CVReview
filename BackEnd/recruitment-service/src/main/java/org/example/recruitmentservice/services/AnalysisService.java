@@ -69,6 +69,10 @@ public class AnalysisService {
                     continue;
                 }
 
+                cv.setCvStatus(CVStatus.SCORING);
+                cv.setUpdatedAt(LocalDateTime.now());
+                candidateCVRepository.save(cv);
+
                 CVAnalysisRequest request = new CVAnalysisRequest();
                 request.setCvId(cv.getId());
                 request.setPositionId(positionId);

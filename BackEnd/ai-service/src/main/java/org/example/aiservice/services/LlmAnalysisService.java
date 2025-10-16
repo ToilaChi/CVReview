@@ -27,8 +27,7 @@ public class LlmAnalysisService {
     @Value("${gemini.api-key}")
     private String apiKey;
 
-    private static final String GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=%s";
-
+    private static final String GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=%s";
 
     public CVAnalysisResult analyze(CVAnalysisRequest req) {
         try {
@@ -108,7 +107,15 @@ public class LlmAnalysisService {
                 .build();
 
         HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
-        return response.body();
+        String body = response.body();
+
+        if (body.contains("Quota exceeded")) {
+            log.warn("[LLM] Quota exceeded, retrying after 10s...");
+            Thread.sleep(10000);
+            return client.send(request, HttpResponse.BodyHandlers.ofString()).body();
+        }
+
+        return body;
     }
 
     private CVAnalysisResult parseGeminiResponse(String rawResponse) {
