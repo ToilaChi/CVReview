@@ -13,6 +13,7 @@ import org.example.recruitmentservice.models.entity.Positions;
 import org.example.recruitmentservice.repository.CVAnalysisRepository;
 import org.example.recruitmentservice.repository.CandidateCVRepository;
 import org.example.recruitmentservice.repository.PositionRepository;
+import org.example.recruitmentservice.services.ProcessingBatchService;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.stereotype.Component;
@@ -26,6 +27,7 @@ public class CVAnalysisResultListener {
     private final CVAnalysisRepository cvAnalysisRepository;
     private final CandidateCVRepository candidateCVRepository;
     private final PositionRepository positionRepository;
+    private final ProcessingBatchService processingBatchService;
 
     @RabbitListener(queues = RabbitMQConfig.CV_ANALYSIS_RESULT_QUEUE)
     public void handleAnalysisResult(@Payload CVAnalysisResult result) {
@@ -50,7 +52,9 @@ public class CVAnalysisResultListener {
             cvAnalysisRepository.save(cvAnalysis);
 
             cv.setCvStatus(CVStatus.SCORED);
+            cv.setScoredAt(LocalDateTime.now());
             candidateCVRepository.save(cv);
+            processingBatchService.incrementProcessed(result.getBatchId());
 
             log.info("[AI-RESULT] Saved analysis result for cvId={} score={}", result.getCvId(), result.getScore());
         } catch (Exception e) {

@@ -6,7 +6,8 @@ import org.example.commonlibrary.dto.response.ErrorCode;
 import org.example.commonlibrary.exception.CustomException;
 import org.example.recruitmentservice.config.RabbitMQConfig;
 import org.example.recruitmentservice.dto.request.CVUploadEvent;
-import org.example.recruitmentservice.dto.response.CandidateCVResponse;
+import org.example.recruitmentservice.models.entity.ProcessingBatch;
+import org.example.recruitmentservice.models.enums.BatchType;
 import org.example.recruitmentservice.models.enums.CVStatus;
 import org.example.recruitmentservice.models.entity.CandidateCV;
 import org.example.recruitmentservice.models.entity.Positions;
@@ -16,10 +17,10 @@ import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.UUID;
+import java.time.format.DateTimeFormatter;
+import java.util.*;
 
 @Service
 @RequiredArgsConstructor
@@ -28,8 +29,9 @@ public class UploadCVService {
     private final CandidateCVRepository candidateCVRepository;
     private final StorageService storageService;
     private final PositionRepository positionRepository;
+    private final ProcessingBatchService processingBatchService;
 
-    public CandidateCVResponse uploadSingleCV(MultipartFile file, Integer positionId) {
+    public void uploadSingleCV(MultipartFile file, Integer positionId, String batchId) {
         try {
             if (file == null || file.isEmpty()) {
                 System.err.println("File is null or empty!");
@@ -55,25 +57,17 @@ public class UploadCVService {
             cv.setCvPath(filePath);
             cv.setCvStatus(CVStatus.UPLOADED);
             cv.setUpdatedAt(LocalDateTime.now());
+            cv.setBatchId(batchId);
 
             candidateCVRepository.save(cv);
 
-            CVUploadEvent event = new CVUploadEvent(cv.getId(), filePath, positionId);
+            CVUploadEvent event = new CVUploadEvent(cv.getId(), filePath, positionId, batchId);
 
             rabbitTemplate.convertAndSend(
                     RabbitMQConfig.CV_UPLOAD_QUEUE,
                     event
             );
             System.out.println("Event published to RabbitMQ - CV ID: " + cv.getId());
-
-            return CandidateCVResponse.builder()
-                    .cvId(cv.getId())
-                    .positionId(positionId)
-                    .fileName(fileName)
-                    .filePath(filePath)
-                    .status(CVStatus.UPLOADED)
-                    .updatedAt(cv.getUpdatedAt())
-                    .build();
 
         } catch (CustomException e) {
             System.err.println("CustomException: " + e.getMessage());
@@ -85,13 +79,26 @@ public class UploadCVService {
         }
     }
 
-    public ApiResponse<List<CandidateCVResponse>> uploadMultipleCVs(
+    public ApiResponse<Map<String, Object>> uploadMultipleCVs(
             List<MultipartFile> files,
             Integer positionId) {
         Positions position = positionRepository.findById(positionId)
                 .orElseThrow(() -> new CustomException(ErrorCode.POSITION_NOT_FOUND));
 
-        List<CandidateCVResponse> responses = new ArrayList<>();
+        if (files == null || files.isEmpty()) {
+            throw new CustomException(ErrorCode.FILE_NOT_FOUND);
+        }
+
+        String batchId = "POS" + positionId + "_"
+                + LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"))
+                + "_B" + UUID.randomUUID().toString().substring(0, 4);
+
+        ProcessingBatch batch = processingBatchService.createBatch(
+                batchId,
+                positionId,
+                files.size(),
+                BatchType.UPLOAD
+        );
 
         for (int i = 0; i < files.size(); i++) {
             MultipartFile file = files.get(i);
@@ -103,23 +110,20 @@ public class UploadCVService {
                 throw new CustomException(ErrorCode.FILE_NOT_FOUND);
                 }
 
-                // Call back existing CV upload method
-                CandidateCVResponse result = uploadSingleCV(file, positionId);
-                responses.add(result);
+                uploadSingleCV(file, positionId, batchId);
                 System.out.println("File " + (i+1) + " uploaded successfully");
 
-            } catch (Exception e) {
-                System.err.println("File " + (i+1) + " failed: " + e.getMessage());
-                throw new CustomException(ErrorCode.FAILED_SAVE_FILE);
+            } catch (CustomException e) {
+                System.err.println("File " + (i + 1) + " failed: " + e.getMessage());
             }
         }
 
-        String message = String.format(
-                "Uploaded %d/%d CVs successfully",
-                responses.size(),
-                files.size()
-        );
+        Map<String, Object> response = new HashMap<>();
+        response.put("batchId", batchId);
+        response.put("message", "Please wait a moment. Your CVs are being processed.");
+        response.put("totalCv", files.size());
+        response.put("status", batch.getStatus());
 
-        return new ApiResponse<>(ErrorCode.SUCCESS.getCode(), message, responses);
+        return new ApiResponse<>(200, "Batch created successfully", response);
     }
 }

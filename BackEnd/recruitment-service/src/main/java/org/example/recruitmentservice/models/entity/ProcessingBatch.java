@@ -45,13 +45,4 @@ public class ProcessingBatch {
     private LocalDateTime createdAt = LocalDateTime.now();
 
     private LocalDateTime completedAt;
-
-    // helper methods
-    public void incrementProcessed() {
-        this.processedCv++;
-        if (processedCv >= totalCv) {
-            this.status = BatchStatus.COMPLETED;
-            this.completedAt = LocalDateTime.now();
-        }
-    }
 }

@@ -8,6 +8,7 @@ import org.example.recruitmentservice.dto.request.CVUploadEvent;
 import org.example.recruitmentservice.models.enums.CVStatus;
 import org.example.recruitmentservice.models.entity.CandidateCV;
 import org.example.recruitmentservice.repository.CandidateCVRepository;
+import org.example.recruitmentservice.services.ProcessingBatchService;
 import org.example.recruitmentservice.services.StorageService;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.beans.factory.annotation.Value;
@@ -36,6 +37,7 @@ public class LlamaParseClient {
     private final RestTemplate restTemplate = new RestTemplate();
     private final CandidateCVRepository candidateCVRepository;
     private final StorageService storageService;
+    private final ProcessingBatchService processingBatchService;
 
     public String parseJD(String filePath) {
         try {
@@ -95,6 +97,7 @@ public class LlamaParseClient {
             cv.setCvStatus(CVStatus.PARSED);
             cv.setParsedAt(LocalDateTime.now());
             cv.setUpdatedAt(LocalDateTime.now());
+            processingBatchService.incrementProcessed(event.getBatchId());
             candidateCVRepository.save(cv);
 
             System.out.println("CV parsed successfully - ID: " + cvId +

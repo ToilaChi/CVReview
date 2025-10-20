@@ -33,7 +33,10 @@ public enum ErrorCode {
     REVIEW_FAILED(4001, "AI review failed", HttpStatus.INTERNAL_SERVER_ERROR),
 
     // File errors
-    FILE_DELETE_FAILED(5001, "File can not delete", HttpStatus.INTERNAL_SERVER_ERROR);
+    FILE_DELETE_FAILED(5001, "File can not delete", HttpStatus.INTERNAL_SERVER_ERROR),
+
+    // Processing batch
+    BATCH_NOT_FOUND(6001, "Batch not found", HttpStatus.NOT_FOUND);
 
     private final int code;
     private final String message;
