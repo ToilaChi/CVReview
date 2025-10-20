@@ -375,15 +375,10 @@ The project will be composed of the following microservices:
             "message": "Uploaded 9/9 CVs successfully",
             "data": [
             {
-                "cvId": 23,
-                "positionId": 11,
-                "email": null,
-                "name": null,
-                "fileName": "1c74f5c7-9917-4da7-bf20-3744b4623e87-CV_Pham_Intern_Developer.pdf",
-                "filePath": "BackEnd/Java/Senior/CV/1c74f5c7-9917-4da7-bf20-3744b4623e87-CV_Pham_Intern_Developer.pdf",
-                "status": "UPLOADED",
-                "updatedAt": "2025-10-08T14:30:09.6209691",
-                "parsedAt": null
+                "totalCv": 3,
+                "batchId": "POS8_20251020_B0ffa",
+                "message": "Please wait a moment. Your CVs are being processed.",
+                "status": "PROCESSING"
             },
             .....
             {
@@ -604,6 +599,91 @@ The project will be composed of the following microservices:
             "data": null,
             "timestamp": "2025-10-13T13:59:43.5713966"
         }
+    ``` 
+- **Analysis CV**
+  - **Name:** `/analysis` 
+  - Endpoint: /analysis
+  - Method: POST
+  - Description: Analysis CV.
+  - Content-Type:  `multipart/form-data`
+  - Header:
+    | Key            | Value                     | Required |
+    |----------------|---------------------------|----------|
+    | Authorization  | Bearer <accessToken> | Yes      |
+  - Query Parameters
+    | Key   | Required | Value |
+    |-------|----------|---------|
+    | positionId  | Yes      | Pham Minh Chi     |
+    | cvIds  | No      | 1     |
+    ...
+    | cvIds  | No      | n    |
+  - Response:
+    - Success: 
+    ```json
+        {
+            "statusCode": 200,
+            "message": "Batch created successfully",
+            "data": {
+                "totalCv": 4,
+                "batchId": "POS15_20251020_133529",
+                "message": "Please wait a moment. Your CVs are being processed.",
+                "status": "PROCESSING"
+            },
+            "timestamp": "2025-10-20T13:35:30.3444644"
+        }
+    ```
+    - Fail:
+     - Position not found:
+    ```json
+        {
+            "statusCode": 2001,
+            "message": "CV not found",
+            "data": null,
+            "timestamp": "2025-10-13T13:59:43.5713966"
+        }
+    ```
+     - CV not found:
+    ```json
+        {
+            "statusCode": 2001,
+            "message": "CV not found",
+            "data": null,
+            "timestamp": "2025-10-13T13:59:43.5713966"
+        }
+    ``` 
+- **Tracking CV upload/scoring**
+  - **Name:** `/tracking` 
+  - Endpoint: /tracking/{{batchId}}/status
+  - Method: GET
+  - Description: Track CV upload/score progress.
+  - Response:
+    - Success: 
+    ```json
+        {
+            "statusCode": 200,
+            "message": "Deleted Candidate CV successfully",
+            "data": {
+                "createdAt": "2025-10-20T13:35:29.187656",
+                "completedAt": "2025-10-20T13:37:11.606602",
+                "processedCv": 4,
+                "totalCv": 4,
+                "batchId": "POS15_20251020_133529",
+                "type": "SCORING/UPLOAD",
+                "status": "COMPLETED"
+            },
+            "timestamp": "2025-10-13T13:53:53.9001019"
+        }
+    ```
+    - Fail:
+     - Batch not found:
+    ```json
+        {
+            "statusCode": 6001,
+            "message": "Batch not found",
+            "data": null,
+            "timestamp": "2025-10-13T13:59:43.5713966"
+        }
+    ``` 
     ``` 
  
    
