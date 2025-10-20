@@ -6,6 +6,8 @@ import org.example.commonlibrary.dto.response.ErrorCode;
 import org.example.commonlibrary.exception.CustomException;
 import org.example.recruitmentservice.config.RabbitMQConfig;
 import org.example.commonlibrary.dto.request.CVAnalysisRequest;
+import org.example.recruitmentservice.models.entity.ProcessingBatch;
+import org.example.recruitmentservice.models.enums.BatchType;
 import org.example.recruitmentservice.models.enums.CVStatus;
 import org.example.recruitmentservice.models.entity.CandidateCV;
 import org.example.recruitmentservice.models.entity.Positions;
@@ -19,7 +21,9 @@ import org.springframework.stereotype.Service;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @Slf4j
 @Service
@@ -28,11 +32,12 @@ public class AnalysisService {
     private final RabbitTemplate rabbitTemplate;
     private final CandidateCVRepository candidateCVRepository;
     private final PositionRepository positionRepository;
+    private final ProcessingBatchService processingBatchService;
 
     @Value("${analysis.batch-size}")
     private int batchSize;
 
-    public ApiResponse<String> analyzeCvs(Integer positionId, List<Integer> cvIds) {
+    public ApiResponse<Map<String, Object>> analyzeCvs(Integer positionId, List<Integer> cvIds) {
         Positions position = positionRepository.findById(positionId)
                 .orElseThrow(() -> new CustomException(ErrorCode.POSITION_NOT_FOUND));
         String jdText = position.getJobDescription();
@@ -56,9 +61,16 @@ public class AnalysisService {
         log.info("[AI_ANALYSIS] Start sending {} CV(s) for Position {} | batchId={}",
                 cvs.size(), positionId, batchId);
 
-        List<List<CandidateCV>> batches = partitionList(cvs, batchSize);
+        ProcessingBatch processingBatch = processingBatchService.createBatch(
+                batchId,
+                positionId,
+                cvs.size(),
+                BatchType.SCORING
+        );
 
+        List<List<CandidateCV>> batches = partitionList(cvs, batchSize);
         int batchIndex = 0;
+
         for (List<CandidateCV> batch : batches) {
             batchIndex++;
             String subBatchId = batchId + "_B" + batchIndex;
@@ -71,6 +83,7 @@ public class AnalysisService {
 
                 cv.setCvStatus(CVStatus.SCORING);
                 cv.setUpdatedAt(LocalDateTime.now());
+                cv.setBatchId(batchId);
                 candidateCVRepository.save(cv);
 
                 CVAnalysisRequest request = new CVAnalysisRequest();
@@ -78,7 +91,7 @@ public class AnalysisService {
                 request.setPositionId(positionId);
                 request.setCvText(cv.getCvContent());
                 request.setJdText(jdText);
-                request.setBatchId(subBatchId);
+                request.setBatchId(batchId);
 
                 rabbitTemplate.convertAndSend(
                         RabbitMQConfig.AI_EXCHANGE,
@@ -90,13 +103,15 @@ public class AnalysisService {
             }
         }
 
+        Map<String, Object> response = new HashMap<>();
+        response.put("batchId", batchId);
+        response.put("message", "Please wait a moment. Your CVs are being processed.");
+        response.put("totalCv", cvs.size());
+        assert processingBatch != null;
+        response.put("status", processingBatch.getStatus());
+
         log.info("[AI_ANALYSIS] Completed publishing CV batch for Position {} | batchId={}", positionId, batchId);
-        return new ApiResponse<>(
-                ErrorCode.SUCCESS.getCode(),
-                "Please wait a moment!",
-                batchId,
-                LocalDateTime.now()
-                );
+        return new ApiResponse<>(200, "Batch created successfully", response);
     }
 
     private <T> List<List<T>> partitionList(List<T> list, int size) {

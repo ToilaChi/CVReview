@@ -48,5 +48,8 @@ public class CandidateCV {
     private LocalDateTime parsedAt;
 
     @Column
+    private String batchId;
+
+    @Column
     private LocalDateTime scoredAt;
 }

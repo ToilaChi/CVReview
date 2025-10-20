@@ -47,7 +47,6 @@ public class AIAnalysisListener {
         }
 
         try {
-            // Call LLM analysis (blocking). This method should return CVAnalysisResult or throw on fatal error.
             CVAnalysisResult result = llmAnalysisService.analyze(request);
 
             // Set analyzedAt if not set by LLM service
