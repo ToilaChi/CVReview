@@ -13,9 +13,9 @@ import java.util.HashMap;
 import java.util.Map;
 
 @RestController
-@RequestMapping("/batch")
+@RequestMapping("/tracking")
 @RequiredArgsConstructor
-public class BatchController {
+public class ProcessingBatchController {
 
     private final ProcessingBatchService processingBatchService;
 
