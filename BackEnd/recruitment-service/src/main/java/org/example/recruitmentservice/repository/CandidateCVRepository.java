@@ -9,5 +9,6 @@ import java.util.List;
 
 public interface CandidateCVRepository extends JpaRepository<CandidateCV, Integer> {
     Page<CandidateCV> findByPositionId(int positionId, Pageable pageable);
-    List<CandidateCV> findByPositionIdAndCvStatus(int position_id, CVStatus cvStatus);
+    List<CandidateCV> findByPositionIdAndCvStatus(int positionId, CVStatus cvStatus);
+    List<CandidateCV> findByBatchIdAndCvStatus(String batchId, CVStatus cvStatus);
 }

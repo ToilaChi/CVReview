@@ -52,4 +52,14 @@ public class CandidateCV {
 
     @Column
     private LocalDateTime scoredAt;
+
+    @Column
+    private LocalDateTime failedAt;
+
+    @Column
+    private Integer retryCount;
+
+    @Lob
+    @Column(columnDefinition = "TEXT")
+    private String errorMessage;
 }

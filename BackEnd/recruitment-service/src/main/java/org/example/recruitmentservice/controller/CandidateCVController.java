@@ -16,6 +16,11 @@ import org.springframework.web.multipart.MultipartFile;
 public class CandidateCVController {
     private final CandidateCVService candidateCVService;
 
+    @GetMapping("/{cvId}")
+    public ApiResponse<CandidateCVResponse> getCVDetail(@PathVariable int cvId) {
+        return candidateCVService.getCVDetail(cvId);
+    }
+
     @GetMapping("/position/{positionId}")
     public ApiResponse<PageResponse<CandidateCVResponse>> getAllCVsByPositionId(
             @PathVariable int positionId,
