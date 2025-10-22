@@ -1,5 +1,6 @@
 package org.example.recruitmentservice.services;
 
+import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.example.commonlibrary.dto.response.ErrorCode;
@@ -31,18 +32,19 @@ public class ProcessingBatchService {
         return batch;
     }
 
+    @Transactional
     public void incrementProcessed(String batchId) {
+        batchRepository.incrementProcessed(batchId);
+
+        // Kiểm tra xem batch đã hoàn tất chưa
         ProcessingBatch batch = batchRepository.findByBatchId(batchId)
                 .orElseThrow(() -> new CustomException(ErrorCode.BATCH_NOT_FOUND));
 
-        batch.setProcessedCv(batch.getProcessedCv() + 1);
-
-        if (batch.getProcessedCv() >= batch.getTotalCv()) {
+        if (batch.getProcessedCv() + 1 >= batch.getTotalCv()) {
             batch.setStatus(BatchStatus.COMPLETED);
             batch.setCompletedAt(LocalDateTime.now());
+            batchRepository.save(batch);
         }
-
-        batchRepository.save(batch);
     }
 
     public ProcessingBatch getBatch(String batchId) {
