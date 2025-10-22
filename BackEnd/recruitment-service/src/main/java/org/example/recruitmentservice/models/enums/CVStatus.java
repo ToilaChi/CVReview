@@ -6,5 +6,7 @@ public enum CVStatus {
     PARSED,
     SCORING,
     SCORED,
-    FAILED
+    FAILED,
+    REJECTED,
+    APPROVED
 }

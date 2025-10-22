@@ -661,7 +661,7 @@ The project will be composed of the following microservices:
     ```json
         {
             "statusCode": 200,
-            "message": "Deleted Candidate CV successfully",
+            "message": "Batch status fetched successfully",
             "data": {
                 "createdAt": "2025-10-20T13:35:29.187656",
                 "completedAt": "2025-10-20T13:37:11.606602",
@@ -683,7 +683,6 @@ The project will be composed of the following microservices:
             "data": null,
             "timestamp": "2025-10-13T13:59:43.5713966"
         }
-    ``` 
     ``` 
  
    
