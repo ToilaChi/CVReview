@@ -20,7 +20,12 @@ public class CandidateCVResponse {
     private String fileName;
     private String filePath;
     private CVStatus status;
+    private String errorMessage;
+    private LocalDateTime failedAt;
+    private Integer retryCount;
+    private Boolean canRetry;
     private LocalDateTime updatedAt;
     private LocalDateTime parsedAt;
+    private LocalDateTime scoredAt;
 }
 

@@ -20,6 +20,9 @@ public enum ErrorCode {
     CV_NOT_FOUND(2001, "CV not found", HttpStatus.NOT_FOUND),
     CV_PARSE_FAILED(2002, "Failed to parse CV", HttpStatus.BAD_REQUEST),
     DUPLICATE_CV(2003, "Duplicate CV upload", HttpStatus.CONFLICT),
+    CV_ALREADY_PROCESSING(2004, "CV already processing", HttpStatus.CONFLICT),
+    CV_NOT_FAILED(2005, "CV not failed", HttpStatus.CONFLICT),
+    NO_FAILED_CVS_IN_BATCH(2006, "No failed CVs in batch", HttpStatus.NOT_FOUND),
 
 
     // Position errors
