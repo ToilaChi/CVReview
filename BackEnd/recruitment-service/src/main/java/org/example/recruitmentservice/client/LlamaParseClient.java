@@ -97,7 +97,7 @@ public class LlamaParseClient {
             cv.setCvStatus(CVStatus.PARSED);
             cv.setParsedAt(LocalDateTime.now());
             cv.setUpdatedAt(LocalDateTime.now());
-            processingBatchService.incrementProcessed(event.getBatchId());
+            processingBatchService.incrementProcessed(event.getBatchId(), true);
             candidateCVRepository.save(cv);
 
             System.out.println("CV parsed successfully - ID: " + cvId +

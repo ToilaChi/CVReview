@@ -23,53 +23,75 @@ public class AIAnalysisListener {
     private final RabbitTemplate rabbitTemplate;
 
     @RabbitListener(queues = RabbitMQConfig.CV_ANALYZE_QUEUE, containerFactory = "rabbitListenerContainerFactory")
-    @Retryable(
-//            value = {RuntimeException.class},
-            maxAttempts = 3,
-            backoff = @Backoff(delay = 2000, multiplier = 2, maxDelay = 10000)
-//            exclude = {IllegalArgumentException.class}
-    )
     public void handleAnalyzeRequest(@Payload CVAnalysisRequest request) {
         String batchId = request.getBatchId();
         Integer cvId = request.getCvId();
 
-        log.info("[AI-LISTENER] Received analyze request. batchId={} cvId={} positionId={}",
+        log.info("[AI-LISTENER] Received analyze request: batchId={}, cvId={}, positionId={}",
                 batchId, cvId, request.getPositionId());
 
-        // Basic validation
+        validateRequest(request, cvId, batchId);
+
+        // ====== CALL GEMINI API ======
+        log.info("[AI-LISTENER] Starting Gemini analysis for cvId={}", cvId);
+        CVAnalysisResult result = llmAnalysisService.analyze(request);
+
+        // Set analyzedAt timestamp if not set by service
+        if (result.getAnalyzedAt() == null) {
+            result.setAnalyzedAt(LocalDateTime.now());
+        }
+
+        rabbitTemplate.convertAndSend(
+                RabbitMQConfig.AI_EXCHANGE,
+                RabbitMQConfig.CV_ANALYSIS_RESULT_ROUTING_KEY,
+                result
+        );
+
+        log.info("[AI-LISTENER] Successfully published analysis result: cvId={}, batchId={}, score={}",
+                cvId, batchId, result.getScore());
+    }
+
+    // Helper method
+
+    private void validateRequest(CVAnalysisRequest request, Integer cvId, String batchId) {
         if (request.getCvText() == null || request.getCvText().isBlank()) {
-            log.warn("[AI-LISTENER] cvText empty for cvId={} batchId={}, throwing to trigger retry/DLQ", cvId, batchId);
-            throw new IllegalArgumentException("cvText is empty");
+            log.error("[AI-LISTENER] Validation failed: cvText is empty for cvId={}, batchId={}",
+                    cvId, batchId);
+            throw new IllegalArgumentException("cvText is empty or null");
         }
+
         if (request.getJdText() == null || request.getJdText().isBlank()) {
-            log.warn("[AI-LISTENER] jdText empty for cvId={} batchId={}, throwing to trigger retry/DLQ", cvId, batchId);
-            throw new IllegalArgumentException("jdText is empty");
+            log.error("[AI-LISTENER] Validation failed: jdText is empty for cvId={}, batchId={}",
+                    cvId, batchId);
+            throw new IllegalArgumentException("jdText is empty or null");
         }
 
-        try {
-            CVAnalysisResult result = llmAnalysisService.analyze(request);
+        if (cvId == null || cvId <= 0) {
+            log.error("[AI-LISTENER] Validation failed: invalid cvId={}", cvId);
+            throw new IllegalArgumentException("cvId is invalid");
+        }
 
-            // Set analyzedAt if not set by LLM service
-            if (result.getAnalyzedAt() == null) {
-                result.setAnalyzedAt(LocalDateTime.now());
-            }
+        if (batchId == null || batchId.isBlank()) {
+            log.error("[AI-LISTENER] Validation failed: batchId is empty");
+            throw new IllegalArgumentException("batchId is empty or null");
+        }
+    }
 
-            // Publish result back to recruitment-service via AI exchange -> routing key cv.analysis.result
-            rabbitTemplate.convertAndSend(
-                    RabbitMQConfig.AI_EXCHANGE,
-                    RabbitMQConfig.CV_ANALYSIS_RESULT_ROUTING_KEY,
-                    result
-            );
+    private String determineErrorType(Exception ex) {
+        String message = ex.getMessage() != null ? ex.getMessage().toLowerCase() : "";
 
-            log.info("[AI-LISTENER] Published analysis result. cvId={} batchId={} score={}",
-                    cvId, batchId, result.getScore());
-
-        } catch (Exception ex) {
-            // Any runtime exception -> allow retry template configured in container factory to handle retries.
-            // After retries exhausted, because factory.setDefaultRequeueRejected(false), message will be rejected and sent to DLQ.
-            log.error("[AI-LISTENER] Error processing cvId={} batchId={} -> will be retried or moved to DLQ. cause={}",
-                    cvId, batchId, ex.getMessage(), ex);
-            throw new RuntimeException("LLM analysis failed", ex);
+        if (message.contains("quota exceeded") || message.contains("rate limit")) {
+            return "QUOTA_EXCEEDED";
+        } else if (message.contains("timeout")) {
+            return "TIMEOUT";
+        } else if (message.contains("parse") || message.contains("json")) {
+            return "PARSE_ERROR";
+        } else if (message.contains("connection") || message.contains("network")) {
+            return "NETWORK_ERROR";
+        } else if (ex instanceof IllegalArgumentException) {
+            return "VALIDATION_ERROR";
+        } else {
+            return "UNKNOWN_ERROR";
         }
     }
 }

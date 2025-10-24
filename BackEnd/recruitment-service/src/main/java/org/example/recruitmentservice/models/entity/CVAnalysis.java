@@ -40,4 +40,7 @@ public class CVAnalysis {
     private String skillMiss;
 
     private LocalDateTime analyzedAt;
+
+    @Column
+    private String analysisMethod = "LLM";
 }

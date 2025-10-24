@@ -29,7 +29,7 @@ public enum ErrorCode {
     POSITION_NOT_FOUND(3001, "Position not found", HttpStatus.NOT_FOUND),
     DUPLICATE_POSITION(3002, "Position already exists", HttpStatus.CONFLICT),
     FILE_NOT_FOUND(3003, "File not found", HttpStatus.NOT_FOUND),
-    FILE_PARSE_FAILED(3004, "Failed to parse JD", HttpStatus.BAD_REQUEST),
+    FILE_PARSE_FAILED(3004, "Failed to parse JD", HttpStatus.INTERNAL_SERVER_ERROR),
     FAILED_SAVE_FILE(3005, "Failed to save file", HttpStatus.INTERNAL_SERVER_ERROR),
 
     // Review errors
@@ -39,7 +39,10 @@ public enum ErrorCode {
     FILE_DELETE_FAILED(5001, "File can not delete", HttpStatus.INTERNAL_SERVER_ERROR),
 
     // Processing batch
-    BATCH_NOT_FOUND(6001, "Batch not found", HttpStatus.NOT_FOUND);
+    BATCH_NOT_FOUND(6001, "Batch not found", HttpStatus.NOT_FOUND),
+
+    // Retry
+    RETRY_FAILED(7001, "Retry failed", HttpStatus.INTERNAL_SERVER_ERROR);
 
     private final int code;
     private final String message;

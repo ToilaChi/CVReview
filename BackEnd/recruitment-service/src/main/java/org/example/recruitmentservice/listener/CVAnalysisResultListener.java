@@ -2,6 +2,7 @@ package org.example.recruitmentservice.listener;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.example.commonlibrary.dto.response.CVAnalysisFailure;
 import org.example.commonlibrary.dto.response.CVAnalysisResult;
 import org.example.commonlibrary.dto.response.ErrorCode;
 import org.example.commonlibrary.exception.CustomException;
@@ -13,6 +14,7 @@ import org.example.recruitmentservice.models.entity.Positions;
 import org.example.recruitmentservice.repository.CVAnalysisRepository;
 import org.example.recruitmentservice.repository.CandidateCVRepository;
 import org.example.recruitmentservice.repository.PositionRepository;
+import org.example.recruitmentservice.services.AnalysisService;
 import org.example.recruitmentservice.services.ProcessingBatchService;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.messaging.handler.annotation.Payload;
@@ -28,8 +30,9 @@ public class CVAnalysisResultListener {
     private final CandidateCVRepository candidateCVRepository;
     private final PositionRepository positionRepository;
     private final ProcessingBatchService processingBatchService;
+    private final AnalysisService analysisService;
 
-    @RabbitListener(queues = RabbitMQConfig.CV_ANALYSIS_RESULT_QUEUE)
+    @RabbitListener(queues = RabbitMQConfig.CV_ANALYSIS_RESULT_QUEUE, containerFactory = "rabbitListenerContainerFactory")
     public void handleAnalysisResult(@Payload CVAnalysisResult result) {
         log.info("[AI-RESULT] Received analysis result for cvId={} score={} batchId={}",
                 result.getCvId(), result.getScore(), result.getBatchId());
@@ -53,14 +56,32 @@ public class CVAnalysisResultListener {
 
             cv.setCvStatus(CVStatus.SCORED);
             cv.setScoredAt(LocalDateTime.now());
+            cv.setErrorMessage(null);
+            cv.setFailedAt(null);
             candidateCVRepository.save(cv);
-            processingBatchService.incrementProcessed(result.getBatchId());
+            processingBatchService.incrementProcessed(result.getBatchId(), true);
 
             log.info("[AI-RESULT] Saved analysis result for cvId={} score={}", result.getCvId(), result.getScore());
         } catch (Exception e) {
             log.error("[AI-RESULT] Error saving analysis result for cvId={} | cause={}",
                     result.getCvId(), e.getMessage(), e);
             throw e;
+        }
+    }
+
+    @RabbitListener(queues = "cv.analysis.failed.queue", containerFactory = "rabbitListenerContainerFactory")
+    public void handleFailureResult(@Payload CVAnalysisFailure failure) {
+        log.error("[FAILURE-LISTENER] Received failure event: cvId={}, batchId={}, error={}",
+                failure.getCvId(), failure.getBatchId(), failure.getErrorMessage());
+
+        try {
+            analysisService.handleFailedCV(failure);
+            log.info("[FAILURE-LISTENER] Successfully processed failure for cvId={}",
+                    failure.getCvId());
+        } catch (Exception e) {
+            log.error("[FAILURE-LISTENER] Error handling failure for cvId={}: {}",
+                    failure.getCvId(), e.getMessage(), e);
+            throw e; // Let RabbitMQ retry this
         }
     }
 }

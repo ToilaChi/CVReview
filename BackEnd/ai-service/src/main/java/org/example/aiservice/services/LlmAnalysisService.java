@@ -33,7 +33,7 @@ public class LlmAnalysisService {
         try {
             String prompt = buildPrompt(req.getJdText(), req.getCvText());
 
-            String response = callGemini(prompt);
+            String response = callGemini(prompt, req.getCvId());
             log.info("[LLM] Raw Gemini response: {}", response);
 
             // Parse Json
@@ -85,7 +85,7 @@ public class LlmAnalysisService {
            \s""".formatted(jd, cv);
     }
 
-    private String callGemini(String prompt) throws IOException, InterruptedException {
+    private String callGemini(String prompt, int cvId) throws IOException, InterruptedException {
         HttpClient client = HttpClient.newHttpClient();
 
         String requestBody = """
@@ -109,11 +109,30 @@ public class LlmAnalysisService {
         HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
         String body = response.body();
 
-        if (body.contains("Quota exceeded")) {
-            log.warn("[LLM] Quota exceeded, retrying after 10s...");
-            Thread.sleep(10000);
-            return client.send(request, HttpResponse.BodyHandlers.ofString()).body();
+        // Check for API errors
+        if (response.statusCode() != 200) {
+            log.error("[LLM] Gemini API error for cvId={}: status={}, body={}",
+                    cvId, response.statusCode(), body);
+            throw new RuntimeException("Gemini API returned status " + response.statusCode());
         }
+
+        // Check for quota exceeded in response body
+        if (body.contains("Quota exceeded") || body.contains("quota_exceeded")) {
+            log.error("[LLM] Quota exceeded for cvId={}", cvId);
+            throw new RuntimeException("Gemini API quota exceeded - will retry via RabbitMQ");
+        }
+
+        // Check for rate limit
+        if (body.contains("Rate limit") || body.contains("rate_limit")) {
+            log.error("[LLM] Rate limit hit for cvId={}", cvId);
+            throw new RuntimeException("Gemini API rate limited - will retry via RabbitMQ");
+        }
+
+//        if (body.contains("Quota exceeded")) {
+//            log.warn("[LLM] Quota exceeded for cvId {}, retrying after 10s...", cvId);
+//            Thread.sleep(10000);
+//            return client.send(request, HttpResponse.BodyHandlers.ofString()).body();
+//        }
 
         return body;
     }
@@ -141,6 +160,7 @@ public class LlmAnalysisService {
             return result;
 
         } catch (Exception ex) {
+            log.error("[LLM] Failed to parse Gemini response: {}", ex.getMessage());
             throw new RuntimeException("Failed to parse Gemini response: " + ex.getMessage(), ex);
         }
     }
