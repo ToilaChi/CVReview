@@ -18,27 +18,31 @@ import java.util.Map;
 @Configuration
 @EnableRabbit
 public class RabbitMQConfig {
-    // ====== UPLOAD FLOW ======
-    public static final String CV_UPLOAD_QUEUE  = "cv.upload.queue";
+
+    // ====== UPLOAD FLOW (Recruitment-service consumes) ======
+    public static final String CV_UPLOAD_QUEUE = "cv.upload.queue";
     public static final String CV_UPLOAD_DLQ = "cv.upload.queue.dlq";
     public static final String CV_UPLOAD_EXCHANGE = "cv.upload.exchange.dlx";
     public static final String CV_UPLOAD_DLQ_ROUTING_KEY = "cv.upload.dlq";
 
-    // ====== Analysis FLOW ======
+    // ====== ANALYSIS FLOW - CONSTANTS ONLY (AI-Service đã declare) ======
     public static final String AI_EXCHANGE = "cv.analysis.exchange";
     public static final String AI_EXCHANGE_DLX = "cv.analysis.exchange.dlx";
 
+    // ❌ KHÔNG declare cv.analyze.queue (AI-Service đã declare)
     public static final String CV_ANALYZE_QUEUE = "cv.analyze.queue";
-    public static final String CV_ANALYZE_DLQ = "cv.analyze.queue.dlq";
     public static final String CV_ANALYZE_ROUTING_KEY = "cv.analyze";
-    public static final String CV_ANALYZE_DLQ_ROUTING_KEY = "cv.analyze.dlq";
 
+    // ✅ Recruitment-service CONSUMES these queues
     public static final String CV_ANALYSIS_RESULT_QUEUE = "cv.analysis.result.queue";
     public static final String CV_ANALYSIS_RESULT_DLQ = "cv.analysis.result.queue.dlq";
     public static final String CV_ANALYSIS_RESULT_ROUTING_KEY = "cv.analysis.result";
     public static final String CV_ANALYSIS_RESULT_DLQ_ROUTING_KEY = "cv.analysis.result.dlq";
 
-    // ====== UPLOAD QUEUE + DLQ ======
+    public static final String CV_ANALYSIS_FAILED_QUEUE = "cv.analysis.failed.queue";
+    public static final String CV_ANALYSIS_FAILED_ROUTING_KEY = "cv.analysis.failed";
+
+    // ====== UPLOAD QUEUE + DLQ (Recruitment-service owns) ======
     @Bean
     public Queue mainQueue() {
         return QueueBuilder.durable(CV_UPLOAD_QUEUE)
@@ -58,60 +62,31 @@ public class RabbitMQConfig {
     }
 
     @Bean
-    public DirectExchange deadLetterExchange() {
-        return new DirectExchange(CV_UPLOAD_EXCHANGE);
-    }
-
-    @Bean
     public Binding mainBinding(Queue mainQueue, DirectExchange mainExchange) {
-        return BindingBuilder.bind(mainQueue).to(mainExchange).with(CV_UPLOAD_DLQ_ROUTING_KEY);
+        return BindingBuilder.bind(mainQueue)
+                .to(mainExchange)
+                .with(CV_UPLOAD_DLQ_ROUTING_KEY);
     }
 
     @Bean
-    public Binding deadLetterBinding(Queue deadLetterQueue, DirectExchange deadLetterExchange) {
-        return BindingBuilder.bind(deadLetterQueue).to(deadLetterExchange).with(CV_UPLOAD_DLQ_ROUTING_KEY + ".dlq");
+    public Binding deadLetterBinding(Queue deadLetterQueue, DirectExchange mainExchange) {
+        return BindingBuilder.bind(deadLetterQueue)
+                .to(mainExchange)
+                .with(CV_UPLOAD_DLQ_ROUTING_KEY + ".dlq");
     }
 
-
-    // ====== AI QUEUE + DLQ ======
-
-    // Main exchange
+    // ====== EXCHANGES (shared with AI-Service) ======
     @Bean
     public DirectExchange aiExchange() {
         return new DirectExchange(AI_EXCHANGE);
     }
 
-    // DLX for AI
     @Bean
     public DirectExchange aiDeadLetterExchange() {
         return new DirectExchange(AI_EXCHANGE_DLX);
     }
 
-    // ---- analyze queue ----
-    @Bean
-    public Queue cvAnalyzeQueue() {
-        return QueueBuilder.durable(CV_ANALYZE_QUEUE)
-                .withArgument("x-dead-letter-exchange", AI_EXCHANGE_DLX)
-                .withArgument("x-dead-letter-routing-key", CV_ANALYZE_DLQ_ROUTING_KEY)
-                .build();
-    }
-
-    @Bean
-    public Queue cvAnalyzeDlqQueue() {
-        return QueueBuilder.durable(CV_ANALYZE_DLQ).build();
-    }
-
-    @Bean
-    public Binding cvAnalyzeBinding(Queue cvAnalyzeQueue, DirectExchange aiExchange) {
-        return BindingBuilder.bind(cvAnalyzeQueue).to(aiExchange).with(CV_ANALYZE_ROUTING_KEY);
-    }
-
-    @Bean
-    public Binding cvAnalyzeDlqBinding(Queue cvAnalyzeDlqQueue, DirectExchange aiDeadLetterExchange) {
-        return BindingBuilder.bind(cvAnalyzeDlqQueue).to(aiDeadLetterExchange).with(CV_ANALYZE_DLQ_ROUTING_KEY);
-    }
-
-    // ---- analysis result queue ----
+    // ====== ANALYSIS RESULT QUEUE (Recruitment-service consumes) ======
     @Bean
     public Queue cvAnalysisResultQueue() {
         return QueueBuilder.durable(CV_ANALYSIS_RESULT_QUEUE)
@@ -127,17 +102,32 @@ public class RabbitMQConfig {
 
     @Bean
     public Binding cvAnalysisResultBinding(Queue cvAnalysisResultQueue, DirectExchange aiExchange) {
-        return BindingBuilder.bind(cvAnalysisResultQueue).to(aiExchange).with(CV_ANALYSIS_RESULT_ROUTING_KEY);
+        return BindingBuilder.bind(cvAnalysisResultQueue)
+                .to(aiExchange)
+                .with(CV_ANALYSIS_RESULT_ROUTING_KEY);
     }
 
     @Bean
     public Binding cvAnalysisResultDlqBinding(Queue cvAnalysisResultDlqQueue, DirectExchange aiDeadLetterExchange) {
-        return BindingBuilder.bind(cvAnalysisResultDlqQueue).to(aiDeadLetterExchange).with(CV_ANALYSIS_RESULT_DLQ_ROUTING_KEY);
+        return BindingBuilder.bind(cvAnalysisResultDlqQueue)
+                .to(aiDeadLetterExchange)
+                .with(CV_ANALYSIS_RESULT_DLQ_ROUTING_KEY);
     }
 
+    // ====== ANALYSIS FAILED QUEUE (Recruitment-service consumes) ======
+    @Bean
+    public Queue cvAnalysisFailedQueue() {
+        return QueueBuilder.durable(CV_ANALYSIS_FAILED_QUEUE).build();
+    }
+
+    @Bean
+    public Binding cvAnalysisFailedBinding(Queue cvAnalysisFailedQueue, DirectExchange aiExchange) {
+        return BindingBuilder.bind(cvAnalysisFailedQueue)
+                .to(aiExchange)
+                .with(CV_ANALYSIS_FAILED_ROUTING_KEY);
+    }
 
     // ====== COMMON SETTINGS ======
-
     @Bean
     public Jackson2JsonMessageConverter messageConverter() {
         return new Jackson2JsonMessageConverter();
@@ -146,18 +136,17 @@ public class RabbitMQConfig {
     @Bean
     public SimpleRabbitListenerContainerFactory rabbitListenerContainerFactory(
             ConnectionFactory connectionFactory,
-            MessageConverter messageConverter) {
+            MessageConverter messageConverter,
+            RetryTemplate retryTemplate) {
 
         SimpleRabbitListenerContainerFactory factory = new SimpleRabbitListenerContainerFactory();
         factory.setConnectionFactory(connectionFactory);
         factory.setMessageConverter(messageConverter);
-
         factory.setConcurrentConsumers(2);
         factory.setMaxConcurrentConsumers(3);
         factory.setPrefetchCount(2);
-
+        factory.setRetryTemplate(retryTemplate);
         factory.setDefaultRequeueRejected(false);
-
         return factory;
     }
 
@@ -166,7 +155,7 @@ public class RabbitMQConfig {
         RetryTemplate retryTemplate = new RetryTemplate();
 
         ExponentialBackOffPolicy backOffPolicy = new ExponentialBackOffPolicy();
-        backOffPolicy.setInitialInterval(2000);
+        backOffPolicy.setInitialInterval(2500);
         backOffPolicy.setMultiplier(2.0);
         backOffPolicy.setMaxInterval(10000);
         retryTemplate.setBackOffPolicy(backOffPolicy);

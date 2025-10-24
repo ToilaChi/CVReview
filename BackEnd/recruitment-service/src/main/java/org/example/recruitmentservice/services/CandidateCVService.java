@@ -11,20 +11,17 @@ import org.example.commonlibrary.utils.PageUtil;
 import org.example.recruitmentservice.config.RabbitMQConfig;
 import org.example.recruitmentservice.dto.request.CVUploadEvent;
 import org.example.recruitmentservice.dto.response.CandidateCVResponse;
-import org.example.recruitmentservice.models.entity.ProcessingBatch;
 import org.example.recruitmentservice.models.enums.CVStatus;
 import org.example.recruitmentservice.models.entity.CandidateCV;
 import org.example.recruitmentservice.models.entity.Positions;
 import org.example.recruitmentservice.repository.CandidateCVRepository;
 import org.example.recruitmentservice.repository.PositionRepository;
-import org.example.recruitmentservice.repository.ProcessingBatchRepository;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.data.domain.*;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDateTime;
-import java.util.List;
 import java.util.UUID;
 
 @Slf4j
@@ -35,7 +32,6 @@ public class CandidateCVService {
     private final PositionRepository positionRepository;
     private final StorageService storageService;
     private final RabbitTemplate rabbitTemplate;
-    private final ProcessingBatchRepository processingBatchRepository;
 
     public ApiResponse<CandidateCVResponse> getCVDetail(int cvId) {
         CandidateCV cv = candidateCVRepository.findById(cvId)
@@ -151,24 +147,6 @@ public class CandidateCVService {
             throw new CustomException(ErrorCode.FAILED_SAVE_FILE);
         }
     }
-
-//    @Transactional
-//    public ApiResponse<CandidateCVResponse> retryCV(String batchId) {
-//        log.info("[RETRY-BATCH] Starting retry for failed CVs in batch: {}", batchId);
-//
-//        ProcessingBatch batch = processingBatchRepository.findByBatchId(batchId)
-//                .orElseThrow(() -> new CustomException(ErrorCode.BATCH_NOT_FOUND));
-//
-//        List<CandidateCV> failedCVs = candidateCVRepository
-//                .findByBatchIdAndCvStatus(batchId, CVStatus.FAILED);
-//
-//        if (failedCVs.isEmpty()) {
-//            log.warn("[RETRY-BATCH] No failed CVs found in batch: {}", batchId);
-//            throw new CustomException(ErrorCode.NO_FAILED_CVS_IN_BATCH);
-//        }
-//
-//        log.info("[RETRY-BATCH] Found {} failed CVs to retry", failedCVs.size());
-//    }
 
     @Transactional
     public void deleteCandidateCV(int cvId) {
