@@ -17,6 +17,8 @@ import org.example.recruitmentservice.repository.CandidateCVRepository;
 import org.example.recruitmentservice.repository.ProcessingBatchRepository;
 import org.springframework.stereotype.Service;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -33,7 +35,6 @@ public class ProcessingBatchService {
         batch.setBatchId(batchId);
         batch.setPositionId(positionId);
         batch.setTotalCv(totalCv);
-        batch.setProcessedCv(0);
         batch.setSuccessCv(0);
         batch.setFailedCv(0);
         batch.setStatus(BatchStatus.PROCESSING);
@@ -45,21 +46,15 @@ public class ProcessingBatchService {
 
     @Transactional
     public void incrementProcessed(String batchId, boolean isSuccess) {
-        batchRepository.incrementProcessed(batchId);
-
-        // Kiểm tra xem batch đã hoàn tất chưa
         ProcessingBatch batch = batchRepository.findByBatchId(batchId)
                 .orElseThrow(() -> new CustomException(ErrorCode.BATCH_NOT_FOUND));
 
-        // Increment counters
         if (isSuccess) {
             batch.setSuccessCv(batch.getSuccessCv() + 1);
         } else {
             batch.setFailedCv(batch.getFailedCv() + 1);
         }
-        batch.setProcessedCv(batch.getProcessedCv() + 1);
 
-        // Check if batch completed
         if (batch.getProcessedCv() >= batch.getTotalCv()) {
             batch.setStatus(BatchStatus.COMPLETED);
             batch.setCompletedAt(LocalDateTime.now());
@@ -104,6 +99,10 @@ public class ProcessingBatchService {
                 .successCv(batch.getSuccessCv())
                 .failedCv(batch.getFailedCv())
                 .failedCvIds(failedCvIds)
+                .progress(BigDecimal.valueOf(batch.getProgress())
+                                    .setScale(2, RoundingMode.HALF_UP)
+                                    .doubleValue())
+                .pending(batch.getPendingCv())
                 .status(batch.getStatus().name())
                 .createdAt(batch.getCreatedAt())
                 .completedAt(batch.getCompletedAt())

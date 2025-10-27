@@ -19,6 +19,10 @@ public class CandidateCVResponse {
     private String name;
     private String fileName;
     private String filePath;
+    private Integer score;
+    private String feedback;
+    private String skillMatch;
+    private String skillMiss;
     private CVStatus status;
     private String errorMessage;
     private LocalDateTime failedAt;

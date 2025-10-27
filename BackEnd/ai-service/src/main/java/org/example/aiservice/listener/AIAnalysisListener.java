@@ -8,6 +8,7 @@ import org.example.commonlibrary.dto.request.CVAnalysisRequest;
 import org.example.commonlibrary.dto.response.CVAnalysisResult;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.retry.annotation.Backoff;
 import org.springframework.retry.annotation.Retryable;
@@ -23,32 +24,35 @@ public class AIAnalysisListener {
     private final RabbitTemplate rabbitTemplate;
 
     @RabbitListener(queues = RabbitMQConfig.CV_ANALYZE_QUEUE, containerFactory = "rabbitListenerContainerFactory")
-    public void handleAnalyzeRequest(@Payload CVAnalysisRequest request) {
-        String batchId = request.getBatchId();
-        Integer cvId = request.getCvId();
+    public void handleAnalyzeRequest(@Payload CVAnalysisRequest request,
+                                     @Header(value = "x-retry-count", required = false) Integer retryCount) {
 
-        log.info("[AI-LISTENER] Received analyze request: batchId={}, cvId={}, positionId={}",
-                batchId, cvId, request.getPositionId());
+        if (retryCount == null) retryCount = 0;
 
-        validateRequest(request, cvId, batchId);
+        log.info("[AI-LISTENER] Processing cvId={}, retry attempt={}/3",
+                request.getCvId(), retryCount);
 
-        // ====== CALL GEMINI API ======
-        log.info("[AI-LISTENER] Starting Gemini analysis for cvId={}", cvId);
-        CVAnalysisResult result = llmAnalysisService.analyze(request);
+        try {
+            validateRequest(request, request.getCvId(), request.getBatchId());
+            CVAnalysisResult result = llmAnalysisService.analyze(request);
 
-        // Set analyzedAt timestamp if not set by service
-        if (result.getAnalyzedAt() == null) {
-            result.setAnalyzedAt(LocalDateTime.now());
+            // Success → publish result
+            rabbitTemplate.convertAndSend(
+                    RabbitMQConfig.AI_EXCHANGE,
+                    RabbitMQConfig.CV_ANALYSIS_RESULT_ROUTING_KEY,
+                    result
+            );
+
+
+            log.info("[AI-LISTENER] Successfully published analysis result: cvId={}, batchId={}, score={}",
+                    request.getCvId(), request.getBatchId(), result.getScore());
+
+        } catch (Exception e) {
+            log.error("[AI-LISTENER] Analysis failed for cvId={}, retry={}, error={}",
+                    request.getCvId(), retryCount, e.getMessage());
+
+            throw e; // Re-throw để trigger retry
         }
-
-        rabbitTemplate.convertAndSend(
-                RabbitMQConfig.AI_EXCHANGE,
-                RabbitMQConfig.CV_ANALYSIS_RESULT_ROUTING_KEY,
-                result
-        );
-
-        log.info("[AI-LISTENER] Successfully published analysis result: cvId={}, batchId={}, score={}",
-                cvId, batchId, result.getScore());
     }
 
     // Helper method

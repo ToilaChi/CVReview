@@ -32,7 +32,7 @@ public class CVAnalysisResultListener {
     private final ProcessingBatchService processingBatchService;
     private final AnalysisService analysisService;
 
-    @RabbitListener(queues = RabbitMQConfig.CV_ANALYSIS_RESULT_QUEUE, containerFactory = "rabbitListenerContainerFactory")
+    @RabbitListener(queues = RabbitMQConfig.CV_ANALYSIS_RESULT_QUEUE)
     public void handleAnalysisResult(@Payload CVAnalysisResult result) {
         log.info("[AI-RESULT] Received analysis result for cvId={} score={} batchId={}",
                 result.getCvId(), result.getScore(), result.getBatchId());
@@ -69,7 +69,7 @@ public class CVAnalysisResultListener {
         }
     }
 
-    @RabbitListener(queues = "cv.analysis.failed.queue", containerFactory = "rabbitListenerContainerFactory")
+    @RabbitListener(queues = "cv.analysis.failed.queue")
     public void handleFailureResult(@Payload CVAnalysisFailure failure) {
         log.error("[FAILURE-LISTENER] Received failure event: cvId={}, batchId={}, error={}",
                 failure.getCvId(), failure.getBatchId(), failure.getErrorMessage());

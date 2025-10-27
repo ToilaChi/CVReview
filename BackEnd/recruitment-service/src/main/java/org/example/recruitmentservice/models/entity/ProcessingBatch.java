@@ -31,9 +31,6 @@ public class ProcessingBatch {
     @Column(nullable = false)
     private Integer totalCv;
 
-    @Column(nullable = false)
-    private Integer processedCv = 0;
-
     @Column
     private Integer successCv;
 
@@ -50,4 +47,19 @@ public class ProcessingBatch {
     private LocalDateTime createdAt = LocalDateTime.now();
 
     private LocalDateTime completedAt;
+
+    @Transient
+    public Integer getProcessedCv() {
+        return successCv + failedCv;
+    }
+
+    @Transient
+    public Double getProgress() {
+        return (successCv + failedCv) * 100.0 / totalCv;
+    }
+
+    @Transient
+    public Integer getPendingCv() {
+        return totalCv - successCv - failedCv;
+    }
 }

@@ -11,9 +11,11 @@ import org.example.commonlibrary.utils.PageUtil;
 import org.example.recruitmentservice.config.RabbitMQConfig;
 import org.example.recruitmentservice.dto.request.CVUploadEvent;
 import org.example.recruitmentservice.dto.response.CandidateCVResponse;
+import org.example.recruitmentservice.models.entity.CVAnalysis;
 import org.example.recruitmentservice.models.enums.CVStatus;
 import org.example.recruitmentservice.models.entity.CandidateCV;
 import org.example.recruitmentservice.models.entity.Positions;
+import org.example.recruitmentservice.repository.CVAnalysisRepository;
 import org.example.recruitmentservice.repository.CandidateCVRepository;
 import org.example.recruitmentservice.repository.PositionRepository;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
@@ -30,6 +32,7 @@ import java.util.UUID;
 public class CandidateCVService {
     private final CandidateCVRepository candidateCVRepository;
     private final PositionRepository positionRepository;
+    private final CVAnalysisRepository cvAnalysisRepository;
     private final StorageService storageService;
     private final RabbitTemplate rabbitTemplate;
 
@@ -37,11 +40,18 @@ public class CandidateCVService {
         CandidateCV cv = candidateCVRepository.findById(cvId)
                 .orElseThrow(() -> new CustomException(ErrorCode.CV_NOT_FOUND));
 
+        CVAnalysis cvAnalysis = cvAnalysisRepository.findByCandidateCV_Id(cvId)
+                .orElseThrow(() -> new CustomException(ErrorCode.CV_NOT_FOUND));
+
         CandidateCVResponse response = CandidateCVResponse.builder()
                 .cvId(cv.getId())
                 .positionId(cv.getPosition().getId())
                 .name(cv.getName())
                 .email(cv.getEmail())
+                .score(cvAnalysis.getScore())
+                .feedback(cvAnalysis.getFeedback())
+                .skillMatch(cvAnalysis.getSkillMatch())
+                .skillMiss(cvAnalysis.getSkillMiss())
                 .status(cv.getCvStatus())
                 .errorMessage(cv.getErrorMessage())
                 .failedAt(cv.getFailedAt())
