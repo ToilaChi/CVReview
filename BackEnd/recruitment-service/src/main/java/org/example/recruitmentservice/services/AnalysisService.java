@@ -151,6 +151,11 @@ public class AnalysisService {
 
         for (CandidateCV cv : failedCVs) {
             try {
+                if (cv.getCvContent() == null || cv.getCvContent().isEmpty()) {
+                    log.warn("[RETRY-BATCH] Skip CV {} - no content", cv.getId());
+                    failCount++;
+                    continue;
+                }
                 // Reset CV status
                 cv.setCvStatus(CVStatus.SCORING);
                 cv.setRetryCount(0);
@@ -205,7 +210,6 @@ public class AnalysisService {
         BatchRetryResponse response = BatchRetryResponse.builder()
                 .batchId(batchId)
                 .totalRetried(successCount)
-                .failedToRetry(failCount)
                 .retriedCvIds(retriedCvIds)
                 .message(String.format("Queued %d CVs for retry", successCount))
                 .build();
@@ -299,6 +303,7 @@ public class AnalysisService {
         if (wasFailed) {
             cv.setErrorMessage(null);
             cv.setFailedAt(null);
+            cv.setRetryCount(null);
 
             // Update batch: move from failed to success
             String batchId = cv.getBatchId();
@@ -313,10 +318,12 @@ public class AnalysisService {
                 .orElse(new CVAnalysis());
 
         analysis.setCandidateCV(cv);
+        analysis.setPositionId(cv.getPosition().getId());
+        analysis.setPositionName(cv.getPosition().getName() + " " + cv.getPosition().getLanguage() + " " + cv.getPosition().getLevel());
         analysis.setScore(request.getScore());
         analysis.setFeedback(request.getFeedback());
-        analysis.setSkillMatch(String.join(",", request.getSkillMatch()));
-        analysis.setSkillMiss(String.join(",", request.getSkillMiss()));
+        analysis.setSkillMatch(request.getSkillMatch());
+        analysis.setSkillMiss(request.getSkillMiss());
         analysis.setAnalysisMethod("MANUAL");
         analysis.setAnalyzedAt(LocalDateTime.now());
 
@@ -407,12 +414,6 @@ public class AnalysisService {
                 .name(cv.getName())
                 .email(cv.getEmail())
                 .status(cv.getCvStatus())
-                .errorMessage(cv.getErrorMessage())
-                .failedAt(cv.getFailedAt())
-                .retryCount(cv.getRetryCount())
-                .canRetry(cv.getCvStatus() == CVStatus.FAILED)
-                .updatedAt(cv.getUpdatedAt())
-                .parsedAt(cv.getParsedAt())
                 .scoredAt(cv.getScoredAt())
                 .build();
     }

@@ -66,21 +66,6 @@ public class ProcessingBatchService {
         batchRepository.save(batch);
     }
 
-//    @Transactional
-//    public void incrementProcessed(String batchId) {
-//        batchRepository.incrementProcessed(batchId);
-//
-//        // Kiểm tra xem batch đã hoàn tất chưa
-//        ProcessingBatch batch = batchRepository.findByBatchId(batchId)
-//                .orElseThrow(() -> new CustomException(ErrorCode.BATCH_NOT_FOUND));
-//
-//        if (batch.getProcessedCv() + 1 >= batch.getTotalCv()) {
-//            batch.setStatus(BatchStatus.COMPLETED);
-//            batch.setCompletedAt(LocalDateTime.now());
-//            batchRepository.save(batch);
-//        }
-//    }
-
     public ApiResponse<BatchStatusResponse> getBatchStatus(String batchId) {
         ProcessingBatch batch = batchRepository.findByBatchId(batchId)
                 .orElseThrow(() -> new CustomException(ErrorCode.BATCH_NOT_FOUND));

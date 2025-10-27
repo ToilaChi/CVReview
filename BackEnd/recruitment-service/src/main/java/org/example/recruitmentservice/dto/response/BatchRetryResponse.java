@@ -11,7 +11,6 @@ import java.util.List;
 public class BatchRetryResponse {
     private String batchId;
     private Integer totalRetried;
-    private Integer failedToRetry;
     private List<Integer> retriedCvIds;
     private String message;
 }
