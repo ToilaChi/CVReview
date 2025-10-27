@@ -20,8 +20,8 @@ public class ManualScoreRequest {
 
     private String feedback;
 
-    private List<String> skillMatch;
+    private String skillMatch;
 
-    private List<String> skillMiss;
+    private String skillMiss;
 }
 

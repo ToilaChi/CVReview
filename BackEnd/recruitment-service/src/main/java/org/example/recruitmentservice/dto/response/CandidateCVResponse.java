@@ -28,6 +28,7 @@ public class CandidateCVResponse {
     private LocalDateTime failedAt;
     private Integer retryCount;
     private Boolean canRetry;
+    private LocalDateTime analyzedAt;
     private LocalDateTime updatedAt;
     private LocalDateTime parsedAt;
     private LocalDateTime scoredAt;

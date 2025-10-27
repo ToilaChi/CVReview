@@ -57,9 +57,7 @@ public class CandidateCVService {
                 .failedAt(cv.getFailedAt())
                 .retryCount(cv.getRetryCount())
                 .canRetry(cv.getCvStatus() == CVStatus.FAILED)
-                .updatedAt(cv.getUpdatedAt())
-                .parsedAt(cv.getParsedAt())
-                .scoredAt(cv.getScoredAt())
+                .analyzedAt(cvAnalysis.getAnalyzedAt())
                 .build();
 
         return new ApiResponse<>(

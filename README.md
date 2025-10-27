@@ -695,6 +695,110 @@ The project will be composed of the following microservices:
             "timestamp": "2025-10-13T13:59:43.5713966"
         }
     ``` 
+- **Manual Score**
+  - **Name:** `/analysis` 
+  - Endpoint: /analysis/manual?cvId=
+  - Method: POST
+  - Description: Manual Score for HR.
+  - Content-Type:  `multipart/form-data`
+  - Header:
+    | Key            | Value                     | Required |
+    |----------------|---------------------------|----------|
+    | Authorization  | Bearer <accessToken> | Yes      |
+  - Request Body:
+    ```
+    {
+        "score": 66,
+        "feedback": "Good",
+        "skillMatch": "Microservice",
+        "skillMiss": "NATS"
+    }
+    ```
+  - Response:
+    - Success: 
+    ```json
+        {
+            "statusCode": 200,
+            "message": "CV scored manually successfully",
+            "data": {
+                "cvId": 95,
+                "positionId": 15,
+                "email": "tranlaluot@gmail.com",
+                "name": "Tran La Luot",
+                "status": "SCORED",
+                "scoredAt": "2025-10-27T15:51:43.6248981"
+            },
+            "timestamp": "2025-10-27T15:51:44.1706388"
+        }
+    ```
+    - Fail:
+     - CV not found:
+    ```json
+        {
+            "statusCode": 2001,
+            "message": "CV not found",
+            "data": null,
+            "timestamp": "2025-10-13T13:59:43.5713966"
+        }
+    ``` 
+     - CV already processing
+    ```json
+        {
+            "statusCode": 2004,
+            "message": "CV already processing",
+            "data": null,
+            "timestamp": "2025-10-13T13:59:43.5713966"
+        }
+    ``` 
+- **Retry Score**
+  - **Name:** `/analysis` 
+  - Endpoint: /analysis/retry
+  - Method: POST
+  - Description: Retry Score for HR.
+  - Content-Type:  `multipart/form-data`
+  - Header:
+    | Key            | Value                     | Required |
+    |----------------|---------------------------|----------|
+    | Authorization  | Bearer <accessToken> | Yes      |
+  - Query Parameters
+    | Key   | Type   | Required | Value |
+    |-------|--------|----------|---------|
+    | batchId  | Text | Yes      | POS15_20251027_161615    |
+  - Response:
+    - Success: 
+    ```json
+        {
+            "statusCode": 200,
+            "message": "The retry request was sent successfully. Please wait a moment.",
+            "data": {
+                "batchId": "POS15_20251027_161615",
+                "totalRetried": 8,
+                "failedToRetry": 0,
+                "retriedCvIds": [76, 77, 78, 79, 88, 89, 90, 91],
+                "message": "Queued 16 CVs for retry"
+            },
+            "timestamp": "2025-10-27T16:23:13.6859334"
+        }
+    ```
+    - Fail:
+     - Batch not found:
+    ```json
+        {
+            "statusCode": 6001,
+            "message": "Batch not found",
+            "data": null,
+            "timestamp": "2025-10-13T13:59:43.5713966"
+        }
+    ``` 
+     - No fail CVs in batch
+    ```json
+        {
+            "statusCode": 2006,
+            "message": "No failed CVs in batch",
+            "data": null,
+            "timestamp": "2025-10-13T13:59:43.5713966"
+        }
+    ``` 
 - **Tracking CV upload/scoring**
   - **Name:** `/tracking` 
   - Endpoint: /tracking/{{batchId}}/status
