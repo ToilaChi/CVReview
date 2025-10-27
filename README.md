@@ -460,6 +460,50 @@ The project will be composed of the following microservices:
             "timestamp": 2025-10-02T17:15:29.8681381
         }
     ```
+- **CV Detail**
+  - **Name:** `/cv` 
+  - Endpoint: /cv/{{cvId}}
+  - Method: GET
+  - Description: Get CV detail.
+  - Content-Type:  `multipart/form-data`
+  - Header:
+    | Key            | Value                     | Required |
+    |----------------|---------------------------|----------|
+    | Authorization  | Bearer <accessToken> | Yes      |
+  - Response:
+    - Success: 
+    ```json
+        {
+            "statusCode": 200,
+            "message": "CV detail retrieved successfully",
+            "data": {
+                "cvId": 94,
+                "positionId": 15,
+                "email": "chi12345pham@gmail.com",
+                "name": "Pham Minh Chi",
+                "score": 96,
+                "feedback": "Exceptional fit...testing and CI/CD.",
+                "skillMatch": "Java, OOP, Spring Boot, RESTful APIs, Microservices, PostgreSQL, MySQL, Git, API Gateway, Service Discovery (Eureka), Redis, Docker, NATS",
+                "skillMiss": "Unit testing (JUnit, Mockito), CI/CD",
+                "status": "SCORED",
+                "canRetry": false,
+                "updatedAt": "2025-10-27T13:52:23.79455",
+                "parsedAt": "2025-10-21T11:27:10.278149",
+                "scoredAt": "2025-10-27T13:53:57.362199"
+            },
+            "timestamp": "2025-10-27T14:22:08.4658925"
+        }
+    ```
+    - Fail:
+     - CV not found:
+    ```json
+        {
+            "statusCode": 2001,
+            "message": "CV not found",
+            "data": null,
+            "timestamp": "2025-10-13T13:59:43.5713966"
+        }
+    ``` 
 - **Get CVs for specific position**
   - **Name:** `/cv` 
   - Endpoint: /cv/position/{positionId}
@@ -661,17 +705,23 @@ The project will be composed of the following microservices:
     ```json
         {
             "statusCode": 200,
-            "message": "Batch status fetched successfully",
+            "message": "Batch status retrieved successfully",
             "data": {
-                "createdAt": "2025-10-20T13:35:29.187656",
-                "completedAt": "2025-10-20T13:37:11.606602",
-                "processedCv": 4,
-                "totalCv": 4,
-                "batchId": "POS15_20251020_133529",
-                "type": "SCORING/UPLOAD",
-                "status": "COMPLETED"
+                "batchId": "POS15_20251027_135222",
+                "processedCv": 6,
+                "totalCv": 6,
+                "successCv": 5,
+                "failedCv": 1,
+                "failedCvIds": [
+                    95
+                ],
+                "progress": 100.0,
+                "pending": 0,
+                "status": "COMPLETED",
+                "createdAt": "2025-10-27T13:53:36.094834",
+                "completedAt": "2025-10-27T13:53:57.792611"
             },
-            "timestamp": "2025-10-13T13:53:53.9001019"
+            "timestamp": "2025-10-27T13:54:07.5327545"
         }
     ```
     - Fail:

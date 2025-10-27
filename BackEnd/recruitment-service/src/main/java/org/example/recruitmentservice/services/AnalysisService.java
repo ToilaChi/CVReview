@@ -189,7 +189,6 @@ public class AnalysisService {
         }
 
         batch.setFailedCv(batch.getFailedCv() - successCount);
-        batch.setProcessedCv(batch.getProcessedCv() - successCount);
 
         // If batch was COMPLETED, revert to PROCESSING
         if (batch.getStatus() == BatchStatus.COMPLETED) {
@@ -351,7 +350,6 @@ public class AnalysisService {
                 .orElseThrow(() -> new CustomException(ErrorCode.BATCH_NOT_FOUND));
 
         batch.setFailedCv(batch.getFailedCv() + 1);
-        batch.setProcessedCv(batch.getProcessedCv() + 1);
         batch.setCreatedAt(failure.getFailedAt());
 
         // Check if batch is completed
@@ -382,7 +380,6 @@ public class AnalysisService {
                 .orElseThrow(() -> new CustomException(ErrorCode.BATCH_NOT_FOUND));
 
         batch.setFailedCv(batch.getFailedCv() - 1);
-        batch.setProcessedCv(batch.getProcessedCv() - 1);
 
         if (batch.getStatus() == BatchStatus.COMPLETED) {
             batch.setStatus(BatchStatus.PROCESSING);

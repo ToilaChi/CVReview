@@ -29,11 +29,9 @@ public class RabbitMQConfig {
     public static final String AI_EXCHANGE = "cv.analysis.exchange";
     public static final String AI_EXCHANGE_DLX = "cv.analysis.exchange.dlx";
 
-    // ❌ KHÔNG declare cv.analyze.queue (AI-Service đã declare)
     public static final String CV_ANALYZE_QUEUE = "cv.analyze.queue";
     public static final String CV_ANALYZE_ROUTING_KEY = "cv.analyze";
 
-    // ✅ Recruitment-service CONSUMES these queues
     public static final String CV_ANALYSIS_RESULT_QUEUE = "cv.analysis.result.queue";
     public static final String CV_ANALYSIS_RESULT_DLQ = "cv.analysis.result.queue.dlq";
     public static final String CV_ANALYSIS_RESULT_ROUTING_KEY = "cv.analysis.result";

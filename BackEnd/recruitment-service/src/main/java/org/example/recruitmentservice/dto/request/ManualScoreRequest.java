@@ -16,7 +16,7 @@ public class ManualScoreRequest {
     @NotNull(message = "Score is required")
     @Min(value = 0, message = "Score must be between 0 and 100")
     @Max(value = 100, message = "Score must be between 0 and 100")
-    private Double score;
+    private Integer score;
 
     private String feedback;
 

@@ -28,7 +28,7 @@ public class CVAnalysis {
     @Column
     private String positionName;
 
-    private Double score;
+    private Integer score;
 
     @Column(columnDefinition = "TEXT")
     private String feedback;

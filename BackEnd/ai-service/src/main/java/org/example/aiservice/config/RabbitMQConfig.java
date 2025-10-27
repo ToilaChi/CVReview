@@ -1,7 +1,9 @@
 package org.example.aiservice.config;
 
+import org.aopalliance.aop.Advice;
 import org.springframework.amqp.core.*;
 import org.springframework.amqp.rabbit.annotation.EnableRabbit;
+import org.springframework.amqp.rabbit.config.RetryInterceptorBuilder;
 import org.springframework.amqp.rabbit.config.SimpleRabbitListenerContainerFactory;
 import org.springframework.amqp.rabbit.connection.ConnectionFactory;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
@@ -12,6 +14,7 @@ import org.springframework.amqp.support.converter.MessageConverter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.retry.backoff.ExponentialBackOffPolicy;
+import org.springframework.retry.interceptor.RetryOperationsInterceptor;
 import org.springframework.retry.policy.SimpleRetryPolicy;
 import org.springframework.retry.support.RetryTemplate;
 
@@ -108,7 +111,6 @@ public class RabbitMQConfig {
     // ====== MESSAGE RECOVERER - Sau 3 retry thất bại → DLQ ======
     @Bean
     public MessageRecoverer messageRecoverer(RabbitTemplate rabbitTemplate) {
-        // ✅ Sau khi hết 3 lần retry → Publish vào DLQ 1 lần duy nhất
         return new RepublishMessageRecoverer(
                 rabbitTemplate,
                 AI_EXCHANGE_DLX,
@@ -131,9 +133,27 @@ public class RabbitMQConfig {
         factory.setConcurrentConsumers(2);
         factory.setMaxConcurrentConsumers(3);
         factory.setPrefetchCount(1);
-
-        // ✅ KHÔNG requeue message
         factory.setDefaultRequeueRejected(false);
+
+        RetryTemplate retryTemplate = new RetryTemplate();
+
+        SimpleRetryPolicy retryPolicy = new SimpleRetryPolicy();
+        retryPolicy.setMaxAttempts(3);
+
+        ExponentialBackOffPolicy backOffPolicy = new ExponentialBackOffPolicy();
+        backOffPolicy.setInitialInterval(3000);
+        backOffPolicy.setMultiplier(2.0);
+        backOffPolicy.setMaxInterval(12000);
+
+        retryTemplate.setRetryPolicy(retryPolicy);
+        retryTemplate.setBackOffPolicy(backOffPolicy);
+
+        RetryOperationsInterceptor interceptor = RetryInterceptorBuilder.stateless()
+                .retryOperations(retryTemplate)
+                .recoverer(messageRecoverer)
+                .build();
+
+        factory.setAdviceChain(new Advice[] { interceptor });
 
         return factory;
     }
@@ -145,7 +165,6 @@ public class RabbitMQConfig {
         RabbitTemplate template = new RabbitTemplate(connectionFactory);
         template.setMessageConverter(messageConverter);
 
-        // ✅ Cấu hình retry cho RabbitTemplate
         template.setRetryTemplate(retryTemplate());
 
         return template;

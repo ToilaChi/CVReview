@@ -14,7 +14,7 @@ import java.util.List;
 @Builder
 public class CVAnalysisResult {
     private Integer cvId;
-    private Double score;
+    private Integer score;
     private String feedback;
     private List<String> skillMatch;
     private List<String> skillMiss;

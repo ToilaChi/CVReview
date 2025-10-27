@@ -11,11 +11,11 @@ import java.util.Optional;
 
 @Repository
 public interface ProcessingBatchRepository extends JpaRepository<ProcessingBatch, Long> {
-    @Modifying
-    @Query("UPDATE ProcessingBatch b " +
-            "SET b.processedCv = b.processedCv + 1 " +
-            "WHERE b.batchId = :batchId")
-    void incrementProcessed(@Param("batchId") String batchId);
+//    @Modifying
+//    @Query("UPDATE ProcessingBatch b " +
+//            "SET b.processedCv = b.processedCv + 1 " +
+//            "WHERE b.batchId = :batchId")
+//    void incrementProcessed(@Param("batchId") String batchId);
 
     @Query("SELECT b FROM ProcessingBatch b WHERE b.batchId = :batchId")
     Optional<ProcessingBatch> findByBatchId(@Param("batchId") String batchId);

@@ -16,6 +16,8 @@ public class BatchStatusResponse {
     private Integer successCv;
     private Integer failedCv;
     private List<Integer> failedCvIds;
+    private Double progress;
+    private Integer pending;
     private String status;
     private LocalDateTime createdAt;
     private LocalDateTime completedAt;
