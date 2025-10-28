@@ -30,6 +30,11 @@ public class AnalysisController {
         return ResponseEntity.ok(analysisService.retryFailedCVsInBatch(batchId));
     }
 
+    @PostMapping("/retryCvs")
+    public ResponseEntity<ApiResponse<BatchRetryResponse>> retry(@RequestBody List<Integer> cvIds) {
+        return ResponseEntity.ok(analysisService.retryFailedCVsInList(cvIds));
+    }
+
     @PostMapping("/manual")
     public ResponseEntity<ApiResponse<CandidateCVResponse>> manualScore(
             @RequestParam int cvId,

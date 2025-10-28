@@ -44,7 +44,7 @@ public class ProcessingBatch {
     @Column(nullable = false)
     private BatchType type;
 
-    private LocalDateTime createdAt = LocalDateTime.now();
+    private LocalDateTime createdAt;
 
     private LocalDateTime completedAt;
 

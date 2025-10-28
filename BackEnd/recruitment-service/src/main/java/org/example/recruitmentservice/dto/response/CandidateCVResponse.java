@@ -17,6 +17,7 @@ public class CandidateCVResponse {
     private int positionId;
     private String email;
     private String name;
+    private String batchId;
     private String fileName;
     private String filePath;
     private Integer score;

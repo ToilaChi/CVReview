@@ -24,6 +24,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDateTime;
+import java.util.Optional;
 import java.util.UUID;
 
 @Slf4j
@@ -40,24 +41,26 @@ public class CandidateCVService {
         CandidateCV cv = candidateCVRepository.findById(cvId)
                 .orElseThrow(() -> new CustomException(ErrorCode.CV_NOT_FOUND));
 
-        CVAnalysis cvAnalysis = cvAnalysisRepository.findByCandidateCV_Id(cvId)
-                .orElseThrow(() -> new CustomException(ErrorCode.CV_NOT_FOUND));
+        Optional<CVAnalysis> cvAnalysisOpt = cvAnalysisRepository.findByCandidateCV_Id(cvId);
+        CVAnalysis cvAnalysis = cvAnalysisOpt.orElse(null);
 
         CandidateCVResponse response = CandidateCVResponse.builder()
                 .cvId(cv.getId())
                 .positionId(cv.getPosition().getId())
                 .name(cv.getName())
                 .email(cv.getEmail())
-                .score(cvAnalysis.getScore())
-                .feedback(cvAnalysis.getFeedback())
-                .skillMatch(cvAnalysis.getSkillMatch())
-                .skillMiss(cvAnalysis.getSkillMiss())
+                .batchId(cv.getBatchId())
+                .filePath(cv.getCvPath())
+                .score(cvAnalysis != null ? cvAnalysis.getScore() : null)
+                .feedback(cvAnalysis != null ? cvAnalysis.getFeedback() : null)
+                .skillMatch(cvAnalysis != null ? cvAnalysis.getSkillMatch() : null)
+                .skillMiss(cvAnalysis != null ? cvAnalysis.getSkillMiss() : null)
                 .status(cv.getCvStatus())
                 .errorMessage(cv.getErrorMessage())
                 .failedAt(cv.getFailedAt())
                 .retryCount(cv.getRetryCount())
                 .canRetry(cv.getCvStatus() == CVStatus.FAILED)
-                .analyzedAt(cvAnalysis.getAnalyzedAt())
+                .analyzedAt(cvAnalysis != null ? cvAnalysis.getAnalyzedAt() : null)
                 .build();
 
         return new ApiResponse<>(
@@ -80,6 +83,7 @@ public class CandidateCVService {
                 CandidateCVResponse.builder()
                         .cvId(cv.getId())
                         .positionId(cv.getPosition().getId())
+                        .batchId(cv.getBatchId())
                         .status(CVStatus.valueOf(cv.getCvStatus().name()))
                         .name(cv.getName())
                         .email(cv.getEmail())
