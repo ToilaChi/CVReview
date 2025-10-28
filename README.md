@@ -697,7 +697,7 @@ The project will be composed of the following microservices:
     ``` 
 - **Manual Score**
   - **Name:** `/analysis` 
-  - Endpoint: /analysis/manual?cvId=
+  - Endpoint: /analysis/manual
   - Method: POST
   - Description: Manual Score for HR.
   - Content-Type:  `multipart/form-data`
@@ -708,6 +708,7 @@ The project will be composed of the following microservices:
   - Request Body:
     ```
     {
+        "cvId": 25,
         "score": 66,
         "feedback": "Good",
         "skillMatch": "Microservice",
@@ -750,7 +751,7 @@ The project will be composed of the following microservices:
             "timestamp": "2025-10-13T13:59:43.5713966"
         }
     ``` 
-- **Retry Score**
+- **Retry Scoring by BatchId**
   - **Name:** `/analysis` 
   - Endpoint: /analysis/retry
   - Method: POST
@@ -795,6 +796,67 @@ The project will be composed of the following microservices:
         {
             "statusCode": 2006,
             "message": "No failed CVs in batch",
+            "data": null,
+            "timestamp": "2025-10-13T13:59:43.5713966"
+        }
+    ``` 
+- **Retry Scoring by CvIds**
+  - **Name:** `/analysis` 
+  - Endpoint: /analysis/retryCvs
+  - Method: POST
+  - Description: Retry Score for HR.
+  - Content-Type:  `multipart/form-data`
+  - Header:
+    | Key            | Value                     | Required |
+    |----------------|---------------------------|----------|
+    | Authorization  | Bearer <accessToken> | Yes      |
+  - Query Parameters
+    | Key   | Type   | Required | Value |
+    |-------|--------|----------|---------|
+    | cvIds  | Text | Yes      | 1    |
+    | cvIds  | Text | Yes      | 2    |
+    ...
+    | cvIds  | Text | Yes      | n    |
+  - Response:
+    - Success: 
+    ```json
+        {
+            "statusCode": 200,
+            "message": "The retry request was sent successfully. Please wait a moment.",
+            "data": {
+                "batchId": "POS15_20251027_161615",
+                "totalRetried": 2,
+                "failedToRetry": 0,
+                "retriedCvIds": [1, 2],
+                "message": "Queued 2 CVs for retry"
+            },
+            "timestamp": "2025-10-27T16:23:13.6859334"
+        }
+    ```
+    - Fail:
+     - CV not found:
+    ```json
+        {
+            "statusCode": 2001,
+            "message": "CV not found",
+            "data": null,
+            "timestamp": "2025-10-13T13:59:43.5713966"
+        }
+    ``` 
+     - CV not failed:
+    ```json
+        {
+            "statusCode": 2005,
+            "message": "CV not failed",
+            "data": null,
+            "timestamp": "2025-10-13T13:59:43.5713966"
+        }
+    ``` 
+     - CVs not same position:
+    ```json
+        {
+            "statusCode": 2007,
+            "message": "CVs not same position",
             "data": null,
             "timestamp": "2025-10-13T13:59:43.5713966"
         }

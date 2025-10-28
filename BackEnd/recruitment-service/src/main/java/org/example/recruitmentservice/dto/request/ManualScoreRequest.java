@@ -13,6 +13,7 @@ import java.util.List;
 @NoArgsConstructor
 @AllArgsConstructor
 public class ManualScoreRequest {
+    private int cvId;
     @NotNull(message = "Score is required")
     @Min(value = 0, message = "Score must be between 0 and 100")
     @Max(value = 100, message = "Score must be between 0 and 100")

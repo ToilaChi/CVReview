@@ -37,8 +37,7 @@ public class AnalysisController {
 
     @PostMapping("/manual")
     public ResponseEntity<ApiResponse<CandidateCVResponse>> manualScore(
-            @RequestParam int cvId,
             @RequestBody ManualScoreRequest manualScoreRequest) {
-        return ResponseEntity.ok(analysisService.manualScore(cvId, manualScoreRequest));
+        return ResponseEntity.ok(analysisService.manualScore(manualScoreRequest));
     }
 }

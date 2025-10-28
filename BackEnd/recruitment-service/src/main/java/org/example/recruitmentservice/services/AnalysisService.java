@@ -322,8 +322,8 @@ public class AnalysisService {
     }
 
     @Transactional
-    public ApiResponse<CandidateCVResponse>  manualScore(Integer cvId, ManualScoreRequest request) {
-        CandidateCV cv = candidateCVRepository.findById(cvId)
+    public ApiResponse<CandidateCVResponse>  manualScore(ManualScoreRequest request) {
+        CandidateCV cv = candidateCVRepository.findById(request.getCvId())
                 .orElseThrow(() -> new CustomException(ErrorCode.CV_NOT_FOUND));
 
         // Validate: Allow manual scoring for FAILED or with confirmation for SCORED
@@ -350,10 +350,10 @@ public class AnalysisService {
         }
 
         candidateCVRepository.save(cv);
-        log.info("Updated CV {} status to SCORED (manual)", cvId);
+        log.info("Updated CV {} status to SCORED (manual)", request.getCvId());
 
         // Create or update CVAnalysis
-        CVAnalysis analysis = cvAnalysisRepository.findByCandidateCV_Id(cvId)
+        CVAnalysis analysis = cvAnalysisRepository.findByCandidateCV_Id(request.getCvId())
                 .orElse(new CVAnalysis());
 
         analysis.setCandidateCV(cv);
@@ -367,7 +367,7 @@ public class AnalysisService {
         analysis.setAnalyzedAt(LocalDateTime.now());
 
         cvAnalysisRepository.save(analysis);
-        log.info("Saved manual analysis for CV {}: score={}", cvId, request.getScore());
+        log.info("Saved manual analysis for CV {}: score={}", request.getCvId(), request.getScore());
 
         return new ApiResponse<>(
                 ErrorCode.SUCCESS.getCode(),
