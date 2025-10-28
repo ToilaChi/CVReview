@@ -153,7 +153,7 @@ public class LlmAnalysisService {
             JSONObject resultJson = new JSONObject(text);
 
             CVAnalysisResult result = new CVAnalysisResult();
-            result.setScore(resultJson.optDouble("score", 0));
+            result.setScore(resultJson.optInt("score", 0));
             result.setFeedback(resultJson.optString("feedback", ""));
             result.setSkillMatch(jsonArrayToList(resultJson.optJSONArray("skillMatch")));
             result.setSkillMiss(jsonArrayToList(resultJson.optJSONArray("skillMiss")));

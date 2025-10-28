@@ -29,10 +29,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -134,7 +131,7 @@ public class AnalysisService {
                 .orElseThrow(() -> new CustomException(ErrorCode.BATCH_NOT_FOUND));
 
         List<CandidateCV> failedCVs = candidateCVRepository
-                .findByPositionIdAndCvStatus(batch.getPositionId(), CVStatus.FAILED);
+                .findByPositionIdAndCvStatusAndBatchId(batch.getPositionId(), CVStatus.FAILED, batchId);
 
         if (failedCVs.isEmpty()) {
             log.warn("[RETRY-BATCH] No failed CVs found in batch: {}", batchId);
@@ -193,7 +190,7 @@ public class AnalysisService {
             }
         }
 
-        batch.setFailedCv(batch.getFailedCv() - successCount);
+        batch.setFailedCv(Math.max(0, Optional.ofNullable(batch.getFailedCv()).orElse(0) - successCount));
 
         // If batch was COMPLETED, revert to PROCESSING
         if (batch.getStatus() == BatchStatus.COMPLETED) {
@@ -222,63 +219,105 @@ public class AnalysisService {
     }
 
     @Transactional
-    public ApiResponse<CandidateCVResponse> retrySingleCV(Integer cvId) {
-        CandidateCV cv = candidateCVRepository.findById(cvId)
-                .orElseThrow(() -> new CustomException(ErrorCode.CV_NOT_FOUND));
-
-        // Validate CV status
-        if (cv.getCvStatus() == CVStatus.SCORING) {
-            throw new CustomException(ErrorCode.CV_ALREADY_PROCESSING);
+    public ApiResponse<BatchRetryResponse> retryFailedCVsInList(List<Integer> cvIds) {
+        if (cvIds == null || cvIds.isEmpty()) {
+            throw new CustomException(ErrorCode.CV_NOT_FOUND);
         }
 
-        if (cv.getCvStatus() != CVStatus.FAILED) {
+        List<CandidateCV> cvs = candidateCVRepository.findAllById(cvIds);
+        if (cvs.isEmpty()) {
+            throw new CustomException(ErrorCode.CV_NOT_FOUND);
+        }
+
+        boolean allFailed = cvs.stream()
+                .allMatch(cv -> cv.getCvStatus() == CVStatus.FAILED);
+        if (!allFailed) {
             throw new CustomException(ErrorCode.CV_NOT_FAILED);
         }
 
-        String batchId = cv.getBatchId();
-
-        // Reset CV status for retry
-        cv.setCvStatus(CVStatus.SCORING);
-        cv.setRetryCount(0);
-        cv.setErrorMessage(null);
-        cv.setFailedAt(null);
-        cv.setUpdatedAt(LocalDateTime.now());
-
-        candidateCVRepository.save(cv);
-        log.info("Reset CV {} status to SCORING for single retry", cvId);
-
-        // Create new analysis request
-        CVAnalysisRequest request = CVAnalysisRequest.builder()
-                .cvId(cv.getId())
-                .batchId(batchId)
-                .positionId(cv.getPosition().getId())
-                .cvText(cv.getCvContent())
-                .jdText(cv.getPosition().getJobDescription())
-                .build();
-
-        // Republish to RabbitMQ
-        try {
-            rabbitTemplate.convertAndSend(
-                    RabbitMQConfig.AI_EXCHANGE,
-                    RabbitMQConfig.CV_ANALYZE_ROUTING_KEY,
-                    request);
-            log.info("Republished CV {} to analysis queue for single retry", cvId);
-
-            // Update batch counters
-            updateBatchCountersForRetry(batchId);
-
-        } catch (Exception e) {
-            log.error("Failed to republish CV {} to queue: {}", cvId, e.getMessage());
-            // Rollback CV status
-            cv.setCvStatus(CVStatus.FAILED);
-            candidateCVRepository.save(cv);
-            throw new CustomException(ErrorCode.RETRY_FAILED);
+        Integer firstPositionId = cvs.get(0).getPosition().getId();
+        boolean samePosition = cvs.stream()
+                .allMatch(cv -> firstPositionId.equals(cv.getPosition().getId()));
+        if (!samePosition) {
+            throw new CustomException(ErrorCode.CVS_NOT_SAME_POSITION);
         }
+
+        String newBatchId = "POS" + firstPositionId + "_"
+                + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"));
+
+        ProcessingBatch batch = processingBatchService.createBatch(
+                newBatchId,
+                firstPositionId,
+                cvs.size(),
+                BatchType.SCORING
+        );
+
+        int successCount = 0;
+        int failCount = 0;
+        List<Integer> retriedCvIds = new ArrayList<>(cvIds);
+
+        for (CandidateCV cv : cvs) {
+            try {
+                if (cv.getCvContent() == null || cv.getCvContent().isEmpty()) {
+                    log.warn("[RETRY-BATCH] Skip CV {} - no content", cv.getId());
+                    failCount++;
+                    continue;
+                }
+
+                cv.setCvStatus(CVStatus.SCORING);
+                cv.setRetryCount(0);
+                cv.setErrorMessage(null);
+                cv.setFailedAt(null);
+                cv.setUpdatedAt(LocalDateTime.now());
+                cv.setBatchId(newBatchId);
+                candidateCVRepository.save(cv);
+
+                // Build analysis request
+                CVAnalysisRequest request = CVAnalysisRequest.builder()
+                        .cvId(cv.getId())
+                        .batchId(newBatchId)
+                        .positionId(cv.getPosition().getId())
+                        .cvText(cv.getCvContent())
+                        .jdText(cv.getPosition().getJobDescription())
+                        .build();
+
+                rabbitTemplate.convertAndSend(
+                        RabbitMQConfig.AI_EXCHANGE,
+                        RabbitMQConfig.CV_ANALYZE_ROUTING_KEY,
+                        request);
+
+                log.info("[RETRY-BATCH] Successfully queued CV {} for retry", cv.getId());
+                successCount++;
+
+            } catch (Exception e) {
+                log.error("[RETRY-BATCH] Failed to queue CV {} for retry: {}",
+                        cv.getId(), e.getMessage(), e);
+
+                // Rollback this CV
+                cv.setCvStatus(CVStatus.FAILED);
+                cv.setErrorMessage("Retry failed: " + e.getMessage());
+                candidateCVRepository.save(cv);
+                failCount++;
+            }
+        }
+
+        batch.setCreatedAt(LocalDateTime.now());
+        processingBatchRepository.save(batch);
+
+        log.info("[RETRY-BATCH] Batch {} retry completed: {} success, {} failed",
+                newBatchId, successCount, failCount);
+
+        BatchRetryResponse response = BatchRetryResponse.builder()
+                .batchId(newBatchId)
+                .totalRetried(successCount)
+                .retriedCvIds(retriedCvIds)
+                .message(String.format("Queued %d CVs for retry", successCount))
+                .build();
 
         return new ApiResponse<>(
                 ErrorCode.SUCCESS.getCode(),
-                "CV queued for retry successfully",
-                toResponse(cv)
+                "The retry request was sent successfully. Please wait a moment.",
+                response
         );
     }
 

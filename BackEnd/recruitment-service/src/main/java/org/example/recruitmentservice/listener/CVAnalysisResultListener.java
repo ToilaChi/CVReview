@@ -58,6 +58,7 @@ public class CVAnalysisResultListener {
             cv.setScoredAt(LocalDateTime.now());
             cv.setErrorMessage(null);
             cv.setFailedAt(null);
+            cv.setRetryCount(null);
             candidateCVRepository.save(cv);
             processingBatchService.incrementProcessed(result.getBatchId(), true);
 

@@ -23,6 +23,7 @@ public enum ErrorCode {
     CV_ALREADY_PROCESSING(2004, "CV already processing", HttpStatus.CONFLICT),
     CV_NOT_FAILED(2005, "CV not failed", HttpStatus.CONFLICT),
     NO_FAILED_CVS_IN_BATCH(2006, "No failed CVs in batch", HttpStatus.NOT_FOUND),
+    CVS_NOT_SAME_POSITION(2007, "CVs not same position", HttpStatus.CONFLICT),
 
 
     // Position errors
