@@ -10,7 +10,9 @@ import org.example.commonlibrary.utils.PageUtil;
 import org.example.recruitmentservice.client.LlamaParseClient;
 import org.example.recruitmentservice.dto.request.PositionsRequest;
 import org.example.recruitmentservice.dto.response.PositionsResponse;
+import org.example.recruitmentservice.models.entity.CandidateCV;
 import org.example.recruitmentservice.models.entity.Positions;
+import org.example.recruitmentservice.repository.CandidateCVRepository;
 import org.example.recruitmentservice.repository.PositionRepository;
 import org.springframework.data.domain.*;
 import org.springframework.stereotype.Service;
@@ -27,6 +29,7 @@ public class PositionService {
     private final PositionRepository positionRepository;
     private final LlamaParseClient llamaParseClient;
     private final StorageService storageService;
+    private final CandidateCVRepository candidateCVRepository;
 
     @Transactional
     public ApiResponse<PositionsResponse> createPosition(PositionsRequest positionsRequest) {
@@ -166,15 +169,15 @@ public class PositionService {
     @Transactional
     public void updatePosition(int positionId, String name, String language, String level, MultipartFile file) {
         Positions position = positionRepository.findById(positionId);
-        if(position == null) {
+        if (position == null) {
             throw new CustomException(ErrorCode.POSITION_NOT_FOUND);
         }
 
-        String finalName = (name != null && !name.trim().isEmpty()) ? name : position.getName();
-        String finalLang = (language != null && !language.trim().isEmpty()) ? language : position.getLanguage();
-        String finalLevel = (level != null && !level.trim().isEmpty()) ? level : position.getLevel();
+        String finalName = (name != null && !name.trim().isEmpty()) ? name.trim() : null;
+        String finalLang = (language != null && !language.trim().isEmpty()) ? language.trim() : null;
+        String finalLevel = (level != null && !level.trim().isEmpty()) ? level.trim() : null;
 
-        //Check duplicate
+        // Check duplicate
         if (name != null && language != null && level != null) {
             Optional<Positions> existing = positionRepository.findByNameAndLanguageAndLevel(finalName, finalLang, finalLevel);
             if (existing.isPresent() && existing.get().getId() != positionId) {
@@ -184,24 +187,19 @@ public class PositionService {
 
         boolean isJDUpdated = (file != null && !file.isEmpty());
 
-        if(isJDUpdated) {
-            String newFilePath = storageService.uploadJD(
-                    file,
-                    finalName,
-                    finalLang,
-                    finalLevel
-            );
+        if (isJDUpdated) {
+            String newFilePath = storageService.uploadJD(file, finalName, finalLang, finalLevel);
 
-            // Parse file by LlamaParse
             try {
                 String absolutePath = storageService.getAbsolutePath(newFilePath);
                 String jdText = llamaParseClient.parseJD(absolutePath);
 
-                if(jdText == null || jdText.isEmpty()) {
+                if (jdText == null || jdText.isEmpty()) {
                     storageService.deleteFile(newFilePath);
                     throw new CustomException(ErrorCode.FILE_PARSE_FAILED);
                 }
 
+                // Xóa file cũ
                 String oldFilePath = position.getJdPath();
                 if (oldFilePath != null) {
                     storageService.deleteFile(oldFilePath);
@@ -210,14 +208,29 @@ public class PositionService {
                 position.setJdPath(newFilePath);
                 position.setJobDescription(jdText);
             } catch (Exception e) {
-                System.err.println("Parse error details: " + e.getMessage());
-                e.printStackTrace(); // In full stack trace
-                // Rollback
                 storageService.deleteFile(newFilePath);
                 throw new CustomException(ErrorCode.FILE_PARSE_FAILED);
             }
+        } else {
+            boolean hasAtLeastOneMeta =
+                    (finalName != null && !finalName.isBlank()) ||
+                    (finalLang != null && !finalLang.isBlank()) ||
+                    (finalLevel != null && !finalLevel.isBlank());
+
+            if (hasAtLeastOneMeta && position.getJdPath() != null) {
+                try {
+                    String movedPath = storageService.moveJD(position.getJdPath(), finalName, finalLang, finalLevel);
+                    System.out.println("movedPath: " + movedPath);
+                    position.setJdPath(movedPath);
+                } catch (Exception e) {
+                    e.printStackTrace();
+                    throw new CustomException(ErrorCode.FILE_MOVE_FAILED);
+                }
+            }
+
         }
 
+        System.out.println("Path: " + position.getJdPath());
         position.setName(finalName);
         position.setLanguage(finalLang);
         position.setLevel(finalLevel);
@@ -231,6 +244,11 @@ public class PositionService {
         Positions position = positionRepository.findById(positionId);
         if(position == null) {
             throw new CustomException(ErrorCode.POSITION_NOT_FOUND);
+        }
+
+        List<CandidateCV> candidateCVS = candidateCVRepository.findListCVsByPositionId(positionId);
+        if (candidateCVS != null) {
+            throw new CustomException(ErrorCode.CAN_NOT_DELETE_POSITION);
         }
 
         try {

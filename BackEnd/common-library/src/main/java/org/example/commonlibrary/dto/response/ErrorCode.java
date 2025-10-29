@@ -32,12 +32,14 @@ public enum ErrorCode {
     FILE_NOT_FOUND(3003, "File not found", HttpStatus.NOT_FOUND),
     FILE_PARSE_FAILED(3004, "Failed to parse JD", HttpStatus.INTERNAL_SERVER_ERROR),
     FAILED_SAVE_FILE(3005, "Failed to save file", HttpStatus.INTERNAL_SERVER_ERROR),
+    CAN_NOT_DELETE_POSITION(3006, "Cannot delete position because it contains CVs", HttpStatus.BAD_REQUEST),
 
     // Review errors
     REVIEW_FAILED(4001, "AI review failed", HttpStatus.INTERNAL_SERVER_ERROR),
 
     // File errors
     FILE_DELETE_FAILED(5001, "File can not delete", HttpStatus.INTERNAL_SERVER_ERROR),
+    FILE_MOVE_FAILED(5002, "File move failed", HttpStatus.INTERNAL_SERVER_ERROR),
 
     // Processing batch
     BATCH_NOT_FOUND(6001, "Batch not found", HttpStatus.NOT_FOUND),

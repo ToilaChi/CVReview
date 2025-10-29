@@ -50,6 +50,40 @@ public class StorageService {
         }
     }
 
+    public String moveJD(String oldPath, String newName, String newLang, String newLevel) throws IOException {
+        Path oldFile = Paths.get(basePath, oldPath);
+        String fileName = oldFile.getFileName().toString();
+
+        StringBuilder newRelativePath = new StringBuilder();
+
+        if (newName != null && !newName.isBlank()) {
+            newRelativePath.append(newName);
+        }
+        if (newLang != null && !newLang.isBlank()) {
+            if (!newRelativePath.isEmpty()) newRelativePath.append("/");
+            newRelativePath.append(newLang);
+        }
+        if (newLevel != null && !newLevel.isBlank()) {
+            if (!newRelativePath.isEmpty()) newRelativePath.append("/");
+            newRelativePath.append(newLevel);
+        }
+
+        // Nếu không có gì để move, giữ nguyên
+        if (newRelativePath.isEmpty()) {
+            return oldPath;
+        }
+
+        Path newDir = Paths.get(basePath, newRelativePath.toString()).normalize();
+        Files.createDirectories(newDir);
+
+        Path newFile = newDir.resolve(fileName);
+        Files.move(oldFile, newFile, StandardCopyOption.REPLACE_EXISTING);
+
+        return newRelativePath + "/" + fileName;
+    }
+
+
+
     public void saveFile(MultipartFile file, String relativePath) {
         try {
             if (file == null || file.isEmpty()) {
