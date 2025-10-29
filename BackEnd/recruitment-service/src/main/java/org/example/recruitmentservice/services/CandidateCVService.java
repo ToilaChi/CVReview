@@ -24,6 +24,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -70,21 +71,21 @@ public class CandidateCVService {
         );
     }
 
-    public ApiResponse<PageResponse<CandidateCVResponse>> getAllCVsByPositionId(int positionId, int page, int size) {
+    public ApiResponse<PageResponse<CandidateCVResponse>> getAllCVsByPositionId(int positionId, List<CVStatus> statuses, int page, int size) {
         Positions position = positionRepository.findById(positionId);
         if(position == null) {
             throw new CustomException(ErrorCode.POSITION_NOT_FOUND);
         }
 
         Pageable pageable = PageRequest.of(page, size, Sort.by("updatedAt").descending());
-        Page<CandidateCV> cvPage = candidateCVRepository.findByPositionId(positionId, pageable);
+        Page<CandidateCV> cvPage = candidateCVRepository.findByPositionIdAndCvStatusIn(positionId, statuses, pageable);
 
         Page<CandidateCVResponse> mappedPage = cvPage.map(cv ->
                 CandidateCVResponse.builder()
                         .cvId(cv.getId())
                         .positionId(cv.getPosition().getId())
                         .batchId(cv.getBatchId())
-                        .status(CVStatus.valueOf(cv.getCvStatus().name()))
+                        .status(cv.getCvStatus())
                         .name(cv.getName())
                         .email(cv.getEmail())
                         .updatedAt(cv.getUpdatedAt())
@@ -158,6 +159,15 @@ public class CandidateCVService {
             e.printStackTrace();
             throw new CustomException(ErrorCode.FAILED_SAVE_FILE);
         }
+    }
+
+    @Transactional
+    public void updateCVStatus(int cvId, CVStatus status) {
+        CandidateCV cv = candidateCVRepository.findById(cvId)
+                .orElseThrow(() -> new CustomException(ErrorCode.CV_NOT_FOUND));
+        cv.setCvStatus(status);
+        cv.setUpdatedAt(LocalDateTime.now());
+        candidateCVRepository.save(cv);
     }
 
     @Transactional

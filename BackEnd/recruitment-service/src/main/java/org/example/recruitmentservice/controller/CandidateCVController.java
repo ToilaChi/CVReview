@@ -5,10 +5,13 @@ import org.example.commonlibrary.dto.response.ApiResponse;
 import org.example.commonlibrary.dto.response.ErrorCode;
 import org.example.commonlibrary.dto.response.PageResponse;
 import org.example.recruitmentservice.dto.response.CandidateCVResponse;
+import org.example.recruitmentservice.models.enums.CVStatus;
 import org.example.recruitmentservice.services.CandidateCVService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+
+import java.util.List;
 
 @RestController
 @RequestMapping("/cv")
@@ -24,10 +27,11 @@ public class CandidateCVController {
     @GetMapping("/position/{positionId}")
     public ApiResponse<PageResponse<CandidateCVResponse>> getAllCVsByPositionId(
             @PathVariable int positionId,
+            @RequestParam(required = false) List<CVStatus> statuses,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size
     ) {
-        return candidateCVService.getAllCVsByPositionId(positionId, page, size);
+        return candidateCVService.getAllCVsByPositionId(positionId, statuses, page, size);
     }
 
     @PostMapping("/{cvId}")
@@ -40,6 +44,17 @@ public class CandidateCVController {
         return ResponseEntity.ok(new ApiResponse<>(
                 ErrorCode.SUCCESS.getCode(),
                 "Updated Candidate CV successfully"));
+    }
+
+    @PostMapping("/{cvId}/{status}")
+    public ResponseEntity<ApiResponse<Object>> updateCVStatus(
+            @PathVariable int cvId,
+            @PathVariable CVStatus status
+            ) {
+        candidateCVService.updateCVStatus(cvId, status);
+        return ResponseEntity.ok(new ApiResponse<>(
+                ErrorCode.SUCCESS.getCode(),
+                "Updated Candidate CV status successfully"));
     }
 
     @DeleteMapping("/{cvId}")
