@@ -318,6 +318,15 @@ The project will be composed of the following microservices:
             "timestamp": "2025-10-02T17:15:29.8681381"  
         }
     ``` 
+     - File move failed
+    ```json
+        {
+            "statusCode": 5002,
+            "message": "File move failed",
+            "data": null,
+            "timestamp": "2025-10-02T17:15:29.8681381"  
+        }
+    ``` 
 - **Delete Position**
   - **Name:** `/positions` 
   - Endpoint: /positions/{positionId}
@@ -348,11 +357,19 @@ The project will be composed of the following microservices:
             "timestamp": "2025-10-02T17:15:29.8681381"  
         }
     ``` 
-     - Fail save file
+     - Can not delete postion
     ```json
         {
-            "statusCode": 3005,
-            "message": "Failed to save file",
+            "statusCode": 3006,
+            "message": "Can not delete position because it contains CVs",
+            "data": null,
+            "timestamp": "2025-10-02T17:15:29.8681381"  
+        }
+     - File delete failed
+    ```json
+        {
+            "statusCode": 5001,
+            "message": "File delete failed",
             "data": null,
             "timestamp": "2025-10-02T17:15:29.8681381"  
         }
