@@ -1,5 +1,6 @@
 package org.example.recruitmentservice.listener;
 
+import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.example.commonlibrary.dto.response.CVAnalysisFailure;
@@ -33,6 +34,7 @@ public class CVAnalysisResultListener {
     private final AnalysisService analysisService;
 
     @RabbitListener(queues = RabbitMQConfig.CV_ANALYSIS_RESULT_QUEUE)
+    @Transactional
     public void handleAnalysisResult(@Payload CVAnalysisResult result) {
         log.info("[AI-RESULT] Received analysis result for cvId={} score={} batchId={}",
                 result.getCvId(), result.getScore(), result.getBatchId());

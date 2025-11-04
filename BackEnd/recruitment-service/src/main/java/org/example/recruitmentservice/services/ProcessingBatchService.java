@@ -1,12 +1,12 @@
 package org.example.recruitmentservice.services;
 
-import jakarta.transaction.Transactional;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.annotation.Propagation;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.example.commonlibrary.dto.response.ApiResponse;
 import org.example.commonlibrary.dto.response.ErrorCode;
 import org.example.commonlibrary.exception.CustomException;
-import org.example.recruitmentservice.dto.response.BatchRetryResponse;
 import org.example.recruitmentservice.dto.response.BatchStatusResponse;
 import org.example.recruitmentservice.models.entity.CandidateCV;
 import org.example.recruitmentservice.models.entity.ProcessingBatch;
@@ -44,7 +44,7 @@ public class ProcessingBatchService {
         return batchRepository.save(batch);
     }
 
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void incrementProcessed(String batchId, boolean isSuccess) {
         ProcessingBatch batch = batchRepository.findByBatchId(batchId)
                 .orElseThrow(() -> new CustomException(ErrorCode.BATCH_NOT_FOUND));

@@ -11,6 +11,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.retry.backoff.ExponentialBackOffPolicy;
 import org.springframework.retry.policy.SimpleRetryPolicy;
 import org.springframework.retry.support.RetryTemplate;
+import org.springframework.transaction.PlatformTransactionManager;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -135,7 +136,8 @@ public class RabbitMQConfig {
     public SimpleRabbitListenerContainerFactory rabbitListenerContainerFactory(
             ConnectionFactory connectionFactory,
             MessageConverter messageConverter,
-            RetryTemplate retryTemplate) {
+            RetryTemplate retryTemplate,
+            PlatformTransactionManager transactionManager) {
 
         SimpleRabbitListenerContainerFactory factory = new SimpleRabbitListenerContainerFactory();
         factory.setConnectionFactory(connectionFactory);
@@ -145,6 +147,8 @@ public class RabbitMQConfig {
         factory.setPrefetchCount(2);
         factory.setRetryTemplate(retryTemplate);
         factory.setDefaultRequeueRejected(false);
+        factory.setChannelTransacted(true);
+        factory.setTransactionManager(transactionManager);
         return factory;
     }
 

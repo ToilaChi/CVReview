@@ -62,12 +62,6 @@ public class LlamaParseClient {
     }
 
     @RabbitListener(queues = RabbitMQConfig.CV_UPLOAD_QUEUE, containerFactory = "rabbitListenerContainerFactory")
-    @Retryable(
-//            value = {RuntimeException.class},
-            maxAttempts = 3,
-            backoff = @Backoff(delay = 2000, multiplier = 2, maxDelay = 10000)
-//            exclude = {IllegalArgumentException.class}
-    )
     public void parseCV(CVUploadEvent event) {
         int cvId = event.getCvId();
 
@@ -91,14 +85,15 @@ public class LlamaParseClient {
             String extractedName = extractName(parsedText);
             String extractedEmail = extractEmail(parsedText);
 
+            cv.setBatchId(cv.getBatchId());
             cv.setCvContent(parsedText);
             if (extractedName != null) cv.setName(extractedName);
             if (extractedEmail != null) cv.setEmail(extractedEmail);
             cv.setCvStatus(CVStatus.PARSED);
             cv.setParsedAt(LocalDateTime.now());
             cv.setUpdatedAt(LocalDateTime.now());
-            processingBatchService.incrementProcessed(event.getBatchId(), true);
             candidateCVRepository.save(cv);
+            processingBatchService.incrementProcessed(event.getBatchId(), true);
 
             System.out.println("CV parsed successfully - ID: " + cvId +
                     " | Name: " + extractedName + " | Email: " + extractedEmail);

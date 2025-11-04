@@ -82,8 +82,6 @@ public class StorageService {
         return newRelativePath + "/" + fileName;
     }
 
-
-
     public void saveFile(MultipartFile file, String relativePath) {
         try {
             if (file == null || file.isEmpty()) {
