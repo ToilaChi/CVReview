@@ -365,6 +365,7 @@ The project will be composed of the following microservices:
             "data": null,
             "timestamp": "2025-10-02T17:15:29.8681381"  
         }
+    ```
      - File delete failed
     ```json
         {
@@ -620,6 +621,36 @@ The project will be composed of the following microservices:
             "message": "Failed to save file",
             "data": null,
             "timestamp": "2025-10-02T17:15:29.8681381"  
+        }
+    ``` 
+- **Update Candidate CV Status**
+  - **Name:** `/cv` 
+  - Endpoint: /cv/{cvId}/{status}
+  - Method: POST
+  - Description: Update candidate CV status.
+  - Content-Type:  `multipart/form-data`
+  - Header:
+    | Key            | Value                     | Required |
+    |----------------|---------------------------|----------|
+    | Authorization  | Bearer <accessToken> | Yes      |
+  - Response:
+    - Success: 
+    ```json
+        {
+            "statusCode": 200,
+            "message": "Updated Candidate CV status successfully",
+            "data": null,
+            "timestamp": "2025-10-13T13:52:06.2765845"
+        }
+    ```
+    - Fail:
+     - CV not found:
+    ```json
+        {
+            "statusCode": 2001,
+            "message": "CV not found",
+            "data": null,
+            "timestamp": "2025-10-13T13:59:43.5713966"
         }
     ``` 
 - **Delete Candidate CV**

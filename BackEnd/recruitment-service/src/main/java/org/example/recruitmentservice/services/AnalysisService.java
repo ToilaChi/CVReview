@@ -1,6 +1,6 @@
 package org.example.recruitmentservice.services;
 
-import jakarta.transaction.Transactional;
+import org.springframework.transaction.annotation.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.example.commonlibrary.dto.response.ApiResponse;
 import org.example.commonlibrary.dto.response.CVAnalysisFailure;

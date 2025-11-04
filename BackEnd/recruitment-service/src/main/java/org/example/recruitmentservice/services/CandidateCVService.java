@@ -1,6 +1,6 @@
 package org.example.recruitmentservice.services;
 
-import jakarta.transaction.Transactional;
+import org.springframework.transaction.annotation.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.example.commonlibrary.dto.response.ApiResponse;
@@ -77,6 +77,10 @@ public class CandidateCVService {
             throw new CustomException(ErrorCode.POSITION_NOT_FOUND);
         }
 
+        if (statuses == null || statuses.isEmpty()) {
+            statuses = List.of(CVStatus.PARSED, CVStatus.SCORED, CVStatus.FAILED);
+        }
+
         Pageable pageable = PageRequest.of(page, size, Sort.by("updatedAt").descending());
         Page<CandidateCV> cvPage = candidateCVRepository.findByPositionIdAndCvStatusIn(positionId, statuses, pageable);
 
@@ -149,7 +153,7 @@ public class CandidateCVService {
             cv.setUpdatedAt(LocalDateTime.now());
             candidateCVRepository.save(cv);
 
-            CVUploadEvent event = new CVUploadEvent(cv.getId(), newFilePath, position.getId());
+            CVUploadEvent event = new CVUploadEvent(cv.getId(), newFilePath, position.getId(), cv.getBatchId());
             rabbitTemplate.convertAndSend(RabbitMQConfig.CV_UPLOAD_QUEUE, event);
         } catch (CustomException e) {
             System.err.println("CustomException while updating CV: " + e.getMessage());
