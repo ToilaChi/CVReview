@@ -3,6 +3,7 @@ package org.example.recruitmentservice.models.entity;
 import jakarta.persistence.*;
 import lombok.*;
 import org.example.recruitmentservice.models.enums.CVStatus;
+import org.example.recruitmentservice.models.enums.SourceType;
 
 import java.time.LocalDateTime;
 
@@ -20,6 +21,10 @@ public class CandidateCV {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "position_id", nullable = false)
     private Positions position;
+
+    @Column
+    @Enumerated(EnumType.STRING)
+    private SourceType sourceType;
 
     @OneToOne(mappedBy = "candidateCV", cascade = CascadeType.ALL)
     private CVAnalysis analysis;
