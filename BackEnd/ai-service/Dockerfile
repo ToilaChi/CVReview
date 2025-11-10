@@ -1,16 +1,16 @@
 FROM maven:3.8-eclipse-temurin-17-alpine AS build
 WORKDIR /build
 
-# Build common-library trước
-COPY common-library/pom.xml ./common-library/pom.xml
-COPY common-library/src ./common-library/src
+# Build common-library
+COPY ../common-library/pom.xml ./common-library/pom.xml
+COPY ../common-library/src ./common-library/src
 RUN cd common-library && mvn clean install -DskipTests -B
 
 # Build ai-service
 WORKDIR /build/service
-COPY ai-service/pom.xml .
+COPY pom.xml .
 RUN mvn dependency:go-offline -B
-COPY ai-service/src ./src
+COPY src ./src
 RUN mvn clean package -DskipTests -B
 
 # Stage 2: Run
