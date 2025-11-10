@@ -14,6 +14,12 @@ spring:
 gemini:
   api-key: ${GEMINI_API_KEY}
 
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
 server:
   address: 0.0.0.0
-  port: 8082
+  port: 8083
