@@ -6,11 +6,11 @@ COPY common-library/pom.xml ./common-library/pom.xml
 COPY common-library/src ./common-library/src
 RUN cd common-library && mvn clean install -DskipTests -B
 
-# Build ai-service
+# Build recruiment-service
 WORKDIR /build/service
-COPY ai-service/pom.xml .
+COPY recruiment-service/pom.xml .
 RUN mvn dependency:go-offline -B
-COPY ai-service/src ./src
+COPY recruiment-service/src ./src
 RUN mvn clean package -DskipTests -B
 
 # Stage 2: Run
