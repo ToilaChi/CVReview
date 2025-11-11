@@ -1,3 +1,4 @@
+# Stage 1: Build
 FROM maven:3.8-eclipse-temurin-17-alpine AS build
 WORKDIR /build
 
@@ -17,8 +18,12 @@ RUN mvn clean package -DskipTests -B
 FROM eclipse-temurin:17-jre-alpine
 WORKDIR /app
 COPY --from=build /build/service/target/*.jar app.jar
+
+ENV SPRING_PROFILES_ACTIVE=${SPRING_PROFILES_ACTIVE:-prod}
+
 EXPOSE 8082
 ENTRYPOINT ["java", \
     "-XX:+UseContainerSupport", \
     "-XX:MaxRAMPercentage=75.0", \
+    "-Djava.security.egd=file:/dev/./urandom", \
     "-jar", "app.jar"]

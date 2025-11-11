@@ -16,7 +16,9 @@ services:
       retries: 5
 
   auth-service:
-    build: ./auth-service
+    build:
+      context: .
+      dockerfile: ./auth-service/Dockerfile
     container_name: auth-service
     hostname: auth-service
     ports:
@@ -29,6 +31,7 @@ services:
         aliases:
           - auth-service
     environment:
+      - SPRING_PROFILES_ACTIVE=local
       - SPRING_RABBITMQ_HOST=rabbitmq
     healthcheck:
       test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8081/actuator/health || exit 1"]
@@ -38,7 +41,9 @@ services:
       start_period: 30s
 
   recruitment-service:
-    build: ./recruitment-service
+    build:
+      context: .
+      dockerfile: ./recruitment-service/Dockerfile
     container_name: recruitment-service
     hostname: recruitment-service
     ports:
@@ -51,6 +56,7 @@ services:
         aliases:
           - recruitment-service
     environment:
+      - SPRING_PROFILES_ACTIVE=local
       - SPRING_RABBITMQ_HOST=rabbitmq
     healthcheck:
       test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8082/actuator/health || exit 1"]
@@ -60,7 +66,9 @@ services:
       start_period: 30s
 
   ai-service:
-    build: ./ai-service
+    build:
+      context: .
+      dockerfile: ./ai-service/Dockerfile
     container_name: ai-service
     ports:
       - "8083:8083"
@@ -70,6 +78,7 @@ services:
     networks:
       - microservice-network
     environment:
+      - SPRING_PROFILES_ACTIVE=local
       - SPRING_RABBITMQ_HOST=rabbitmq
     healthcheck:
       test: [ "CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8083/actuator/health || exit 1" ]
@@ -79,7 +88,9 @@ services:
       start_period: 30s
 
   api-gateway:
-    build: ./api-gateway
+    build:
+      context: .
+      dockerfile: ./api-gateway/Dockerfile
     container_name: api-gateway
     hostname: api-gateway
     ports:
@@ -96,6 +107,7 @@ services:
         aliases:
           - api-gateway
     environment:
+      - SPRING_PROFILES_ACTIVE=local
       - SPRING_RABBITMQ_HOST=rabbitmq
     restart: on-failure:3
     healthcheck:
