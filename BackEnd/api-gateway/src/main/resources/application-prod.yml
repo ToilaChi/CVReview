@@ -1,0 +1,31 @@
+spring:
+  cloud:
+    gateway:
+      forwarded-headers-strategy: framework
+      server:
+        webflux:
+          max-in-memory-size: 50MB
+          httpclient:
+            connect-timeout: 30000
+            response-timeout: 300s
+          routes:
+            - id: auth-service
+              uri: ${AUTH_SERVICE_URL}
+              predicates:
+                - Path=/auth/**
+                - Method=GET,POST,PUT,DELETE
+              filters:
+                - name: CircuitBreaker
+                  args:
+                    name: authServiceCircuitBreaker
+                    statusCodes: 500,502,503
+
+            - id: recruitment-service
+              uri: ${RECRUITMENT_SERVICE_URL}
+              predicates:
+                - Path=/positions/**,/cv/**,/upload/**,/analysis/**,/tracking/**
+                - Method=GET,POST,PUT,DELETE
+              filters: []
+
+jwt:
+  secret: ${JWT_SECRET}

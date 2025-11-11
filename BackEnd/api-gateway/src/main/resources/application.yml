@@ -1,29 +1,8 @@
 spring:
   application:
     name: api-gateway
-  cloud:
-    gateway:
-      server:
-        webflux:
-          routes:
-            - id: auth-service
-              uri: http://auth-service:8081
-              predicates:
-                - Path=/auth/**
-              filters:
-                -name: CircuitBreaker
-                args:
-                  name: authServiceCircuitBreaker
-                  fallbackUri: forward:/fallback
-            - id: recruitment-service
-              uri: http://recruitment-service:8082
-              predicates:
-                - Path=/positions/**, /cv/**, /upload/**, /analysis/**, /tracking/**
-              filters:
-                -name: CircuitBreaker
-                args:
-                  name: authServiceCircuitBreaker
-                  fallbackUri: forward:/fallback
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:local}
 
 server:
   port: 8080
@@ -31,7 +10,6 @@ server:
 
 jwt:
   secret: LJ8WPZjFNSfnoD5g+JZXSFiQaMY6gfNvBfR8w9HwT9OI0yEg2RfH2t9mpR7C2Ij7
-
 management:
   endpoints:
     web:
