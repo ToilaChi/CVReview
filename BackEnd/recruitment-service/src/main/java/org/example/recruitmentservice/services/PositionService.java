@@ -40,6 +40,12 @@ public class PositionService {
                 positionsRequest.getLevel()
         );
 
+        String name = positionsRequest.getName();
+        String language = positionsRequest.getLanguage();
+        if (name == null || name.isBlank() || language == null || language.isBlank()) {
+            throw new CustomException(ErrorCode.MISSING_NAME_AND_LANGUAGE);
+        }
+
         if (existing.isPresent()) {
             throw new CustomException(ErrorCode.DUPLICATE_POSITION);
         }
@@ -247,7 +253,7 @@ public class PositionService {
         }
 
         List<CandidateCV> candidateCVS = candidateCVRepository.findListCVsByPositionId(positionId);
-        if (candidateCVS != null) {
+        if (!candidateCVS.isEmpty()) {
             throw new CustomException(ErrorCode.CAN_NOT_DELETE_POSITION);
         }
 

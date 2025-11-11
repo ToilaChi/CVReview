@@ -14,6 +14,7 @@ public interface CandidateCVRepository extends JpaRepository<CandidateCV, Intege
 
     @Query("SELECT c FROM CandidateCV c WHERE c.position.id = :positionId")
     List<CandidateCV> findListCVsByPositionId(@Param("positionId") int positionId);
+
     Page<CandidateCV> findByPositionIdAndCvStatusIn(int positionId, List<CVStatus> statuses, Pageable pageable);
     List<CandidateCV> findByPositionIdAndCvStatus(int positionId, CVStatus cvStatus);
     List<CandidateCV> findByPositionIdAndCvStatusAndBatchId(int positionId, CVStatus cvStatus, String batchId);

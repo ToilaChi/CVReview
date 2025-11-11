@@ -25,7 +25,6 @@ public enum ErrorCode {
     NO_FAILED_CVS_IN_BATCH(2006, "No failed CVs in batch", HttpStatus.NOT_FOUND),
     CVS_NOT_SAME_POSITION(2007, "CVs not same position", HttpStatus.CONFLICT),
 
-
     // Position errors
     POSITION_NOT_FOUND(3001, "Position not found", HttpStatus.NOT_FOUND),
     DUPLICATE_POSITION(3002, "Position already exists", HttpStatus.CONFLICT),
@@ -33,6 +32,7 @@ public enum ErrorCode {
     FILE_PARSE_FAILED(3004, "Failed to parse JD", HttpStatus.INTERNAL_SERVER_ERROR),
     FAILED_SAVE_FILE(3005, "Failed to save file", HttpStatus.INTERNAL_SERVER_ERROR),
     CAN_NOT_DELETE_POSITION(3006, "Cannot delete position because it contains CVs", HttpStatus.BAD_REQUEST),
+    MISSING_NAME_AND_LANGUAGE(3007, "Missing name and language", HttpStatus.BAD_REQUEST),
 
     // Review errors
     REVIEW_FAILED(4001, "AI review failed", HttpStatus.INTERNAL_SERVER_ERROR),
