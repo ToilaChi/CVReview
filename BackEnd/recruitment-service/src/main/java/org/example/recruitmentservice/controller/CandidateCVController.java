@@ -8,6 +8,7 @@ import org.example.recruitmentservice.dto.response.CandidateCVResponse;
 import org.example.recruitmentservice.models.enums.CVStatus;
 import org.example.recruitmentservice.services.CandidateCVService;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -19,11 +20,13 @@ import java.util.List;
 public class CandidateCVController {
     private final CandidateCVService candidateCVService;
 
+    @PreAuthorize("hasRole('HR')")
     @GetMapping("/{cvId}")
     public ApiResponse<CandidateCVResponse> getCVDetail(@PathVariable int cvId) {
         return candidateCVService.getCVDetail(cvId);
     }
 
+    @PreAuthorize("hasRole('HR')")
     @GetMapping("/position/{positionId}")
     public ApiResponse<PageResponse<CandidateCVResponse>> getAllCVsByPositionId(
             @PathVariable int positionId,
@@ -34,6 +37,7 @@ public class CandidateCVController {
         return candidateCVService.getAllCVsByPositionId(positionId, statuses, page, size);
     }
 
+    @PreAuthorize("hasRole('HR')")
     @PostMapping("/{cvId}")
     public ResponseEntity<ApiResponse<Object>> updateCandidateCV(
             @PathVariable int cvId,
@@ -46,6 +50,7 @@ public class CandidateCVController {
                 "Updated Candidate CV successfully"));
     }
 
+    @PreAuthorize("hasRole('HR')")
     @PostMapping("/{cvId}/{status}")
     public ResponseEntity<ApiResponse<Object>> updateCVStatus(
             @PathVariable int cvId,
@@ -57,6 +62,7 @@ public class CandidateCVController {
                 "Updated Candidate CV status successfully"));
     }
 
+    @PreAuthorize("hasAnyRole('HR', 'CANDIDATE')")
     @DeleteMapping("/{cvId}")
     public ResponseEntity<ApiResponse<Object>> deleteCandidateCV(
             @PathVariable int cvId) {
