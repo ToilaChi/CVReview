@@ -7,6 +7,7 @@ import org.example.recruitmentservice.dto.response.BatchRetryResponse;
 import org.example.recruitmentservice.dto.response.CandidateCVResponse;
 import org.example.recruitmentservice.services.AnalysisService;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -18,6 +19,7 @@ import java.util.Map;
 public class AnalysisController {
     private final AnalysisService analysisService;
 
+    @PreAuthorize("hasRole('HR')")
     @PostMapping
     public ResponseEntity<ApiResponse<Map<String, Object>>> analyzeCvs(
             @RequestParam int positionId,
@@ -25,16 +27,19 @@ public class AnalysisController {
         return ResponseEntity.ok(analysisService.analyzeCvs(positionId, cvIds));
     }
 
+    @PreAuthorize("hasRole('HR')")
     @PostMapping("/retry")
     public ResponseEntity<ApiResponse<BatchRetryResponse>> retry(@RequestParam String batchId) {
         return ResponseEntity.ok(analysisService.retryFailedCVsInBatch(batchId));
     }
 
+    @PreAuthorize("hasRole('HR')")
     @PostMapping("/retryCvs")
     public ResponseEntity<ApiResponse<BatchRetryResponse>> retry(@RequestBody List<Integer> cvIds) {
         return ResponseEntity.ok(analysisService.retryFailedCVsInList(cvIds));
     }
 
+    @PreAuthorize("hasRole('HR')")
     @PostMapping("/manual")
     public ResponseEntity<ApiResponse<CandidateCVResponse>> manualScore(
             @RequestBody ManualScoreRequest manualScoreRequest) {
