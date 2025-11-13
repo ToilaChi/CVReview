@@ -11,6 +11,7 @@ import java.util.Optional;
 public interface PositionRepository extends JpaRepository<Positions, Integer> {
     Positions findById(int positionId);
     Optional<Positions> findByNameAndLanguageAndLevel(String name, String language, String level);
+    Optional<Positions> findByNameAndLanguage(String name, String language);
     @Query("SELECT p FROM Positions p " +
             "WHERE (:name IS NULL OR p.name = :name) " +
             "AND (:language IS NULL OR p.language = :language) " +

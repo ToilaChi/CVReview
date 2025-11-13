@@ -25,7 +25,7 @@ public class ProcessingBatch {
     @Column(nullable = false, unique = true)
     private String batchId;
 
-    @Column(nullable = false)
+    @Column
     private Integer positionId;
 
     @Column(nullable = false)

@@ -72,7 +72,7 @@ public class ProcessingBatchService {
 
         // Get list of failed CV IDs for this batch
         List<Integer> failedCvIds = candidateCVRepository
-                .findByPositionIdAndCvStatusAndBatchId(batch.getPositionId(), CVStatus.FAILED, batchId)
+                .findByBatchIdAndCvStatus(batchId, CVStatus.FAILED)
                 .stream()
                 .map(CandidateCV::getId)
                 .collect(Collectors.toList());

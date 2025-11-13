@@ -47,21 +47,18 @@ public class PositionController {
         return positionService.getAllPositions(page, size);
     }
 
-    @PreAuthorize("hasRole('HR')")
+    @PreAuthorize("hasAnyRole('HR', 'CANDIDATE')")
     @GetMapping("/search")
     public ResponseEntity<ApiResponse<List<PositionsResponse>>> searchPositions(@RequestParam String keyword) {
         return ResponseEntity.ok(positionService.searchPositions(keyword));
     }
 
     @PreAuthorize("hasRole('HR')")
-    @PatchMapping("/{positionId}")
+    @PutMapping("/{positionId}")
     public ResponseEntity<ApiResponse<Object>> updatePosition(
             @PathVariable int positionId,
-            @RequestParam(value = "name", required = false) String name,
-            @RequestParam(value = "language", required = false) String language,
-            @RequestParam(value = "level", required = false) String level,
-            @RequestParam(value = "file", required = false) MultipartFile file) {
-        positionService.updatePosition(positionId, name, language, level, file);
+            @ModelAttribute PositionsRequest positionsRequest) {
+        positionService.updatePosition(positionId, positionsRequest);
         return ResponseEntity.ok(new ApiResponse<>(
                 ErrorCode.SUCCESS.getCode(),
                 "Updated successfully"));

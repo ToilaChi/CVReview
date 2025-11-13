@@ -37,7 +37,7 @@ public class CandidateCVController {
         return candidateCVService.getAllCVsByPositionId(positionId, statuses, page, size);
     }
 
-    @PreAuthorize("hasRole('HR')")
+    @PreAuthorize("hasAnyRole('HR', 'CANDIDATE')")
     @PostMapping("/{cvId}")
     public ResponseEntity<ApiResponse<Object>> updateCandidateCV(
             @PathVariable int cvId,

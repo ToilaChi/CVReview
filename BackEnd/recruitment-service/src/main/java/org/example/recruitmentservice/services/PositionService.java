@@ -173,22 +173,24 @@ public class PositionService {
     }
 
     @Transactional
-    public void updatePosition(int positionId, String name, String language, String level, MultipartFile file) {
+    public void updatePosition(int positionId, PositionsRequest positionsRequest) {
         Positions position = positionRepository.findById(positionId);
         if (position == null) {
             throw new CustomException(ErrorCode.POSITION_NOT_FOUND);
         }
 
-        String finalName = (name != null && !name.trim().isEmpty()) ? name.trim() : null;
-        String finalLang = (language != null && !language.trim().isEmpty()) ? language.trim() : null;
-        String finalLevel = (level != null && !level.trim().isEmpty()) ? level.trim() : null;
+        String name = positionsRequest.getName();
+        String language = positionsRequest.getLanguage();
+        String level = positionsRequest.getLevel();
+        MultipartFile file = positionsRequest.getFile();
 
-        // Check duplicate
-        if (name != null && language != null && level != null) {
-            Optional<Positions> existing = positionRepository.findByNameAndLanguageAndLevel(finalName, finalLang, finalLevel);
-            if (existing.isPresent() && existing.get().getId() != positionId) {
-                throw new CustomException(ErrorCode.DUPLICATE_POSITION);
-            }
+        String finalName = (name != null && !name.trim().isEmpty()) ? name.trim() : position.getName();
+        String finalLang = (language != null && !language.trim().isEmpty()) ? language.trim() : position.getLanguage();
+        String finalLevel = (level != null && !level.trim().isEmpty()) ? level.trim() : position.getLevel();
+
+        Optional<Positions> existing = positionRepository.findByNameAndLanguageAndLevel(finalName, finalLang, finalLevel);
+        if (existing.isPresent() && existing.get().getId() != positionId) {
+            throw new CustomException(ErrorCode.DUPLICATE_POSITION);
         }
 
         boolean isJDUpdated = (file != null && !file.isEmpty());

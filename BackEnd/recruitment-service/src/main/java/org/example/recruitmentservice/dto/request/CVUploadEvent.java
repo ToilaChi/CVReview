@@ -1,23 +1,17 @@
 package org.example.recruitmentservice.dto.request;
 
 import lombok.AllArgsConstructor;
-import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-@Data
-@AllArgsConstructor
-@NoArgsConstructor
-@Builder
-public class CVUploadEvent {
-    private int cvId;
-    private String filePath;
-    private int positionId;
-    private String batchId;
+import java.io.Serializable;
 
-    public CVUploadEvent(int cvId, String filePath, int positionId) {
-        this.cvId = cvId;
-        this.filePath = filePath;
-        this.positionId = positionId;
-    }
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
+public class CVUploadEvent implements Serializable {
+    private Integer cvId;
+    private String filePath;
+    private Integer positionId; // Có thể null cho CANDIDATE
+    private String batchId;
 }
