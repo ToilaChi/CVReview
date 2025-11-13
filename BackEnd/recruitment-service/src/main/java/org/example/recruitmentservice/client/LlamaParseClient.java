@@ -7,6 +7,7 @@ import org.example.recruitmentservice.config.RabbitMQConfig;
 import org.example.recruitmentservice.dto.request.CVUploadEvent;
 import org.example.recruitmentservice.models.enums.CVStatus;
 import org.example.recruitmentservice.models.entity.CandidateCV;
+import org.example.recruitmentservice.models.enums.SourceType;
 import org.example.recruitmentservice.repository.CandidateCVRepository;
 import org.example.recruitmentservice.services.ProcessingBatchService;
 import org.example.recruitmentservice.services.StorageService;
@@ -79,13 +80,15 @@ public class LlamaParseClient {
                 throw new CustomException(ErrorCode.FILE_NOT_FOUND);
             }
 
+            // Parse CV
             String jobId = uploadFile(absolutePath);
             String parsedText = pollResult(jobId);
 
+            // Extract information
             String extractedName = extractName(parsedText);
             String extractedEmail = extractEmail(parsedText);
 
-            cv.setBatchId(cv.getBatchId());
+            // Update CV entity
             cv.setCvContent(parsedText);
             if (extractedName != null) cv.setName(extractedName);
             if (extractedEmail != null) cv.setEmail(extractedEmail);
@@ -93,15 +96,25 @@ public class LlamaParseClient {
             cv.setParsedAt(LocalDateTime.now());
             cv.setUpdatedAt(LocalDateTime.now());
             candidateCVRepository.save(cv);
+
+            // Update batch
             processingBatchService.incrementProcessed(event.getBatchId(), true);
 
             System.out.println("CV parsed successfully - ID: " + cvId +
-                    " | Name: " + extractedName + " | Email: " + extractedEmail);
+                    " | Name: " + extractedName +
+                    " | Email: " + extractedEmail +
+                    " | Source: " + cv.getSourceType() +
+                    " | Position: " + (cv.getPosition() != null ? cv.getPosition().getId() : "N/A"));
+
         } catch (Exception e) {
             System.err.println("CV parse failed for cvId " + cvId + ": " + e.getMessage());
             cv.setCvStatus(CVStatus.FAILED);
             cv.setUpdatedAt(LocalDateTime.now());
             candidateCVRepository.save(cv);
+
+            // Update batch with failure
+            processingBatchService.incrementProcessed(event.getBatchId(), false);
+
             throw new CustomException(ErrorCode.CV_PARSE_FAILED);
         }
     }

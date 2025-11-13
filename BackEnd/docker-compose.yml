@@ -107,7 +107,7 @@ services:
         aliases:
           - api-gateway
     environment:
-      - SPRING_PROFILES_ACTIVE=local
+      - SPRING_PROFILES_ACTIVE=dev
       - SPRING_RABBITMQ_HOST=rabbitmq
     restart: on-failure:3
     healthcheck:

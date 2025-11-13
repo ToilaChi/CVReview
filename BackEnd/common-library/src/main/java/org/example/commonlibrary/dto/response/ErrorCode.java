@@ -15,6 +15,7 @@ public enum ErrorCode {
     USER_NOT_FOUND(1003, "User not found", HttpStatus.NOT_FOUND),
     INVALID_CREDENTIALS(1004, "Invalid username or password", HttpStatus.BAD_REQUEST),
     INVALID_EMAIL(6001, "Invalid email", HttpStatus.BAD_REQUEST),
+    UNAUTHORIZED_ACTION(1005, "Unauthorized action", HttpStatus.UNAUTHORIZED),
 
     // CV errors
     CV_NOT_FOUND(2001, "CV not found", HttpStatus.NOT_FOUND),

@@ -10,7 +10,7 @@ The project will be composed of the following microservices:
 - AI-service: Analyze CV content with AI/LLM, save evaluation results and feedback to the system.
 ## 3. API endpoints
 1. **Auth service**
-- **Login**
+- **Login For All**
   - **Name:** `/login` 
   - Endpoint: /auth/login
   - Method: POST
@@ -52,7 +52,7 @@ The project will be composed of the following microservices:
          "data": null,
          "message": "Phone is incorrect. Please enter again"
         }
-- **Refresh Token**
+- **Refresh Token For All**
 - **Name:** `/refresh-token` 
   - Endpoint: /auth/refresh-token
   - Method: POST
@@ -79,7 +79,7 @@ The project will be composed of the following microservices:
         }
       ```
 2. **Recruitment service**
-- **Create Position**
+- **Create Position For HR**
   - **Name:** `/positions` 
   - Endpoint: /positions
   - Method: POST
@@ -159,7 +159,7 @@ The project will be composed of the following microservices:
             "timestamp": "2025-10-02T17:15:29.8681381"  
         }
     ``` 
-- **Filter Position**
+- **Filter Position For HR**
   - **Name:** `/positions` 
   - Endpoint: /positions
   - Method: GET
@@ -212,7 +212,7 @@ The project will be composed of the following microservices:
             "timestamp": "2025-10-02T17:15:29.8681381"  
         }
     ``` 
-- **Search Position**
+- **Search Position For All**
   - **Name:** `/positions/search` 
   - Endpoint: /positions/search?keyword={position}
   - Method: GET
@@ -264,7 +264,7 @@ The project will be composed of the following microservices:
             "timestamp": "2025-10-02T17:15:29.8681381"  
         }
     ```
-- **Update Position**
+- **Update Position For HR**
   - **Name:** `/positions` 
   - Endpoint: /positions/{positionId}
   - Method: PATCH
@@ -336,7 +336,7 @@ The project will be composed of the following microservices:
             "timestamp": "2025-10-02T17:15:29.8681381"  
         }
     ``` 
-- **Delete Position**
+- **Delete Position For HR**
   - **Name:** `/positions` 
   - Endpoint: /positions/{positionId}
   - Method: DELETE
@@ -384,26 +384,30 @@ The project will be composed of the following microservices:
             "timestamp": "2025-10-02T17:15:29.8681381"  
         }
     ``` 
-- **Upload CV**
+- **Upload CV For HR**
   - **Name:** `/upload` 
-  - Endpoint: /upload/cv
+  - Endpoint: /upload/hr/cv
   - Method: POST
   - Description: Upload CV to store in database
-  - Content-Type:  `multipart/form-data`
   - Header:
     | Key            | Value                     | Required |
     |----------------|---------------------------|----------|
     | Authorization  | Bearer <accessToken> | Yes      |
+  - Query Parameters
+    | Key   | Type   | Required | Value |
+    |-------|--------|----------|---------|
+    | files  | File | Yes      | abc.pdf, def.pdf,...     |
+    | positionId  | Text | Yes      | 1     |
   - Response:
     - Success: 
     ```json
         {
             "statusCode": 200,
-            "message": "Batch created successfully",
+            "message": "CV uploaded successfully",
             "data": {
                 "totalCv": 4,
                 "batchId": "POS5_20251111_B0853",
-                "message": "Please wait a moment. Your CVs are being processed.",
+                "message": "Your CV has been uploaded successfully and is being processed.",
                 "status": "PROCESSING"
             },
             "timestamp": "2025-11-11T07:19:30.007447375"
@@ -419,6 +423,15 @@ The project will be composed of the following microservices:
             "timestamp": "2025-10-02T17:15:29.8681381"  
         }
     ``` 
+     - File not found
+    ```json
+        {
+            "statusCode": 3003,
+            "message": "File not found",
+            "data": null,
+            "timestamp": "2025-10-02T17:15:29.8681381"  
+        }
+    ``` 
      - Fail save file
     ```json
         {
@@ -428,7 +441,72 @@ The project will be composed of the following microservices:
             "timestamp": "2025-10-02T17:15:29.8681381"  
         }
     ``` 
-- **Get All Position**
+     - Unauthorized action
+    ```json
+        {
+            "statusCode": 1005,
+            "message": "Unauthorized action",
+            "data": null,
+            "timestamp": "2025-10-02T17:15:29.8681381"  
+        }
+    ``` 
+- **Upload CV For Candidate**
+  - **Name:** `/upload` 
+  - Endpoint: /upload/candidate/cv
+  - Method: POST
+  - Description: Upload CV to store in database
+  - Header:
+    | Key            | Value                     | Required |
+    |----------------|---------------------------|----------|
+    | Authorization  | Bearer <accessToken> | Yes      |
+  - Query Parameters
+    | Key   | Type   | Required | Value |
+    |-------|--------|----------|---------|
+    | file  | File | Yes      | abc.pdf     |
+  - Response:
+    - Success: 
+    ```json
+        {
+            "statusCode": 200,
+            "message": "CV uploaded successfully",
+            "data": {
+                "totalCv": 1,
+                "batchId": "CAND_20251113_d87bbbbc",
+                "message": "Your CV has been uploaded successfully and is being processed.",
+                "status": "PROCESSING"
+            },
+            "timestamp": "2025-11-11T07:19:30.007447375"
+        }
+    ```
+    - Fail:
+     - File not found
+    ```json
+        {
+            "statusCode": 3003,
+            "message": "File not found",
+            "data": null,
+            "timestamp": "2025-10-02T17:15:29.8681381"  
+        }
+    ``` 
+     - Fail save file
+    ```json
+        {
+            "statusCode": 3005,
+            "message": "Failed to save file",
+            "data": null,
+            "timestamp": "2025-10-02T17:15:29.8681381"  
+        }
+    ``` 
+     - Unauthorized action
+    ```json
+        {
+            "statusCode": 1005,
+            "message": "Unauthorized action",
+            "data": null,
+            "timestamp": "2025-10-02T17:15:29.8681381"  
+        }
+    ``` 
+- **Get All Position For All**
   - **Name:** `/positions` 
   - Endpoint: /positions/all
   - Method: GET
@@ -473,7 +551,7 @@ The project will be composed of the following microservices:
             "timestamp": 2025-10-02T17:15:29.8681381
         }
     ```
-- **CV Detail**
+- **CV Detail For HR**
   - **Name:** `/cv` 
   - Endpoint: /cv/{{cvId}}
   - Method: GET
@@ -492,6 +570,7 @@ The project will be composed of the following microservices:
             "data": {
                 "cvId": 94,
                 "positionId": 15,
+                "positionName": "BackEnd Java Intern",
                 "email": "chi12345pham@gmail.com",
                 "name": "Pham Minh Chi",
                 "score": 96,
@@ -517,7 +596,7 @@ The project will be composed of the following microservices:
             "timestamp": "2025-10-13T13:59:43.5713966"
         }
     ``` 
-- **Get CVs for specific position**
+- **Get CVs for specific position For HR**
   - **Name:** `/cv` 
   - Endpoint: /cv/position/{positionId}
   - Method: GET
@@ -538,6 +617,7 @@ The project will be composed of the following microservices:
                     {
                         "cvId": 32,
                         "positionId": 9,
+                        "positionName": "Developer Java Intern",
                         "email": "chi12345pham@gmail.com",
                         "name": "Pham Minh Chi",
                         "filePath": "Tester/Python/Fresher/CV/40b1c39b-3975-40d2-bb30-b048c43a1e16-CV_Pham_Intern_Developer.pdf",
@@ -548,6 +628,7 @@ The project will be composed of the following microservices:
                     {
                         "cvId": 8,
                         "positionId": 9,
+                        "positionName": "Developer Java Intern",
                         "name": "",
                         "filePath": "Tester/Python/Fresher/CV/6252061e-9969-40f6-b8e2-a8042a7e3286-Candidate_CV.pdf",
                         "status": "PARSED",
@@ -573,7 +654,7 @@ The project will be composed of the following microservices:
             "timestamp": "2025-10-02T17:15:29.8681381"  
         }
     ```  
-- **Update Candidate CV**
+- **Update Candidate CV For All**
   - **Name:** `/cv` 
   - Endpoint: /cv/{cvId}
   - Method: POST
@@ -618,11 +699,11 @@ The project will be composed of the following microservices:
             "timestamp": "2025-10-02T17:15:29.8681381"  
         }
     ``` 
-- **Update Candidate CV Status**
+- **Update Candidate CV Status For HR**
   - **Name:** `/cv` 
   - Endpoint: /cv/{cvId}/{status}
   - Method: POST
-  - Description: Update candidate CV status.
+  - Description: Update candidate CV status (REJECTED or APPROVED).
   - Content-Type:  `multipart/form-data`
   - Header:
     | Key            | Value                     | Required |
@@ -648,7 +729,7 @@ The project will be composed of the following microservices:
             "timestamp": "2025-10-13T13:59:43.5713966"
         }
     ``` 
-- **Delete Candidate CV**
+- **Delete Candidate CV For All**
   - **Name:** `/cv` 
   - Endpoint: /cv/{cvId}
   - Method: DELETE
@@ -687,7 +768,7 @@ The project will be composed of the following microservices:
             "timestamp": "2025-10-13T13:59:43.5713966"
         }
     ``` 
-- **Analysis CV**
+- **Analysis CV For HR**
   - **Name:** `/analysis` 
   - Endpoint: /analysis
   - Method: POST
@@ -738,7 +819,7 @@ The project will be composed of the following microservices:
             "timestamp": "2025-10-13T13:59:43.5713966"
         }
     ``` 
-- **Manual Score**
+- **Manual Score For HR**
   - **Name:** `/analysis` 
   - Endpoint: /analysis/manual
   - Method: POST
@@ -794,7 +875,7 @@ The project will be composed of the following microservices:
             "timestamp": "2025-10-13T13:59:43.5713966"
         }
     ``` 
-- **Retry Scoring by BatchId**
+- **Retry Scoring by BatchId For HR**
   - **Name:** `/analysis` 
   - Endpoint: /analysis/retry
   - Method: POST
@@ -843,7 +924,7 @@ The project will be composed of the following microservices:
             "timestamp": "2025-10-13T13:59:43.5713966"
         }
     ``` 
-- **Retry Scoring by CvIds**
+- **Retry Scoring by CvIds For HR**
   - **Name:** `/analysis` 
   - Endpoint: /analysis/retryCvs
   - Method: POST
@@ -904,7 +985,7 @@ The project will be composed of the following microservices:
             "timestamp": "2025-10-13T13:59:43.5713966"
         }
     ``` 
-- **Tracking CV upload/scoring**
+- **Tracking CV upload/scoring For All**
   - **Name:** `/tracking` 
   - Endpoint: /tracking/{{batchId}}/status
   - Method: GET

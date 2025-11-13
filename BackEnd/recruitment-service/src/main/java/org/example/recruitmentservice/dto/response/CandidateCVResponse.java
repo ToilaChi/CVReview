@@ -15,6 +15,7 @@ import java.time.LocalDateTime;
 public class CandidateCVResponse {
     private int cvId;
     private int positionId;
+    private String positionName;
     private String email;
     private String name;
     private String batchId;

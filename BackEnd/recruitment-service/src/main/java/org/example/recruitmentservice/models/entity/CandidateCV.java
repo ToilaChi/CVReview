@@ -19,7 +19,7 @@ public class CandidateCV {
     private int id;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "position_id", nullable = false)
+    @JoinColumn(name = "position_id")
     private Positions position;
 
     @Column
