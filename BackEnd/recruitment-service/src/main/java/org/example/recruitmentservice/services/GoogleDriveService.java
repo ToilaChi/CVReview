@@ -38,6 +38,12 @@ public class GoogleDriveService {
     @Value("${google.drive.folder-id}")
     private String rootFolderId;
 
+    @Value("${OAUTH_CLIENT}")
+    private String oauthClientJson;
+
+    @Value("${GOOGLE_DRIVE_TOKEN}")
+    private String googleDriveToken;
+
     private Drive driveService;
     private static final JsonFactory JSON_FACTORY = GsonFactory.getDefaultInstance();
     private static final String APPLICATION_NAME = "Recruitment Service";
@@ -46,29 +52,29 @@ public class GoogleDriveService {
     public void init() throws Exception {
         HttpTransport httpTransport = GoogleNetHttpTransport.newTrustedTransport();
 
-        String json = System.getenv("OAUTH_CLIENT");
-        if (json == null || json.isEmpty()) {
-            throw new RuntimeException("OAUTH_CLIENT environment variable is missing");
+        if (oauthClientJson == null || oauthClientJson.isEmpty()) {
+            throw new RuntimeException("OAUTH_CLIENT property is missing");
         }
 
         GoogleClientSecrets clientSecrets = GoogleClientSecrets.load(
                 JSON_FACTORY,
-                new StringReader(json)
+                new StringReader(oauthClientJson)
         );
 
-        // Tạo tokens directory và restore credential từ env
+        // Tạo tokens directory
         java.io.File tokensDir = new java.io.File("tokens");
         tokensDir.mkdirs();
 
-        String tokenBase64 = System.getenv("GOOGLE_DRIVE_TOKEN");
-        if (tokenBase64 != null && !tokenBase64.isEmpty()) {
+        // Restore token từ env nếu có
+        if (googleDriveToken != null && !googleDriveToken.isEmpty()) {
             try {
-                byte[] decodedToken = Base64.getDecoder().decode(tokenBase64);
+                byte[] decodedToken = Base64.getDecoder().decode(googleDriveToken);
                 java.io.File credentialFile = new java.io.File(tokensDir, "StoredCredential");
                 Files.write(credentialFile.toPath(), decodedToken);
                 log.info("Restored Google Drive token from environment variable");
             } catch (Exception e) {
-                log.warn("Failed to restore token from env: {}", e.getMessage());
+                log.error("Failed to restore token from env: {}", e.getMessage());
+                throw new RuntimeException("Invalid GOOGLE_DRIVE_TOKEN format", e);
             }
         }
 
@@ -78,14 +84,30 @@ public class GoogleDriveService {
                 clientSecrets,
                 Collections.singletonList(DriveScopes.DRIVE_FILE)
         )
-                .setDataStoreFactory(new FileDataStoreFactory(new java.io.File("tokens")))
+                .setDataStoreFactory(new FileDataStoreFactory(tokensDir))
                 .setAccessType("offline")
                 .build();
 
-        Credential credential = new AuthorizationCodeInstalledApp(
-                flow,
-                new LocalServerReceiver.Builder().setPort(8888).build()
-        ).authorize("user");
+        Credential credential;
+
+        // Chỉ chạy OAuth flow nếu chưa có token
+        if (googleDriveToken != null && !googleDriveToken.isEmpty()) {
+            // Load credential từ DataStore (file đã restore)
+            credential = flow.loadCredential("user");
+
+            if (credential == null) {
+                throw new RuntimeException("Failed to load credential from restored token");
+            }
+
+            log.info("Loaded existing Google Drive credential from token");
+        } else {
+            // Chỉ chạy OAuth flow khi local development
+            log.warn("No GOOGLE_DRIVE_TOKEN found, starting OAuth flow (local only)");
+            credential = new AuthorizationCodeInstalledApp(
+                    flow,
+                    new LocalServerReceiver.Builder().setPort(8888).build()
+            ).authorize("user");
+        }
 
         driveService = new Drive.Builder(httpTransport, JSON_FACTORY, credential)
                 .setApplicationName(APPLICATION_NAME)
