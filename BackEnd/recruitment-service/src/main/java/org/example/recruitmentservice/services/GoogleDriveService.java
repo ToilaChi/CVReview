@@ -25,10 +25,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import jakarta.annotation.PostConstruct;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
+
+import java.io.*;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -51,10 +49,14 @@ public class GoogleDriveService {
     public void init() throws Exception {
         HttpTransport httpTransport = GoogleNetHttpTransport.newTrustedTransport();
 
-        InputStream in = new ClassPathResource(oAuthFile).getInputStream();
+        String json = System.getenv("OAUTH_CLIENT");
+        if (json == null || json.isEmpty()) {
+            throw new RuntimeException("OAUTH_CLIENT environment variable is missing");
+        }
+
         GoogleClientSecrets clientSecrets = GoogleClientSecrets.load(
                 JSON_FACTORY,
-                new InputStreamReader(in)
+                new StringReader(json)
         );
 
         GoogleAuthorizationCodeFlow flow = new GoogleAuthorizationCodeFlow.Builder(
