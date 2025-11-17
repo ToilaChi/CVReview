@@ -17,6 +17,7 @@ public class PositionsResponse {
     private String name;
     private String language;
     private String level;
+    private String positionName;
     private String jdPath;
     private String driveFileUrl;
     private LocalDateTime createdAt;
