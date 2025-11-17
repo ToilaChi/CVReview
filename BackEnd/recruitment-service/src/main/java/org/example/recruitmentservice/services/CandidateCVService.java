@@ -1,5 +1,6 @@
 package org.example.recruitmentservice.services;
 
+import org.example.recruitmentservice.dto.response.DriveFileInfo;
 import org.springframework.transaction.annotation.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -23,7 +24,9 @@ import org.springframework.data.domain.*;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -53,6 +56,7 @@ public class CandidateCVService {
                 .email(cv.getEmail())
                 .batchId(cv.getBatchId())
                 .filePath(cv.getCvPath())
+                .driveFileUrl(cv.getDriveFileUrl())
                 .score(cvAnalysis != null ? cvAnalysis.getScore() : null)
                 .feedback(cvAnalysis != null ? cvAnalysis.getFeedback() : null)
                 .skillMatch(cvAnalysis != null ? cvAnalysis.getSkillMatch() : null)
@@ -96,6 +100,7 @@ public class CandidateCVService {
                         .email(cv.getEmail())
                         .updatedAt(cv.getUpdatedAt())
                         .filePath(cv.getCvPath())
+                        .driveFileUrl(cv.getDriveFileUrl())
                         .build()
         );
 
@@ -128,26 +133,26 @@ public class CandidateCVService {
 
         // Upload new file
         try {
-            String oldFilePath = cv.getCvPath();
-            if (oldFilePath != null && !oldFilePath.isEmpty()) {
-                storageService.deleteFile(oldFilePath);
+            String oldFileId = cv.getDriveFileId();
+            if (oldFileId != null && !oldFileId.isEmpty()) {
+                storageService.deleteFile(oldFileId);  // deleteFile nhận fileId
             }
 
             Positions position = cv.getPosition();
-            if (position == null) {
-                throw new CustomException(ErrorCode.POSITION_NOT_FOUND);
+            String folderPath;
+            if (position != null && position.getDriveFileId() != null) {
+                folderPath = position.getName() + "/"
+                        + position.getLanguage() + "/"
+                        + position.getLevel() + "/CV";
+            } else {
+                folderPath = "candidate-cvs/" + LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy/MM"));
             }
 
-            String jdPath = position.getJdPath();
-            String baseDir = jdPath.substring(0, jdPath.lastIndexOf("/"));
-            String cvDir = baseDir + "/CV";
+            DriveFileInfo driveFileInfo = storageService.uploadCV(newFile, folderPath);
 
-            String newFileName = UUID.randomUUID() + "-" + newFile.getOriginalFilename();
-            String newFilePath = cvDir + "/" + newFileName;
+            cv.setDriveFileId(driveFileInfo.getFileId());
+            cv.setDriveFileUrl(driveFileInfo.getWebViewLink());
 
-            storageService.saveFile(newFile, newFilePath);
-
-            cv.setCvPath(newFilePath);
             cv.setCvStatus(CVStatus.UPLOADED);
             cv.setName(null);
             cv.setEmail(null);
@@ -155,8 +160,14 @@ public class CandidateCVService {
             cv.setUpdatedAt(LocalDateTime.now());
             candidateCVRepository.save(cv);
 
-            CVUploadEvent event = new CVUploadEvent(cv.getId(), newFilePath, position.getId(), cv.getBatchId());
+            CVUploadEvent event = new CVUploadEvent(
+                    cv.getId(),
+                    driveFileInfo.getFileId(),  // Gửi fileId
+                    position != null ? position.getId() : null,
+                    cv.getBatchId()
+            );
             rabbitTemplate.convertAndSend(RabbitMQConfig.CV_UPLOAD_QUEUE, event);
+
         } catch (CustomException e) {
             System.err.println("CustomException while updating CV: " + e.getMessage());
             throw e;

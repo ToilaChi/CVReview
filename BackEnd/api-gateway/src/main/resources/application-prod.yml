@@ -1,13 +1,12 @@
 spring:
   cloud:
     gateway:
-      forwarded-headers-strategy: framework
       server:
         webflux:
-          max-in-memory-size: 50MB
           httpclient:
             connect-timeout: 30000
             response-timeout: 300s
+
           routes:
             - id: auth-service
               uri: ${AUTH_SERVICE_URL}
@@ -26,6 +25,9 @@ spring:
                 - Path=/positions/**,/cv/**,/upload/**,/analysis/**,/tracking/**
                 - Method=GET,POST,PUT,DELETE
               filters: []
+  http:
+    codecs:
+      max-in-memory-size: 52428800  # 50MB in bytes
 
 jwt:
   secret: ${JWT_SECRET}

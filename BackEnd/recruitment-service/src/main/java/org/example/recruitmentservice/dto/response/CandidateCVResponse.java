@@ -21,6 +21,7 @@ public class CandidateCVResponse {
     private String batchId;
     private String fileName;
     private String filePath;
+    private String driveFileUrl;
     private Integer score;
     private String feedback;
     private String skillMatch;

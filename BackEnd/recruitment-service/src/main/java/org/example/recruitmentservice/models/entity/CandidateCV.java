@@ -35,8 +35,14 @@ public class CandidateCV {
     @Column
     private String name;
 
-    @Column(nullable = false)
+    @Column
     private String cvPath;
+
+    @Column
+    private String driveFileId;
+
+    @Column
+    private String driveFileUrl;
 
     @Lob
     @Column(columnDefinition = "TEXT")

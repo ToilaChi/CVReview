@@ -11,7 +11,7 @@ import java.io.Serializable;
 @AllArgsConstructor
 public class CVUploadEvent implements Serializable {
     private Integer cvId;
-    private String filePath;
+    private String fileId;
     private Integer positionId; // Có thể null cho CANDIDATE
     private String batchId;
 }

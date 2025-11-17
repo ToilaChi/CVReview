@@ -1,5 +1,6 @@
 package org.example.recruitmentservice.services;
 
+import org.example.recruitmentservice.dto.response.DriveFileInfo;
 import org.springframework.transaction.annotation.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.example.commonlibrary.dto.response.ApiResponse;
@@ -33,7 +34,7 @@ public class PositionService {
 
     @Transactional
     public ApiResponse<PositionsResponse> createPosition(PositionsRequest positionsRequest) {
-        //Check duplicate
+        // Check duplicate
         Optional<Positions> existing = positionRepository.findByNameAndLanguageAndLevel(
                 positionsRequest.getName(),
                 positionsRequest.getLanguage(),
@@ -41,17 +42,17 @@ public class PositionService {
         );
 
         String name = positionsRequest.getName();
-        String language = positionsRequest.getLanguage();
-        if (name == null || name.isBlank() || language == null || language.isBlank()) {
-            throw new CustomException(ErrorCode.MISSING_NAME_AND_LANGUAGE);
+        String level = positionsRequest.getLevel();
+        if (name == null || name.isBlank() || level == null || level.isBlank()) {
+            throw new CustomException(ErrorCode.MISSING_NAME_AND_LEVEL);
         }
 
         if (existing.isPresent()) {
             throw new CustomException(ErrorCode.DUPLICATE_POSITION);
         }
 
-        // Upload file
-        String jdPath = storageService.uploadJD(
+        // Upload file to Google Drive
+        DriveFileInfo driveFileInfo = storageService.uploadJD(
                 positionsRequest.getFile(),
                 positionsRequest.getName(),
                 positionsRequest.getLanguage(),
@@ -60,36 +61,50 @@ public class PositionService {
 
         // Parse file by LlamaParse
         String jdText;
+        String tempFilePath = null;
         try {
-            String absolutePath = storageService.getAbsolutePath(jdPath);
-            jdText = llamaParseClient.parseJD(absolutePath);
+            // Download từ Drive về temp
+            tempFilePath = storageService.downloadFileToTemp(driveFileInfo.getFileId());
+            jdText = llamaParseClient.parseJD(tempFilePath);
         } catch (Exception e) {
+            // Nếu parse fail, xóa file trên Drive
+            storageService.deleteFile(driveFileInfo.getFileId());
             System.err.println("Parse error details: " + e.getMessage());
-            e.printStackTrace(); // In full stack trace
+            e.printStackTrace();
             throw new CustomException(ErrorCode.FILE_PARSE_FAILED);
+        } finally {
+            // Cleanup temp file
+            if (tempFilePath != null) {
+                storageService.deleteTempFile(tempFilePath);
+            }
         }
 
-        // Save db
+        // Save to DB
         Positions position = new Positions();
         position.setName(positionsRequest.getName());
         position.setLanguage(positionsRequest.getLanguage());
         position.setLevel(positionsRequest.getLevel());
         position.setJobDescription(jdText);
-        position.setJdPath(jdPath);
+
+        // Lưu Drive info
+        position.setDriveFileId(driveFileInfo.getFileId());
+        position.setDriveFileUrl(driveFileInfo.getWebViewLink());
+        // jdPath để null (deprecated)
+
         position.setCreatedAt(LocalDateTime.now());
         position.setUpdatedAt(LocalDateTime.now());
 
         Positions positionSaved = positionRepository.save(position);
 
-        PositionsResponse response = new PositionsResponse(
-                positionSaved.getId(),
-                positionSaved.getName(),
-                positionSaved.getLanguage(),
-                positionSaved.getLevel(),
-                positionSaved.getJdPath(),
-                positionSaved.getCreatedAt(),
-                positionSaved.getUpdatedAt()
-        );
+        PositionsResponse response = PositionsResponse.builder()
+                .id(positionSaved.getId())
+                .name(positionSaved.getName())
+                .language(positionSaved.getLanguage())
+                .level(positionSaved.getLevel())
+                .driveFileUrl(positionSaved.getDriveFileUrl())
+                .createdAt(positionSaved.getCreatedAt())
+                .updatedAt(positionSaved.getUpdatedAt())
+                .build();
 
         return new ApiResponse<>(
                 ErrorCode.SUCCESS.getCode(),
@@ -127,6 +142,7 @@ public class PositionService {
                         .language(position.getLanguage())
                         .level(position.getLevel())
                         .jdPath(position.getJdPath())
+                        .driveFileUrl(position.getDriveFileUrl())
                         .createdAt(position.getCreatedAt())
                         .build()
         );
@@ -146,27 +162,26 @@ public class PositionService {
         }
 
         String[] words = keyword.trim().toLowerCase().split("\\s+");
-
         List<Positions> all = positionRepository.findAll();
 
-        // Filter
         List<Positions> filtered = all.stream()
                 .filter(p -> {
                     String combined = (p.getName() + " " + p.getLanguage() + " " + p.getLevel())
                             .toLowerCase();
-                    // Bắt buộc tất cả từ phải match (AND)
                     return Arrays.stream(words).allMatch(combined::contains);
                 })
                 .toList();
 
         List<PositionsResponse> responseList = filtered.stream()
-                .map(p -> new PositionsResponse(
-                        p.getId(),
-                        p.getName(),
-                        p.getLanguage(),
-                        p.getLevel(),
-                        p.getJdPath()
-                ))
+                .map(p -> PositionsResponse.builder()
+                        .id(p.getId())
+                        .name(p.getName())
+                        .language(p.getLanguage())
+                        .level(p.getLevel())
+                        .jdPath(p.getJdPath())
+                        .driveFileUrl(p.getDriveFileUrl())
+                        .createdAt(p.getCreatedAt())
+                        .build())
                 .toList();
 
         return new ApiResponse<>(ErrorCode.SUCCESS.getCode(), ErrorCode.SUCCESS.getMessage(), responseList);
@@ -188,6 +203,7 @@ public class PositionService {
         String finalLang = (language != null && !language.trim().isEmpty()) ? language.trim() : position.getLanguage();
         String finalLevel = (level != null && !level.trim().isEmpty()) ? level.trim() : position.getLevel();
 
+        // Check duplicate
         Optional<Positions> existing = positionRepository.findByNameAndLanguageAndLevel(finalName, finalLang, finalLevel);
         if (existing.isPresent() && existing.get().getId() != positionId) {
             throw new CustomException(ErrorCode.DUPLICATE_POSITION);
@@ -196,49 +212,66 @@ public class PositionService {
         boolean isJDUpdated = (file != null && !file.isEmpty());
 
         if (isJDUpdated) {
-            String newFilePath = storageService.uploadJD(file, finalName, finalLang, finalLevel);
+            // Upload file mới lên Drive
+            DriveFileInfo newFileInfo = storageService.uploadJD(file, finalName, finalLang, finalLevel);
 
+            String tempFilePath = null;
             try {
-                String absolutePath = storageService.getAbsolutePath(newFilePath);
-                String jdText = llamaParseClient.parseJD(absolutePath);
+                // Download về temp để parse
+                tempFilePath = storageService.downloadFileToTemp(newFileInfo.getFileId());
+                String jdText = llamaParseClient.parseJD(tempFilePath);
 
                 if (jdText == null || jdText.isEmpty()) {
-                    storageService.deleteFile(newFilePath);
+                    storageService.deleteFile(newFileInfo.getFileId());
                     throw new CustomException(ErrorCode.FILE_PARSE_FAILED);
                 }
 
-                // Xóa file cũ
-                String oldFilePath = position.getJdPath();
-                if (oldFilePath != null) {
-                    storageService.deleteFile(oldFilePath);
+                // Xóa file cũ trên Drive
+                String oldFileId = position.getDriveFileId();
+                if (oldFileId != null) {
+                    storageService.deleteFile(oldFileId);
                 }
 
-                position.setJdPath(newFilePath);
+                // Update position
+                position.setDriveFileId(newFileInfo.getFileId());
+                position.setDriveFileUrl(newFileInfo.getWebViewLink());
                 position.setJobDescription(jdText);
-            } catch (Exception e) {
-                storageService.deleteFile(newFilePath);
-                throw new CustomException(ErrorCode.FILE_PARSE_FAILED);
-            }
-        } else {
-            boolean hasAtLeastOneMeta =
-                    (finalName != null && !finalName.isBlank()) ||
-                    (finalLang != null && !finalLang.isBlank()) ||
-                    (finalLevel != null && !finalLevel.isBlank());
 
-            if (hasAtLeastOneMeta && position.getJdPath() != null) {
+            } catch (Exception e) {
+                storageService.deleteFile(newFileInfo.getFileId());
+                throw new CustomException(ErrorCode.FILE_PARSE_FAILED);
+            } finally {
+                if (tempFilePath != null) {
+                    storageService.deleteTempFile(tempFilePath);
+                }
+            }
+
+        } else {
+            // Chỉ update metadata → move file trên Drive
+            boolean hasMetadataChange =
+                    !finalName.equals(position.getName()) ||
+                            !finalLang.equals(position.getLanguage()) ||
+                            !finalLevel.equals(position.getLevel());
+
+            if (hasMetadataChange && position.getDriveFileId() != null) {
                 try {
-                    String movedPath = storageService.moveJD(position.getJdPath(), finalName, finalLang, finalLevel);
-                    System.out.println("movedPath: " + movedPath);
-                    position.setJdPath(movedPath);
+                    DriveFileInfo movedInfo = storageService.moveJD(
+                            position.getDriveFileId(),
+                            finalName,
+                            finalLang,
+                            finalLevel
+                    );
+
+                    if (movedInfo != null) {
+                        position.setDriveFileUrl(movedInfo.getWebViewLink());
+                    }
                 } catch (Exception e) {
                     e.printStackTrace();
                     throw new CustomException(ErrorCode.FILE_MOVE_FAILED);
                 }
             }
-
         }
 
-        System.out.println("Path: " + position.getJdPath());
         position.setName(finalName);
         position.setLanguage(finalLang);
         position.setLevel(finalLevel);
@@ -259,8 +292,11 @@ public class PositionService {
             throw new CustomException(ErrorCode.CAN_NOT_DELETE_POSITION);
         }
 
+        // Xóa file trên Drive
         try {
-            storageService.deleteFile(position.getJdPath());
+            if (position.getDriveFileId() != null) {
+                storageService.deleteFile(position.getDriveFileId());
+            }
         } catch (Exception e) {
             throw new CustomException(ErrorCode.FILE_DELETE_FAILED);
         }

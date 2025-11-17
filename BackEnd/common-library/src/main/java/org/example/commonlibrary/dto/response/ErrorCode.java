@@ -33,7 +33,7 @@ public enum ErrorCode {
     FILE_PARSE_FAILED(3004, "Failed to parse JD", HttpStatus.INTERNAL_SERVER_ERROR),
     FAILED_SAVE_FILE(3005, "Failed to save file", HttpStatus.INTERNAL_SERVER_ERROR),
     CAN_NOT_DELETE_POSITION(3006, "Cannot delete position because it contains CVs", HttpStatus.BAD_REQUEST),
-    MISSING_NAME_AND_LANGUAGE(3007, "Missing name and language", HttpStatus.BAD_REQUEST),
+    MISSING_NAME_AND_LEVEL(3007, "Missing name and level", HttpStatus.BAD_REQUEST),
 
     // Review errors
     REVIEW_FAILED(4001, "AI review failed", HttpStatus.INTERNAL_SERVER_ERROR),

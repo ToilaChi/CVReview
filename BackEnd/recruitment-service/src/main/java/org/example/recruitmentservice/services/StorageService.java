@@ -1,150 +1,172 @@
 package org.example.recruitmentservice.services;
 
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.example.commonlibrary.dto.response.ErrorCode;
 import org.example.commonlibrary.exception.CustomException;
-import org.springframework.beans.factory.annotation.Value;
+import org.example.recruitmentservice.dto.response.DriveFileInfo;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
-import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.nio.file.StandardCopyOption;
-import java.util.UUID;
 
+@Slf4j
 @Service
+@RequiredArgsConstructor
 public class StorageService {
 
-    @Value("${storage.local.base-path}")
-    private String basePath;
+    private final GoogleDriveService googleDriveService;
 
-    public String uploadJD(MultipartFile file, String name, String language, String level) {
+    /**
+     * Upload JD file lên Google Drive
+     * @return DriveFileInfo chứa fileId và links
+     */
+    public DriveFileInfo uploadJD(MultipartFile file, String name, String language, String level) {
         try {
             if (file == null || file.isEmpty()) {
                 throw new CustomException(ErrorCode.FAILED_SAVE_FILE);
             }
 
-            Path relativePath = Paths.get(
-                    name,
-                    language != null ? language : "",
-                    level != null ? level : ""
-            ).normalize();
+            // Build folder path tương tự như trước: name/language/level
+            String folderPath = buildFolderPath(name, language, level);
 
-            // Build absolute folder path
-            Path folderPath = Paths.get(basePath, relativePath.toString()).normalize();
-            Files.createDirectories(folderPath);
+            log.info("Uploading JD to Drive: {}", folderPath);
+            return googleDriveService.uploadFile(file, folderPath);
 
-            // Create file name unique
-            String fileName = UUID.randomUUID() + "-" + file.getOriginalFilename();
-            Path filePath = folderPath.resolve(fileName);
-
-            // Save file
-            Files.copy(file.getInputStream(), filePath, StandardCopyOption.REPLACE_EXISTING);
-
-            return relativePath.resolve(fileName).toString().replace("\\", "/");
-        } catch (IOException e) {
-            System.err.println("IOException: " + e.getMessage());
+        } catch (CustomException e) {
+            throw e;
+        } catch (Exception e) {
+            log.error("Failed to upload JD: {}", e.getMessage());
             throw new CustomException(ErrorCode.FAILED_SAVE_FILE);
         }
     }
 
-    public String moveJD(String oldPath, String newName, String newLang, String newLevel) throws IOException {
-        Path oldFile = Paths.get(basePath, oldPath);
-        String fileName = oldFile.getFileName().toString();
-
-        StringBuilder newRelativePath = new StringBuilder();
-
-        if (newName != null && !newName.isBlank()) {
-            newRelativePath.append(newName);
-        }
-        if (newLang != null && !newLang.isBlank()) {
-            if (!newRelativePath.isEmpty()) newRelativePath.append("/");
-            newRelativePath.append(newLang);
-        }
-        if (newLevel != null && !newLevel.isBlank()) {
-            if (!newRelativePath.isEmpty()) newRelativePath.append("/");
-            newRelativePath.append(newLevel);
-        }
-
-        // Nếu không có gì để move, giữ nguyên
-        if (newRelativePath.isEmpty()) {
-            return oldPath;
-        }
-
-        Path newDir = Paths.get(basePath, newRelativePath.toString()).normalize();
-        Files.createDirectories(newDir);
-
-        Path newFile = newDir.resolve(fileName);
-        Files.move(oldFile, newFile, StandardCopyOption.REPLACE_EXISTING);
-
-        return newRelativePath + "/" + fileName;
-    }
-
-    public void saveFile(MultipartFile file, String relativePath) {
+    /**
+     * Upload CV file lên Google Drive
+     * @param file File cần upload
+     * @param folderPath Đường dẫn folder (vd: "Backend/Java/Senior/CV" hoặc "candidate-cvs/2025/01")
+     * @return DriveFileInfo
+     */
+    public DriveFileInfo uploadCV(MultipartFile file, String folderPath) {
         try {
             if (file == null || file.isEmpty()) {
                 throw new CustomException(ErrorCode.FAILED_SAVE_FILE);
             }
 
-            Path normalizedPath = Paths.get(relativePath).normalize();
+            log.info("Uploading CV to Drive: {}", folderPath);
+            return googleDriveService.uploadFile(file, folderPath);
 
-            if (normalizedPath.isAbsolute() || normalizedPath.startsWith("..")) {
-                throw new CustomException(ErrorCode.FAILED_SAVE_FILE);
-            }
-
-            Path target = Paths.get(basePath, normalizedPath.toString()).normalize();
-
-            if (!target.startsWith(Paths.get(basePath).normalize())) {
-                throw new CustomException(ErrorCode.FAILED_SAVE_FILE);
-            }
-
-            Path parent = target.getParent();
-            if (parent != null) {
-                Files.createDirectories(parent);
-            }
-
-            try (InputStream in = file.getInputStream()) {
-                Files.copy(in, target, StandardCopyOption.REPLACE_EXISTING);
-            }
-        } catch (IOException e) {
-            System.err.println("IOException: " + e.getMessage());
-            e.printStackTrace();
+        } catch (CustomException e) {
+            throw e;
+        } catch (Exception e) {
+            log.error("Failed to upload CV: {}", e.getMessage());
             throw new CustomException(ErrorCode.FAILED_SAVE_FILE);
         }
     }
 
-    public String getAbsolutePath(String relativePath) {
-        if (relativePath == null || relativePath.isEmpty()) {
+    /**
+     * Download file từ Drive về temp để parse
+     * @param fileId Google Drive file ID
+     * @return Absolute path của file temp
+     */
+    public String downloadFileToTemp(String fileId) {
+        try {
+            return googleDriveService.downloadFileToTemp(fileId);
+        } catch (Exception e) {
+            log.error("Failed to download file: {}", e.getMessage());
             throw new CustomException(ErrorCode.FILE_NOT_FOUND);
         }
-        return Paths.get(basePath, relativePath).toAbsolutePath().toString();
     }
 
-    public void deleteFile(String filePath) {
+    /**
+     * Xóa file trên Drive
+     */
+    public void deleteFile(String fileId) {
         try {
-            if (filePath == null || filePath.isEmpty()) {
+            if (fileId == null || fileId.isEmpty()) {
                 throw new CustomException(ErrorCode.FILE_NOT_FOUND);
             }
-
-            Path pathToDelete;
-
-            if (filePath.matches("^[A-Za-z]:.*") || filePath.startsWith("/") || Paths.get(filePath).isAbsolute()) {
-                pathToDelete = Paths.get(filePath).normalize();
-            } else {
-                pathToDelete = Paths.get(basePath, filePath).normalize();
-            }
-
-            if (Files.exists(pathToDelete)) {
-                Files.delete(pathToDelete);
-                System.out.println("Deleted old JD file: " + pathToDelete);
-            } else {
-                System.err.println("File not found for deletion: " + pathToDelete);
-            }
-        } catch (IOException e) {
-            e.printStackTrace();
+            googleDriveService.deleteFile(fileId);
+        } catch (Exception e) {
+            log.error("Failed to delete file: {}", e.getMessage());
             throw new CustomException(ErrorCode.FILE_DELETE_FAILED);
         }
+    }
+
+    /**
+     * Move JD file sang folder mới trên Drive
+     */
+    public DriveFileInfo moveJD(String fileId, String newName, String newLang, String newLevel) {
+        try {
+            String newFolderPath = buildFolderPath(newName, newLang, newLevel);
+
+            if (newFolderPath.isEmpty()) {
+                // Không có gì để move
+                return null;
+            }
+
+            log.info("Moving JD on Drive to: {}", newFolderPath);
+            return googleDriveService.moveFile(fileId, newFolderPath);
+
+        } catch (Exception e) {
+            log.error("Failed to move JD: {}", e.getMessage());
+            throw new CustomException(ErrorCode.FILE_MOVE_FAILED);
+        }
+    }
+
+    /**
+     * Xóa temp file sau khi parse xong
+     */
+    public void deleteTempFile(String tempFilePath) {
+        try {
+            Path path = Paths.get(tempFilePath);
+            if (Files.exists(path)) {
+                Files.delete(path);
+                log.info("Deleted temp file: {}", tempFilePath);
+            }
+        } catch (IOException e) {
+            log.warn("Failed to delete temp file: {}", e.getMessage());
+            // Không throw exception vì đây chỉ là cleanup
+        }
+    }
+
+    /**
+     * Build folder path: name/language/level
+     */
+    private String buildFolderPath(String name, String language, String level) {
+        StringBuilder path = new StringBuilder();
+
+        if (name != null && !name.isBlank()) {
+            path.append(name.trim());
+        }
+        if (language != null && !language.isBlank()) {
+            if (!path.isEmpty()) path.append("/");
+            path.append(language.trim());
+        }
+        if (level != null && !level.isBlank()) {
+            if (!path.isEmpty()) path.append("/");
+            path.append(level.trim());
+        }
+
+        return path.toString();
+    }
+
+    // ==== DEPRECATED METHODS (for backward compatibility) ====
+    // Có thể xóa sau khi migration hoàn tất
+
+    @Deprecated
+    public String getAbsolutePath(String relativePath) {
+        log.warn("getAbsolutePath() is deprecated. Use downloadFileToTemp() instead.");
+        // Tạm thời giữ để không break code, nhưng sẽ xóa sau
+        throw new UnsupportedOperationException("This method is deprecated. Use downloadFileToTemp() with fileId instead.");
+    }
+
+    @Deprecated
+    public void saveFile(MultipartFile file, String relativePath) {
+        log.warn("saveFile() is deprecated. Use uploadCV() instead.");
+        throw new UnsupportedOperationException("This method is deprecated. Use uploadCV() instead.");
     }
 }
