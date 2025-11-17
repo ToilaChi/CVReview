@@ -38,9 +38,6 @@ public class GoogleDriveService {
     @Value("${google.drive.folder-id}")
     private String rootFolderId;
 
-    @Value("${google.drive.oauth-client-file}")
-    private String oAuthFile;
-
     private Drive driveService;
     private static final JsonFactory JSON_FACTORY = GsonFactory.getDefaultInstance();
     private static final String APPLICATION_NAME = "Recruitment Service";
@@ -58,6 +55,22 @@ public class GoogleDriveService {
                 JSON_FACTORY,
                 new StringReader(json)
         );
+
+        // Tạo tokens directory và restore credential từ env
+        java.io.File tokensDir = new java.io.File("tokens");
+        tokensDir.mkdirs();
+
+        String tokenBase64 = System.getenv("GOOGLE_DRIVE_TOKEN");
+        if (tokenBase64 != null && !tokenBase64.isEmpty()) {
+            try {
+                byte[] decodedToken = Base64.getDecoder().decode(tokenBase64);
+                java.io.File credentialFile = new java.io.File(tokensDir, "StoredCredential");
+                Files.write(credentialFile.toPath(), decodedToken);
+                log.info("Restored Google Drive token from environment variable");
+            } catch (Exception e) {
+                log.warn("Failed to restore token from env: {}", e.getMessage());
+            }
+        }
 
         GoogleAuthorizationCodeFlow flow = new GoogleAuthorizationCodeFlow.Builder(
                 httpTransport,
