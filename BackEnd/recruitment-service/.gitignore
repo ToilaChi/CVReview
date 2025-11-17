@@ -34,3 +34,6 @@ build/
 
 #Environment
 src/main/resources/.env
+
+#Service account
+src/main/resources/OAuth-client.json
