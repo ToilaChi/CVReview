@@ -23,6 +23,8 @@ import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 @Service
 @RequiredArgsConstructor
@@ -121,7 +123,7 @@ public class PositionService {
         }
 
         List<PositionsResponse> response = positionsList.stream()
-                .map(PositionsResponse::new)
+                .map(this::toResponse)
                 .toList();
 
         return new ApiResponse<>(
@@ -135,17 +137,7 @@ public class PositionService {
         Pageable pageable = PageRequest.of(page, size, Sort.by("createdAt").descending());
         Page<Positions> positionPage = positionRepository.findAll(pageable);
 
-        Page<PositionsResponse> mappedPage = positionPage.map(position ->
-                PositionsResponse.builder()
-                        .id(position.getId())
-                        .name(position.getName())
-                        .language(position.getLanguage())
-                        .level(position.getLevel())
-                        .jdPath(position.getJdPath())
-                        .driveFileUrl(position.getDriveFileUrl())
-                        .createdAt(position.getCreatedAt())
-                        .build()
-        );
+        Page<PositionsResponse> mappedPage = positionPage.map(this::toResponse);
 
         return ApiResponse.<PageResponse<PositionsResponse>>builder()
                 .statusCode(ErrorCode.SUCCESS.getCode())
@@ -173,15 +165,7 @@ public class PositionService {
                 .toList();
 
         List<PositionsResponse> responseList = filtered.stream()
-                .map(p -> PositionsResponse.builder()
-                        .id(p.getId())
-                        .name(p.getName())
-                        .language(p.getLanguage())
-                        .level(p.getLevel())
-                        .jdPath(p.getJdPath())
-                        .driveFileUrl(p.getDriveFileUrl())
-                        .createdAt(p.getCreatedAt())
-                        .build())
+                .map(this::toResponse)
                 .toList();
 
         return new ApiResponse<>(ErrorCode.SUCCESS.getCode(), ErrorCode.SUCCESS.getMessage(), responseList);
@@ -302,5 +286,30 @@ public class PositionService {
         }
 
         positionRepository.delete(position);
+    }
+
+    // HELPER METHOD
+
+    private PositionsResponse toResponse(Positions position) {
+        return PositionsResponse.builder()
+                .id(position.getId())
+                .name(position.getName())
+                .language(position.getLanguage())
+                .level(position.getLevel())
+                .positionName(buildPositionName(
+                        position.getName(),
+                        position.getLanguage(),
+                        position.getLevel()
+                ))
+                .jdPath(position.getJdPath())
+                .driveFileUrl(position.getDriveFileUrl())
+                .createdAt(position.getCreatedAt())
+                .build();
+    }
+
+    private String buildPositionName(String name, String language, String level) {
+        return Stream.of(name, language, level)
+                .filter(s -> s != null && !s.isBlank())
+                .collect(Collectors.joining(" "));
     }
 }
