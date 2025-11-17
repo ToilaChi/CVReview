@@ -51,7 +51,6 @@ analysis:
 google:
   drive:
     folder-id: ${FOLDER_ID}
-#    oauth-client: ${OAUTH_CLIENT}
     use-shared-drive: false
 
 
