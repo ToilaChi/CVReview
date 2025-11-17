@@ -55,8 +55,17 @@ storage:
 llama-parse:
   api-key: ${LLAMAPARSE_API_KEY}
 
+# Batch
 analysis:
   batch-size: 20
+
+# GG Drive
+google:
+  drive:
+    folder-id: ${FOLDER_ID}
+    service-account-file: ${SERVICE_ACCOUNT}
+    oauth-client-file: ${OAUTH_CLIENT}
+    use-shared-drive: false
 
 server:
   address: 0.0.0.0

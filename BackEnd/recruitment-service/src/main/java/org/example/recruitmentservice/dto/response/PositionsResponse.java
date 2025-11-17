@@ -18,6 +18,7 @@ public class PositionsResponse {
     private String language;
     private String level;
     private String jdPath;
+    private String driveFileUrl;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 
@@ -27,15 +28,16 @@ public class PositionsResponse {
         this.language = positions.getLanguage();
         this.level = positions.getLevel();
         this.jdPath = positions.getJdPath();
+        this.driveFileUrl = positions.getDriveFileUrl();
         this.createdAt = positions.getCreatedAt();
         this.updatedAt = positions.getUpdatedAt();
     }
-
-    public PositionsResponse(int id, String name, String language, String level, String jdPath) {
-        this.id = id;
-        this.name = name;
-        this.language = language;
-        this.level = level;
-        this.jdPath = jdPath;
-    }
+//
+//    public PositionsResponse(int id, String name, String language, String level, String jdPath) {
+//        this.id = id;
+//        this.name = name;
+//        this.language = language;
+//        this.level = level;
+//        this.jdPath = jdPath;
+//    }
 }

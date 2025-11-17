@@ -106,7 +106,7 @@ The project will be composed of the following microservices:
                 "name": "Tester",
                 "language": "",
                 "level": "Fresher",
-                "jdPath": "D:/CVReview/.../Developer.pdf",
+                "driveFileUrl": "https://drive.google.com/file/d/1-KllrO-_VQ757MV84seCYfHxbx0ycRJu/view?usp=drivesdk",
                 "createdAt": "2025-10-02T14:13:54.4057562",
                 "updatedAt": "2025-10-02T14:13:54.4057562"
             },
@@ -150,11 +150,11 @@ The project will be composed of the following microservices:
             "timestamp": "2025-10-02T17:15:29.8681381"  
         }
     ``` 
-     - Missing name and language
+     - Missing name and level
     ```json
         {
             "statusCode": 3006,
-            "message": "Missing name and language",
+            "message": "Missing name and level",
             "data": null,
             "timestamp": "2025-10-02T17:15:29.8681381"  
         }
@@ -185,7 +185,7 @@ The project will be composed of the following microservices:
                 "name": "Developer",
                 "language": "Java",
                 "level": "Intern",
-                "jdPath": "D:/CVReview/.../Developer.pdf",
+                "driveFileUrl": "https://drive.google.com/file/d/1-KllrO-_VQ757MV84seCYfHxbx0ycRJu/view?usp=drivesdk",
                 "createdAt": "2025-10-02T14:07:23.751569",
                 "updatedAt": "2025-10-02T14:07:23.751569"
             },
@@ -194,7 +194,7 @@ The project will be composed of the following microservices:
                 "name": "Developer",
                 "language": "C#",
                 "level": "Intern",
-                "jdPath": "D:/CVReview/BackEnd/...Developer.pdf",
+                "driveFileUrl": "https://drive.google.com/file/d/1-KllrO-_VQ757MV84seCYfHxbx0ycRJu/view?usp=drivesdk",
                 "createdAt": "2025-10-02T14:11:52.262104",
                 "updatedAt": "2025-10-02T14:11:52.262104"
             }
@@ -237,7 +237,7 @@ The project will be composed of the following microservices:
                 "name": "Developer",
                 "language": "Java",
                 "level": "Intern",
-                "jdPath": "D:/CVReview/.../Developer.pdf",
+                "driveFileUrl": "https://drive.google.com/file/d/1-KllrO-_VQ757MV84seCYfHxbx0ycRJu/view?usp=drivesdk",
                 "createdAt": "2025-10-02T14:07:23.751569",
                 "updatedAt": "2025-10-02T14:07:23.751569"
             },
@@ -246,7 +246,7 @@ The project will be composed of the following microservices:
                 "name": "Developer",
                 "language": "C#",
                 "level": "Intern",
-                "jdPath": "D:/CVReview/BackEnd/...Developer.pdf",
+                "driveFileUrl": "https://drive.google.com/file/d/1-KllrO-_VQ757MV84seCYfHxbx0ycRJu/view?usp=drivesdk",
                 "createdAt": "2025-10-02T14:11:52.262104",
                 "updatedAt": "2025-10-02T14:11:52.262104"
             }
@@ -529,7 +529,7 @@ The project will be composed of the following microservices:
                         "name": "FrontEnd",
                         "language": "JavaScript",
                         "level": "Senior",
-                        "jdPath": "FrontEnd/JavaScript/Senior/d9ee3f55-632d-4423-ada1-a2b4c0aa461b-CV_Pham_Intern_Developer.pdf",
+                        "driveFileUrl": "https://drive.google.com/file/d/1-KllrO-_VQ757MV84seCYfHxbx0ycRJu/view?usp=drivesdk",
                         "createdAt": "2025-10-09T11:00:38.298548"
                     }
                     ...
@@ -538,7 +538,7 @@ The project will be composed of the following microservices:
                         "name": "Developer",
                         "language": "Java",
                         "level": "Intern",
-                        "jdPath": "Developer/Java/Intern/c568cce1-aa51-4a10-a0b2-066240c417f8-CV_Pham_Intern_Developer.pdf",
+                        "driveFileUrl": "https://drive.google.com/file/d/1-KllrO-_VQ757MV84seCYfHxbx0ycRJu/view?usp=drivesdk",
                         "createdAt": "2025-10-02T14:07:23.751569"
                     }
                 ],
@@ -578,6 +578,7 @@ The project will be composed of the following microservices:
                 "skillMatch": "Java, OOP, Spring Boot, RESTful APIs, Microservices, PostgreSQL, MySQL, Git, API Gateway, Service Discovery (Eureka), Redis, Docker, NATS",
                 "skillMiss": "Unit testing (JUnit, Mockito), CI/CD",
                 "status": "SCORED",
+                "driveFileUrl": "https://drive.google.com/file/d/1-KllrO-_VQ757MV84seCYfHxbx0ycRJu/view?usp=drivesdk",
                 "canRetry": false,
                 "updatedAt": "2025-10-27T13:52:23.79455",
                 "parsedAt": "2025-10-21T11:27:10.278149",
@@ -620,7 +621,7 @@ The project will be composed of the following microservices:
                         "positionName": "Developer Java Intern",
                         "email": "chi12345pham@gmail.com",
                         "name": "Pham Minh Chi",
-                        "filePath": "Tester/Python/Fresher/CV/40b1c39b-3975-40d2-bb30-b048c43a1e16-CV_Pham_Intern_Developer.pdf",
+                        "driveFileUrl": "https://drive.google.com/file/d/1-KllrO-_VQ757MV84seCYfHxbx0ycRJu/view?usp=drivesdk",
                         "status": "PARSED",
                         "updatedAt": "2025-10-09T15:06:15.270665"
                     }
@@ -630,7 +631,7 @@ The project will be composed of the following microservices:
                         "positionId": 9,
                         "positionName": "Developer Java Intern",
                         "name": "",
-                        "filePath": "Tester/Python/Fresher/CV/6252061e-9969-40f6-b8e2-a8042a7e3286-Candidate_CV.pdf",
+                        "driveFileUrl": "https://drive.google.com/file/d/1-KllrO-_VQ757MV84seCYfHxbx0ycRJu/view?usp=drivesdk",
                         "status": "PARSED",
                         "updatedAt": "2025-10-08T14:08:11.816049"
                     }

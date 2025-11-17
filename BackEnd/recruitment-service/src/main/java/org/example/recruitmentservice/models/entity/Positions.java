@@ -32,8 +32,14 @@ public class Positions {
     @Column(columnDefinition = "TEXT", nullable = false)
     private String jobDescription;
 
-    @Column(nullable = false)
+    @Column
     private String jdPath;
+
+    @Column
+    private String driveFileId;
+
+    @Column
+    private String driveFileUrl;
 
     @Column(nullable = false)
     private LocalDateTime createdAt;

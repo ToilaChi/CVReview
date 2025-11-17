@@ -7,6 +7,7 @@ import org.example.commonlibrary.dto.response.ErrorCode;
 import org.example.commonlibrary.exception.CustomException;
 import org.example.recruitmentservice.config.RabbitMQConfig;
 import org.example.recruitmentservice.dto.request.CVUploadEvent;
+import org.example.recruitmentservice.dto.response.DriveFileInfo;
 import org.example.recruitmentservice.models.entity.ProcessingBatch;
 import org.example.recruitmentservice.models.enums.BatchType;
 import org.example.recruitmentservice.models.enums.CVStatus;
@@ -142,12 +143,19 @@ public class UploadCVService {
                 throw new CustomException(ErrorCode.FILE_NOT_FOUND);
             }
 
-            String filePath = buildFilePath(file, position);
-            storageService.saveFile(file, filePath);
+            // Build folder path
+            String folderPath = buildFolderPath(position);
 
+            // Upload lên Drive
+            DriveFileInfo driveFileInfo = storageService.uploadCV(file, folderPath);
+
+            // Save CV entity
             CandidateCV cv = new CandidateCV();
             cv.setPosition(position); // Có thể null cho CANDIDATE
-            cv.setCvPath(filePath);
+            cv.setDriveFileId(driveFileInfo.getFileId());
+            cv.setDriveFileUrl(driveFileInfo.getWebViewLink());
+            // cvPath để null (deprecated)
+
             cv.setCvStatus(CVStatus.UPLOADED);
             cv.setUpdatedAt(LocalDateTime.now());
             cv.setBatchId(batchId);
@@ -155,16 +163,16 @@ public class UploadCVService {
 
             candidateCVRepository.save(cv);
 
-            // Publish event to RabbitMQ
+            // Publish event to RabbitMQ (chỉ parse, không upload)
             CVUploadEvent event = new CVUploadEvent(
                     cv.getId(),
-                    filePath,
+                    driveFileInfo.getFileId(), // Gửi fileId thay vì path
                     position != null ? position.getId() : null,
                     batchId
             );
 
             rabbitTemplate.convertAndSend(RabbitMQConfig.CV_UPLOAD_QUEUE, event);
-            System.out.println("Event published to RabbitMQ - CV ID: " + cv.getId());
+            System.out.println("Event published to RabbitMQ - CV ID: " + cv.getId() + " | FileId: " + driveFileInfo.getFileId());
 
             return cv;
 
@@ -179,23 +187,32 @@ public class UploadCVService {
     }
 
     /**
-     * Build file path base on position hoặc dùng thư mục chung cho CANDIDATE
+     * Build folder path cho CV trên Drive
      */
-    private String buildFilePath(MultipartFile file, Positions position) {
-        String cvDir;
+    private String buildFolderPath(Positions position) {
+        if (position != null && position.getDriveFileId() != null) {
+            // HR upload - lưu theo position structure
+            StringBuilder path = new StringBuilder();
 
-        if (position != null && position.getJdPath() != null) {
-            // HR upload - lưu theo position
-            String jdPath = position.getJdPath();
-            String baseDir = jdPath.substring(0, jdPath.lastIndexOf("/"));
-            cvDir = baseDir + "/CV";
+            // Name (mandatory)
+            path.append(position.getName());
+
+            // Language (optional)
+            if (position.getLanguage() != null && !position.getLanguage().isBlank()) {
+                path.append("/").append(position.getLanguage().trim());
+            }
+
+            // Level (mandatory)
+            path.append("/").append(position.getLevel());
+
+            // CV folder
+            path.append("/CV");
+
+            return path.toString();
         } else {
             // CANDIDATE upload - lưu vào thư mục chung
-            cvDir = "candidate-cvs/" + LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy/MM"));
+            return "candidate-cvs/" + LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy/MM"));
         }
-
-        String fileName = UUID.randomUUID() + "-" + file.getOriginalFilename();
-        return cvDir + "/" + fileName;
     }
 
     /**

@@ -40,6 +40,9 @@ public class LlamaParseClient {
     private final StorageService storageService;
     private final ProcessingBatchService processingBatchService;
 
+    /**
+     * Parse JD từ file path (temp file đã download từ Drive)
+     */
     public String parseJD(String filePath) {
         try {
             System.out.println("API Key: " + (apiKey != null ? "exists" : "null"));
@@ -62,6 +65,9 @@ public class LlamaParseClient {
         }
     }
 
+    /**
+     * RabbitMQ Listener - Parse CV từ Drive
+     */
     @RabbitListener(queues = RabbitMQConfig.CV_UPLOAD_QUEUE, containerFactory = "rabbitListenerContainerFactory")
     public void parseCV(CVUploadEvent event) {
         int cvId = event.getCvId();
@@ -69,19 +75,22 @@ public class LlamaParseClient {
         CandidateCV cv = candidateCVRepository.findById(cvId)
                 .orElseThrow(() -> new CustomException(ErrorCode.CV_NOT_FOUND));
 
+        String tempFilePath = null;
         try {
             cv.setCvStatus(CVStatus.PARSING);
             candidateCVRepository.save(cv);
 
-            String absolutePath = storageService.getAbsolutePath(event.getFilePath());
-            File file = new File(absolutePath);
+            // Download file từ Drive về temp
+            String fileId = event.getFileId(); // Giờ đây là fileId, không phải path
+            tempFilePath = storageService.downloadFileToTemp(fileId);
 
+            File file = new File(tempFilePath);
             if (!file.exists()) {
                 throw new CustomException(ErrorCode.FILE_NOT_FOUND);
             }
 
             // Parse CV
-            String jobId = uploadFile(absolutePath);
+            String jobId = uploadFile(tempFilePath);
             String parsedText = pollResult(jobId);
 
             // Extract information
@@ -116,6 +125,11 @@ public class LlamaParseClient {
             processingBatchService.incrementProcessed(event.getBatchId(), false);
 
             throw new CustomException(ErrorCode.CV_PARSE_FAILED);
+        } finally {
+            // Cleanup temp file
+            if (tempFilePath != null) {
+                storageService.deleteTempFile(tempFilePath);
+            }
         }
     }
 
@@ -212,7 +226,7 @@ public class LlamaParseClient {
             return matcher.group(1).trim();
         }
 
-        // Fallback — bắt mọi email trong text (phòng khi không có label “Email:”)
+        // Fallback – bắt mọi email trong text (phòng khi không có label "Email:")
         matcher = Pattern.compile("([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,})").matcher(text);
         if (matcher.find()) {
             return matcher.group(1).trim();
@@ -225,7 +239,7 @@ public class LlamaParseClient {
     private String extractName(String text) {
         if (text == null || text.isEmpty()) return null;
 
-        // Regex chính — tìm các dạng "Name:", "Full Name:", "Họ tên:", "Fullname:"
+        // Regex chính – tìm các dạng "Name:", "Full Name:", "Họ tên:", "Fullname:"
         Pattern namePattern = Pattern.compile(
                 "(?i)(?:^|\\b)(?:name|full name|họ tên)[:\\s]+([A-ZĐ][a-zA-ZĐđ\\s]+?)(?=\\b(?:date|dob|birth|email|phone|address|\\r?\\n|$))"
         );
