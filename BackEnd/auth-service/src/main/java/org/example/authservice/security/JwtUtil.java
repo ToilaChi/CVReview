@@ -29,9 +29,10 @@ public class JwtUtil {
         this.refreshTime = refreshTime;
     }
 
-    public String generateAccessToken(String phone, Role role) {
+    public String generateAccessToken(String id, String phone, Role role) {
         return Jwts.builder()
                 .subject("CV Review")
+                .claim("Id", id)
                 .claim("Phone", phone)
                 .claim("Role", role)
                 .issuedAt(new Date())
@@ -40,9 +41,10 @@ public class JwtUtil {
                 .compact();
     }
 
-    public String generateRefreshToken(String phone, Role role) {
+    public String generateRefreshToken(String id, String phone, Role role) {
         return Jwts.builder()
                 .subject("CV Review")
+                .claim("Id", id)
                 .claim("Phone", phone)
                 .claim("Role", role)
                 .issuedAt(new Date())
@@ -63,6 +65,16 @@ public class JwtUtil {
         }
 
         return claims.get("Phone", String.class);
+    }
+
+    public String extractId(String token) {
+        Claims claims = Jwts.parser()
+                .verifyWith(secretKey)
+                .build()
+                .parseSignedClaims(token)
+                .getPayload();
+
+        return claims.get("Id", String.class);
     }
 
     public String extractRole(String token) {

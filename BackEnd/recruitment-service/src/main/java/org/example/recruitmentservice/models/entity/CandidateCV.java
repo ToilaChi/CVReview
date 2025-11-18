@@ -18,6 +18,12 @@ public class CandidateCV {
     @Column(nullable = false, unique = true)
     private int id;
 
+    @Column
+    private String candidateId;
+
+    @Column
+    private String hrId;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "position_id")
     private Positions position;

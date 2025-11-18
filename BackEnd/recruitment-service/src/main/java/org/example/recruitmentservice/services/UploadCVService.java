@@ -47,6 +47,8 @@ public class UploadCVService {
             throw new CustomException(ErrorCode.UNAUTHORIZED_ACTION);
         }
 
+        String userId = extractUserId(request);
+
         Positions position = positionRepository.findById(positionId)
                 .orElseThrow(() -> new CustomException(ErrorCode.POSITION_NOT_FOUND));
 
@@ -69,7 +71,7 @@ public class UploadCVService {
             System.out.println("\n--- Processing file " + (i + 1) + "/" + files.size() + " ---");
 
             try {
-                uploadSingleCV(file, position, batchId, SourceType.HR);
+                uploadSingleCV(file, position, batchId, SourceType.HR, userId);
                 successCount++;
                 System.out.println("File " + (i + 1) + " uploaded successfully");
             } catch (Exception e) {
@@ -99,6 +101,8 @@ public class UploadCVService {
             throw new CustomException(ErrorCode.UNAUTHORIZED_ACTION);
         }
 
+        String userId = extractUserId(request);
+
         if (file == null || file.isEmpty()) {
             throw new CustomException(ErrorCode.FILE_NOT_FOUND);
         }
@@ -113,7 +117,7 @@ public class UploadCVService {
         );
 
         try {
-            CandidateCV cv = uploadSingleCV(file, null, batchId, SourceType.CANDIDATE);
+            CandidateCV cv = uploadSingleCV(file, null, batchId, SourceType.CANDIDATE, userId);
 
             Map<String, Object> response = new HashMap<>();
             response.put("cvId", cv.getId());
@@ -136,7 +140,8 @@ public class UploadCVService {
             MultipartFile file,
             Positions position,
             String batchId,
-            SourceType sourceType) {
+            SourceType sourceType,
+            String userId) {
 
         try {
             if (file == null || file.isEmpty()) {
@@ -160,6 +165,11 @@ public class UploadCVService {
             cv.setUpdatedAt(LocalDateTime.now());
             cv.setBatchId(batchId);
             cv.setSourceType(sourceType);
+            if (sourceType == SourceType.HR) {
+                cv.setHrId(userId);
+            } else if (sourceType == SourceType.CANDIDATE) {
+                cv.setCandidateId(userId);
+            }
 
             candidateCVRepository.save(cv);
 
@@ -231,6 +241,17 @@ public class UploadCVService {
         return "CAND_"
                 + LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"))
                 + "_" + UUID.randomUUID().toString().substring(0, 8);
+    }
+
+    /**
+     * Extract User ID từ request header
+     */
+    private String extractUserId(HttpServletRequest request) {
+        String userId = request.getHeader("X-User-Id");
+        if (userId == null || userId.isBlank()) {
+            throw new CustomException(ErrorCode.UNAUTHORIZED_ACTION);
+        }
+        return userId;
     }
 
     /**

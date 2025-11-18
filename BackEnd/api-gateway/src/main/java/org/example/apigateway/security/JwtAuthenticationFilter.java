@@ -68,13 +68,15 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
             // Extract thông tin và thêm vào header
             String phone = jwtUtil.extractPhone(token);
             String role = jwtUtil.extractRole(token);
+            String id = jwtUtil.extractId(token);
 
-            System.out.println("JWT valid for " + path + " - Phone: " + phone + ", Role: " + role);
+            System.out.println("JWT valid for " + path + " - Id: " + id + ", Phone: " + phone + ", Role: " + role);
 
-            // Thêm thông tin người dùng vào headers để các service sau có thể sử dụng
+            // Thêm thông tin người dùng vào headers
             ServerHttpRequest modifiedRequest = exchange.getRequest().mutate()
                     .header("X-User-Phone", phone)
                     .header("X-User-Role", role)
+                    .header("X-User-Id", id)
                     .build();
 
             return chain.filter(exchange.mutate().request(modifiedRequest).build());

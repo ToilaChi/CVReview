@@ -36,6 +36,17 @@ public class JwtUtil {
         }
     }
 
+    public String extractId(String token) {
+        Claims claims = extractAllClaims(token);
+
+        String id = claims.get("Id", String.class);
+        if (id == null || id.isEmpty()) {
+            throw new JwtException("Token không hợp lệ: thiếu thông tin Id");
+        }
+
+        return id;
+    }
+
     public String extractPhone(String token) {
         Claims claims = extractAllClaims(token);
 
@@ -82,7 +93,8 @@ public class JwtUtil {
             }
 
             // Check required claims
-            if (claims.get("Phone", String.class) == null ||
+            if (claims.get("Id", String.class) == null ||
+                    claims.get("Phone", String.class) == null ||
                     claims.get("Role", String.class) == null) {
                 System.out.println("Missing required claims");
                 return false;
