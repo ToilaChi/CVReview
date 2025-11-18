@@ -60,7 +60,7 @@ public class AuthService {
                     updatePasswordWithEncryption(phone, loginRequest.getPassword());
                 }
                 // Create access token
-                String accessToken = jwtUtil.generateAccessToken(phone.getPhone(), phone.getRole());
+                String accessToken = jwtUtil.generateAccessToken(phone.getId(), phone.getPhone(), phone.getRole());
 
                 // Create refresh token
                 RefreshToken refreshToken = refreshTokenService.createRefreshToken(phone);
