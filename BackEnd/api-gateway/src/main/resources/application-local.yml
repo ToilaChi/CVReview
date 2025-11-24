@@ -25,7 +25,7 @@ spring:
             - id: recruitment-service
               uri: http://localhost:8082
               predicates:
-                - Path=/positions/**,/cv/**,/upload/**,/analysis/**,/tracking/**
+                - Path=/positions/**,/cv/**,/upload/**,/analysis/**,/tracking/**,/debug/**
                 - Method=GET,POST,PUT,DELETE
               filters: []
 
