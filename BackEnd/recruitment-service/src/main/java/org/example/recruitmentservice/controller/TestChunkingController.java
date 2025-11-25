@@ -4,7 +4,7 @@ import lombok.RequiredArgsConstructor;
 import org.example.recruitmentservice.dto.request.ChunkPayload;
 import org.example.recruitmentservice.models.entity.CandidateCV;
 import org.example.recruitmentservice.repository.CandidateCVRepository;
-import org.example.recruitmentservice.services.ChunkingService;
+import org.example.recruitmentservice.services.chunking.ChunkingService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
@@ -52,7 +52,7 @@ public class TestChunkingController {
         response.put("cvId", cv.getId());
         response.put("candidateId", cv.getCandidateId());
         response.put("candidateName", cv.getName());
-        response.put("position", cv.getPosition() != null ? cv.getPosition().getName() : "Unknown");
+        response.put("position", cv.getPosition() != null ? cv.getPosition().getName() : null);
         response.put("totalChunks", chunks.size());
         response.put("totalWords", chunks.stream().mapToInt(ChunkPayload::getWords).sum());
         response.put("totalTokens", chunks.stream().mapToInt(ChunkPayload::getTokensEstimate).sum());
