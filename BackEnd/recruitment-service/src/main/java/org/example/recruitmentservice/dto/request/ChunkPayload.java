@@ -32,8 +32,8 @@ public class ChunkPayload {
     private List<String> companies;
     private List<String> degrees;
     private List<String> dateRanges;
-
-    private String documentSummary;
-    private String sectionSummary;
-    private String chunkSummary;
+//
+//    private String documentSummary;
+//    private String sectionSummary;
+//    private String chunkSummary;
 }
