@@ -1,6 +1,7 @@
 package org.example.recruitmentservice.services.text;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.example.recruitmentservice.services.chunking.ChunkingService;
 import org.example.recruitmentservice.utils.TextUtils;
 import org.springframework.stereotype.Component;
@@ -14,29 +15,41 @@ import java.util.regex.Pattern;
 
 @Component
 @RequiredArgsConstructor
+@Slf4j
 public class SectionExtractor {
+    private final TextUtils textUtils;
+
     /**
-     * Extracts CV sections based on common heading patterns.
-     * Returns a map of section names to their content.
+     * Extracts CV sections based on markdown headers.
+     * Returns a map of normalized section names to their content.
      */
     public Map<String, String> extractSections(String text) {
         Map<String, String> sections = new LinkedHashMap<>();
+        log.info("TEXT:\n{}", text);
 
-        // Regex để match markdown headers: # Summary, ## Education, etc.
-        Pattern headerPattern = Pattern.compile("^\\s*#{1,6}\\s+(.+?)\\s*$", Pattern.MULTILINE);
+        // Flexible pattern for markdown headers
+        // Matches: # Header, ## Header, ### Header (with optional whitespace)
+        Pattern headerPattern = Pattern.compile("[\\p{Zs}\\t]*#{1,6}\\s+(.+)");
         Matcher matcher = headerPattern.matcher(text);
 
         List<SectionBoundary> boundaries = new ArrayList<>();
         while (matcher.find()) {
-            boundaries.add(new SectionBoundary(
-                    matcher.group(1).trim(),
-                    matcher.start()
-            ));
+            String headerName = matcher.group(1).trim();
+            int headerStart = matcher.start();
+            boundaries.add(new SectionBoundary(headerName, headerStart));
+            log.debug("Found section header: '{}' at position {}", headerName, headerStart);
         }
 
-        // Extract text giữa các headers
+        if (boundaries.isEmpty()) {
+            log.warn("No markdown headers found, returning full text as single section");
+            return Map.of("FullText", text);
+        }
+
+        // Extract text between headers
         for (int i = 0; i < boundaries.size(); i++) {
             SectionBoundary current = boundaries.get(i);
+
+            // Find next header line (skip current header line)
             int contentStart = text.indexOf('\n', current.position);
             if (contentStart == -1) contentStart = current.position;
             else contentStart++; // Skip newline
@@ -46,16 +59,26 @@ public class SectionExtractor {
                     : text.length();
 
             String sectionText = text.substring(contentStart, contentEnd).trim();
-            String sectionKey = normalizeSectionName(current.name);
-            sections.put(sectionKey, sectionText);
+
+            if (!sectionText.isEmpty()) {
+                String sectionKey = normalizeSectionName(current.name);
+                sections.put(sectionKey, sectionText);
+                log.debug("Extracted section '{}': {} chars", sectionKey, sectionText.length());
+            }
         }
 
-        return sections.isEmpty()
-                ? Map.of("FullText", text)
-                : sections;
+        if (sections.isEmpty()) {
+            log.warn("Section extraction failed, returning full text");
+            return Map.of("FullText", text);
+        }
+
+        log.info("Extracted {} sections: {}", sections.size(), sections.keySet());
+        return sections;
     }
 
-    // Normalize section names: "Career Objectives" → "CAREER_OBJECTIVES"
+    /**
+     * Normalize section names: "Career Objectives" → "CAREER_OBJECTIVES"
+     */
     private String normalizeSectionName(String name) {
         return name.toUpperCase()
                 .replaceAll("[^A-Z0-9]+", "_")
@@ -66,8 +89,8 @@ public class SectionExtractor {
      * Helper class to track section boundaries during parsing.
      */
     public static class SectionBoundary {
-        final int position;
         final String name;
+        final int position;
 
         SectionBoundary(String name, int position) {
             this.name = name;

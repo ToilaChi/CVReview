@@ -4,9 +4,9 @@ import org.example.recruitmentservice.dto.request.ChunkPayload;
 import org.example.recruitmentservice.models.entity.CandidateCV;
 import org.example.recruitmentservice.services.chunking.config.ChunkingConfig;
 import org.example.recruitmentservice.services.chunking.strategy.ChunkingStrategy;
+import org.example.recruitmentservice.services.chunking.strategy.HybridChunkingStrategy;
 import org.example.recruitmentservice.services.metadata.MetadataExtractor;
 import org.example.recruitmentservice.services.metadata.model.CVMetadata;
-import org.example.recruitmentservice.services.summary.SummaryGenerator;
 import org.example.recruitmentservice.services.text.TextNormalizer;
 import org.springframework.stereotype.Service;
 import lombok.RequiredArgsConstructor;
@@ -19,74 +19,52 @@ import java.util.List;
 @Service
 @RequiredArgsConstructor
 public class ChunkingService {
-
+    private final ChunkingStrategy chunkingStrategy;
     private final ChunkingConfig config;
     private final TextNormalizer textNormalizer;
     private final MetadataExtractor metadataExtractor;
-    private final SummaryGenerator summaryGenerator;
-    private final ChunkingStrategy chunkingStrategy;
 
     /**
      * Main entry point - simplified orchestration
      */
-    public List<ChunkPayload> chunk(
-            CandidateCV candidateCV,
-            String parsedText,
-            TokenizerMode mode
-    ) {
+    public List<ChunkPayload> chunk(CandidateCV candidateCV, String parsedText) {
         // Validation
+        if (candidateCV == null) {
+            log.error("Candidate CV is null");
+            return Collections.emptyList();
+        }
+
         if (parsedText == null || parsedText.isBlank()) {
             log.warn("Empty CV text for candidate: {}", candidateCV.getCandidateId());
             return Collections.emptyList();
         }
 
         try {
-            // 1. Normalize text
+            log.info("Starting chunking process for candidate: {}", candidateCV.getCandidateId());
+
+            // Step 1: Normalize text
             String normalized = textNormalizer.normalizeText(parsedText);
+            log.debug("Normalized CV text: {} chars", normalized.length());
 
-            // 2. Extract metadata
+            // Step 2: Extract metadata
             CVMetadata metadata = metadataExtractor.extractAll(normalized);
+            log.debug("Extracted metadata: {} skills, {} years experience",
+                    metadata.getSkills().size(),
+                    metadata.getExperienceYears());
 
-            // 3. Generate summary
-            String summary = summaryGenerator.generateDocumentSummary(normalized);
-            metadata.setDocumentSummary(summary);
-
-            // 4. Delegate to chunking strategy
             List<ChunkPayload> chunks = chunkingStrategy.chunk(
                     candidateCV,
                     normalized,
                     metadata
             );
 
-            log.info("Successfully chunked CV into {} chunks", chunks.size());
+            log.info("Successfully chunked CV into {} chunks for candidate: {}",
+                    chunks.size(), candidateCV.getCandidateId());
             return chunks;
 
         } catch (Exception e) {
-            log.error("Error chunking CV", e);
-            // Graceful degradation
-//            return List.of(buildFallbackChunk(candidateCV, parsedText));
+            log.error("Error chunking CV for candidate: {}", candidateCV.getCandidateId(), e);
+            return Collections.emptyList();
         }
-        return List.of();
-    }
-
-//    private ChunkPayload buildFallbackChunk(...) {
-//        // Simple fallback
-//    }
-
-    /**
-     * Helper class to track section boundaries during parsing.
-     */
-    public static class SectionBoundary {
-        final int position;
-        final String name;
-
-        public SectionBoundary(int position, String name) {
-            this.position = position;
-            this.name = name;
-        }
-    }
-
-    public enum TokenizerMode {
-        ESTIMATE, REMOTE
     }
 }

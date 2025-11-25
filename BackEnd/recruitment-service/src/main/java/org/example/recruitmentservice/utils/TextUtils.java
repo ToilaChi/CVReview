@@ -12,24 +12,24 @@ import java.util.stream.Collectors;
 public class TextUtils {
     private final ChunkingConfig config;
 
+    /**
+     * Count words in text using simple whitespace split.
+     */
     public int countWords(String text) {
         if (text == null || text.isBlank()) return 0;
         return text.trim().split("\\s+").length;
     }
 
+    /**
+     * Estimate tokens from word count using config multiplier.
+     */
     public int estimateTokensFromWords(int words) {
         return (int) Math.ceil(words * config.getTokensPerWord());
     }
 
-    public String truncateByWords(String text, int wordLimit) {
-        if (text == null || text.isBlank()) return "";
-
-        String[] words = text.split("\\s+");
-        if (words.length <= wordLimit) return text;
-
-        return String.join(" ", Arrays.copyOfRange(words, 0, wordLimit)) + "...";
-    }
-
+    /**
+     * Normalize heading text (capitalize first letter of each word).
+     */
     public String normalizeHeading(String heading) {
         if (heading == null || heading.isEmpty()) return "";
 

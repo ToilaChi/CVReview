@@ -43,8 +43,7 @@ public class TestChunkingController {
         // 3. Chunk
         List<ChunkPayload> chunks = chunkingService.chunk(
                 cv,
-                cv.getCvContent(),
-                ChunkingService.TokenizerMode.ESTIMATE
+                cv.getCvContent()
         );
 
         // 4. Build response

@@ -4,6 +4,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Configuration;
 import lombok.Getter;
 import lombok.Setter;
+
 import java.util.Set;
 
 @Configuration
@@ -11,16 +12,25 @@ import java.util.Set;
 @Getter
 @Setter
 public class ChunkingConfig {
+
     // Chunking parameters
     private int minTokens = 120;
     private int maxTokens = 300;
     private int overlapTokens = 30;
     private double tokensPerWord = 1.3;
 
-    // Summary parameters
-    private int documentSummaryMaxWords = 50;
-    private int sectionSummaryMaxWords = 30;
-    private int chunkSummaryMaxWords = 20;
+    // Entity chunking parameters (NEW)
+    private boolean enableEntityChunking = true;
+    private Set<String> entityChunkingSections = Set.of(
+            "PROJECTS", "EXPERIENCE", "WORK_EXPERIENCE",
+            "PROFESSIONAL_EXPERIENCE", "EMPLOYMENT_HISTORY",
+            "EDUCATION", "ACADEMIC_BACKGROUND"
+    );
+
+    // Summary parameters (INCREASED LIMITS)
+    private int documentSummaryMaxWords = 80;
+    private int sectionSummaryMaxWords = 60;
+    private int chunkSummaryMaxWords = 100;
 
     // Seniority thresholds
     private int juniorMaxYears = 2;
@@ -84,4 +94,14 @@ public class ChunkingConfig {
             "Agile", "Scrum", "Kanban", "Waterfall", "DevOps", "CI/CD",
             "Microservices", "Serverless", "Event-Driven"
     );
+
+    /**
+     * Check if section should use entity-based chunking
+     */
+    public boolean shouldChunkByEntity(String sectionName) {
+        if (!enableEntityChunking) return false;
+        String normalized = sectionName.toUpperCase();
+        return entityChunkingSections.stream()
+                .anyMatch(normalized::contains);
+    }
 }
