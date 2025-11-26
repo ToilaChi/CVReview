@@ -2,8 +2,7 @@ package org.example.recruitmentservice.services.text;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.example.recruitmentservice.services.chunking.ChunkingService;
-import org.example.recruitmentservice.utils.TextUtils;
+import org.example.recruitmentservice.services.chunking.config.CVSchema;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -17,84 +16,178 @@ import java.util.regex.Pattern;
 @RequiredArgsConstructor
 @Slf4j
 public class SectionExtractor {
-    private final TextUtils textUtils;
+    private final CVSchema cvSchema;
 
-    /**
-     * Extracts CV sections based on markdown headers.
-     * Returns a map of normalized section names to their content.
-     */
     public Map<String, String> extractSections(String text) {
+        String normalizedText = normalizeTextFromLlamaParse(text);
         Map<String, String> sections = new LinkedHashMap<>();
-        log.info("TEXT:\n{}", text);
 
-        // Flexible pattern for markdown headers
-        // Matches: # Header, ## Header, ### Header (with optional whitespace)
-        Pattern headerPattern = Pattern.compile("[\\p{Zs}\\t]*#{1,6}\\s+(.+)");
-        Matcher matcher = headerPattern.matcher(text);
+        // Pattern chỉ lấy level 1-2 headers (# hoặc ##)
+        Pattern headerPattern = Pattern.compile(
+                "(?:^|\\n)\\s*(#{1,2})\\s+([^#\\n\\r]+?)(?=\\s*\\n|$)",
+                Pattern.MULTILINE
+        );
 
+        Matcher matcher = headerPattern.matcher(normalizedText);
         List<SectionBoundary> boundaries = new ArrayList<>();
+
         while (matcher.find()) {
-            String headerName = matcher.group(1).trim();
+            String hashes = matcher.group(1);
+            String headerName = matcher.group(2).trim();
+            int level = hashes.length();
             int headerStart = matcher.start();
-            boundaries.add(new SectionBoundary(headerName, headerStart));
-            log.debug("Found section header: '{}' at position {}", headerName, headerStart);
+
+            if (headerName.length() > 100) continue;
+
+            // Normalize và validate
+            String normalizedSection = cvSchema.normalizeSection(headerName);
+
+            if (normalizedSection == null) {
+                log.debug("Skipped unknown section: '{}'", headerName);
+                continue;
+            }
+
+            boundaries.add(new SectionBoundary(normalizedSection, headerStart, level));
+            log.debug("Found section: '{}' (normalized: '{}') at position {}",
+                    headerName, normalizedSection, headerStart);
         }
 
         if (boundaries.isEmpty()) {
-            log.warn("No markdown headers found, returning full text as single section");
-            return Map.of("FullText", text);
+            log.warn("No valid sections found");
+            return Map.of("FullText", normalizedText);
         }
 
-        // Extract text between headers
+        // Skip name header nếu là boundary đầu tiên
+        if (boundaries.size() >= 2) {
+            SectionBoundary first = boundaries.get(0);
+            if (first.position < 50 && first.name.split("\\s+").length <= 4) {
+                if (!cvSchema.isValidMainSection(first.name)) {
+                    log.info("Skipped name header: '{}'", first.name);
+                    boundaries.remove(0);
+                }
+            }
+        }
+
+        // Extract content cho mỗi section
         for (int i = 0; i < boundaries.size(); i++) {
             SectionBoundary current = boundaries.get(i);
 
-            // Find next header line (skip current header line)
-            int contentStart = text.indexOf('\n', current.position);
-            if (contentStart == -1) contentStart = current.position;
-            else contentStart++; // Skip newline
+            // Tìm end của header line
+            String searchText = normalizedText.substring(current.position);
+            Matcher headerMatcher = Pattern.compile("^\\s*#{1,2}\\s+[^#\\n\\r]+").matcher(searchText);
 
-            int contentEnd = (i < boundaries.size() - 1)
-                    ? boundaries.get(i + 1).position
-                    : text.length();
+            int contentStart = headerMatcher.find()
+                    ? current.position + headerMatcher.end()
+                    : current.position;
 
-            String sectionText = text.substring(contentStart, contentEnd).trim();
+            // Content end = next main section
+            int contentEnd = normalizedText.length();
+            if (i + 1 < boundaries.size()) {
+                contentEnd = boundaries.get(i + 1).position;
+            }
+
+            String sectionText = normalizedText.substring(contentStart, contentEnd).trim();
 
             if (!sectionText.isEmpty()) {
-                String sectionKey = normalizeSectionName(current.name);
-                sections.put(sectionKey, sectionText);
-                log.debug("Extracted section '{}': {} chars", sectionKey, sectionText.length());
+                sections.put(current.name, sectionText);
+                log.debug("Extracted section '{}': {} chars", current.name, sectionText.length());
             }
         }
 
         if (sections.isEmpty()) {
-            log.warn("Section extraction failed, returning full text");
-            return Map.of("FullText", text);
+            return Map.of("FullText", normalizedText);
         }
 
-        log.info("Extracted {} sections: {}", sections.size(), sections.keySet());
-        return sections;
+        // Split entities CHỈ cho PROJECTS và EXPERIENCE
+        Map<String, String> finalSections = new LinkedHashMap<>();
+        for (Map.Entry<String, String> entry : sections.entrySet()) {
+            String sectionKey = entry.getKey();
+            String sectionText = entry.getValue();
+
+            if (cvSchema.isEntitySection(sectionKey)) {
+                Map<String, String> entities = splitIntoEntities(sectionKey, sectionText);
+                finalSections.putAll(entities);
+            } else {
+                finalSections.put(sectionKey, sectionText);
+            }
+        }
+
+        log.info("Extracted {} sections: {}", finalSections.size(), finalSections.keySet());
+        return finalSections;
     }
 
-    /**
-     * Normalize section names: "Career Objectives" → "CAREER_OBJECTIVES"
-     */
-    private String normalizeSectionName(String name) {
+    private Map<String, String> splitIntoEntities(String sectionName, String sectionText) {
+        Map<String, String> entities = new LinkedHashMap<>();
+
+        // Pattern cho level 3+ headers (###, ####)
+        Pattern entityPattern = Pattern.compile(
+                "(?:^|\\n)\\s*#{3,}\\s+([^#\\n\\r]+?)(?:\\s*\\([0-9/\\-\\s]+\\))?(?=\\s*\\n|$)",
+                Pattern.MULTILINE
+        );
+
+        Matcher matcher = entityPattern.matcher(sectionText);
+        List<SectionBoundary> entityBoundaries = new ArrayList<>();
+
+        while (matcher.find()) {
+            String entityName = matcher.group(1).trim();
+            if (entityName.length() > 100) continue;
+            entityBoundaries.add(new SectionBoundary(entityName, matcher.start(), 3));
+        }
+
+        if (entityBoundaries.isEmpty()) {
+            entities.put(sectionName, sectionText);
+            return entities;
+        }
+
+        for (int i = 0; i < entityBoundaries.size(); i++) {
+            SectionBoundary current = entityBoundaries.get(i);
+            int start = current.position;
+            int end = (i < entityBoundaries.size() - 1)
+                    ? entityBoundaries.get(i + 1).position
+                    : sectionText.length();
+
+            String content = sectionText.substring(start, end).trim();
+            if (!content.isEmpty()) {
+                String entityKey = sectionName + "_" + normalizeEntityName(current.name);
+                entities.put(entityKey, content);
+            }
+        }
+
+        return entities;
+    }
+
+    private String normalizeEntityName(String name) {
         return name.toUpperCase()
                 .replaceAll("[^A-Z0-9]+", "_")
                 .replaceAll("^_|_$", "");
     }
 
-    /**
-     * Helper class to track section boundaries during parsing.
-     */
+    private String normalizeTextFromLlamaParse(String text) {
+        if (text == null) return "";
+
+        String normalized = text
+                .replaceAll("\\p{Zs}", " ")
+                .replaceAll("\\u00A0", " ")
+                .replaceAll("\\r\\n", "\n")
+                .replaceAll("\\r", "\n");
+
+        normalized = normalized.replaceAll("(\\s)(#{1,6}\\s+)", "$1\n$2");
+        normalized = normalized.replaceAll("[ \\t]+", " ");
+        normalized = normalized.replaceAll(" *\\n *", "\n");
+        normalized = normalized.replaceAll("\\n{3,}", "\n\n");
+
+        return normalized.trim();
+    }
+
     public static class SectionBoundary {
         final String name;
         final int position;
+        final int level;
 
-        SectionBoundary(String name, int position) {
+        SectionBoundary(String name, int position, int level) {
             this.name = name;
             this.position = position;
+            this.level = level;
         }
     }
 }
