@@ -1,26 +1,22 @@
 package org.example.recruitmentservice.services;
 
+import com.google.api.client.auth.oauth2.BearerToken;
+import com.google.api.client.auth.oauth2.ClientParametersAuthentication;
 import com.google.api.client.auth.oauth2.Credential;
-import com.google.api.client.googleapis.auth.oauth2.GoogleAuthorizationCodeFlow;
-import com.google.api.client.googleapis.auth.oauth2.GoogleClientSecrets;
 import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport;
 import com.google.api.client.http.FileContent;
+import com.google.api.client.http.GenericUrl;
 import com.google.api.client.http.HttpTransport;
 import com.google.api.client.json.JsonFactory;
 import com.google.api.client.json.gson.GsonFactory;
-import com.google.api.client.util.store.FileDataStoreFactory;
 import com.google.api.services.drive.Drive;
-import com.google.api.services.drive.DriveScopes;
 import com.google.api.services.drive.model.File;
 import com.google.api.services.drive.model.FileList;
-import com.google.api.client.extensions.java6.auth.oauth2.AuthorizationCodeInstalledApp;
-import com.google.api.client.extensions.jetty.auth.oauth2.LocalServerReceiver;
 import lombok.extern.slf4j.Slf4j;
 import org.example.commonlibrary.dto.response.ErrorCode;
 import org.example.commonlibrary.exception.CustomException;
 import org.example.recruitmentservice.dto.response.DriveFileInfo;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -32,88 +28,54 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.*;
 
-@Slf4j
 @Service
+@Slf4j
 public class GoogleDriveService {
+
+    @Value("${OAUTH_CLIENT_ID}")
+    private String clientId;
+
+    @Value("${OAUTH_CLIENT_SECRET}")
+    private String clientSecret;
+
+    @Value("${GOOGLE_REFRESH_TOKEN}")
+    private String refreshToken;
+
     @Value("${google.drive.folder-id}")
     private String rootFolderId;
 
-    @Value("${OAUTH_CLIENT}")
-    private String oauthClientJson;
-
-    @Value("${GOOGLE_DRIVE_TOKEN}")
-    private String googleDriveToken;
-
     private Drive driveService;
+
     private static final JsonFactory JSON_FACTORY = GsonFactory.getDefaultInstance();
     private static final String APPLICATION_NAME = "Recruitment Service";
 
     @PostConstruct
     public void init() throws Exception {
-        HttpTransport httpTransport = GoogleNetHttpTransport.newTrustedTransport();
+        HttpTransport transport = GoogleNetHttpTransport.newTrustedTransport();
+        JsonFactory jsonFactory = GsonFactory.getDefaultInstance();
 
-        if (oauthClientJson == null || oauthClientJson.isEmpty()) {
-            throw new RuntimeException("OAUTH_CLIENT property is missing");
-        }
-
-        GoogleClientSecrets clientSecrets = GoogleClientSecrets.load(
-                JSON_FACTORY,
-                new StringReader(oauthClientJson)
-        );
-
-        // Tạo tokens directory
-        java.io.File tokensDir = new java.io.File("tokens");
-        tokensDir.mkdirs();
-
-        // Restore token từ env nếu có
-        if (googleDriveToken != null && !googleDriveToken.isEmpty()) {
-            try {
-                byte[] decodedToken = Base64.getDecoder().decode(googleDriveToken);
-                java.io.File credentialFile = new java.io.File(tokensDir, "StoredCredential");
-                Files.write(credentialFile.toPath(), decodedToken);
-                log.info("Restored Google Drive token from environment variable");
-            } catch (Exception e) {
-                log.error("Failed to restore token from env: {}", e.getMessage());
-                throw new RuntimeException("Invalid GOOGLE_DRIVE_TOKEN format", e);
-            }
-        }
-
-        GoogleAuthorizationCodeFlow flow = new GoogleAuthorizationCodeFlow.Builder(
-                httpTransport,
-                JSON_FACTORY,
-                clientSecrets,
-                Collections.singletonList(DriveScopes.DRIVE_FILE)
-        )
-                .setDataStoreFactory(new FileDataStoreFactory(tokensDir))
-                .setAccessType("offline")
+        // Build credential manually
+        Credential credential = new Credential.Builder(BearerToken.authorizationHeaderAccessMethod())
+                .setTransport(transport)
+                .setJsonFactory(jsonFactory)
+                .setClientAuthentication(new ClientParametersAuthentication(clientId, clientSecret))
+                .setTokenServerUrl(new GenericUrl("https://oauth2.googleapis.com/token")) // <-- important
                 .build();
 
-        Credential credential;
+        credential.setRefreshToken(refreshToken);
 
-        // Chỉ chạy OAuth flow nếu chưa có token
-        if (googleDriveToken != null && !googleDriveToken.isEmpty()) {
-            // Load credential từ DataStore (file đã restore)
-            credential = flow.loadCredential("user");
-
-            if (credential == null) {
-                throw new RuntimeException("Failed to load credential from restored token");
-            }
-
-            log.info("Loaded existing Google Drive credential from token");
-        } else {
-            // Chỉ chạy OAuth flow khi local development
-            log.warn("No GOOGLE_DRIVE_TOKEN found, starting OAuth flow (local only)");
-            credential = new AuthorizationCodeInstalledApp(
-                    flow,
-                    new LocalServerReceiver.Builder().setPort(8888).build()
-            ).authorize("user");
+        // Refresh token immediately
+        boolean success = credential.refreshToken();
+        if (!success) {
+            throw new RuntimeException("FAILED TO REFRESH GOOGLE DRIVE TOKEN. Refresh token expired or revoked.");
         }
 
-        driveService = new Drive.Builder(httpTransport, JSON_FACTORY, credential)
+        // Build Drive client
+        driveService = new Drive.Builder(transport, jsonFactory, credential)
                 .setApplicationName(APPLICATION_NAME)
                 .build();
 
-        log.info("Google Drive Service initialized successfully");
+        log.info("Google Drive initialized successfully");
     }
 
     /**

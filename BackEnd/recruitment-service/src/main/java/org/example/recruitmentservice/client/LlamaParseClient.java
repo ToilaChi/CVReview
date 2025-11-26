@@ -109,6 +109,11 @@ public class LlamaParseClient {
             // Update batch
             processingBatchService.incrementProcessed(event.getBatchId(), true);
 
+            // Debug: Log 500 ký tự đầu để kiểm tra format
+            System.out.println("=== Parsed Content Preview ===");
+            System.out.println(parsedText.substring(0, Math.min(500, parsedText.length())));
+            System.out.println("=== End Preview ===");
+
             System.out.println("CV parsed successfully - ID: " + cvId +
                     " | Name: " + extractedName +
                     " | Email: " + extractedEmail +
@@ -145,6 +150,22 @@ public class LlamaParseClient {
 
         MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
         body.add("file", new FileSystemResource(file));
+        body.add("parsing_instruction",
+                "Extract all text content preserving document structure. " +
+                        "Use proper markdown headers (# for main titles, ## for sections, ### for subsections). " +
+                        "Preserve lists, tables, and formatting. " +
+                        "Do NOT wrap output in code blocks or backticks.");
+        body.add("result_type", "markdown");
+        body.add("target_pages", "");
+        body.add("invalidate_cache", "true");
+        body.add("gpt4o_mode", "false");
+        body.add("skip_diagonal_text", "true");
+        body.add("extract_all_pages", "true");
+        body.add("do_not_unroll_columns", "true");
+        body.add("page_separator", "true");
+        body.add("prefix_or_suffix", "true");
+        body.add("continuous_mode", "true");
+        body.add("fast_mode", "false");
 
         HttpEntity<MultiValueMap<String, Object>> request = new HttpEntity<>(body, headers);
 
@@ -192,9 +213,11 @@ public class LlamaParseClient {
 
                     Map<String, Object> resultBody = resultResponse.getBody();
                     if (resultBody.containsKey("markdown")) {
-                        String markdown = (String) resultBody.get("markdown");
-                        System.out.println("Parse completed! Text length: " + markdown.length());
-                        return markdown;
+                        String rawMarkdown = (String) resultBody.get("markdown");
+                        String cleanedMarkdown = cleanMarkdown(rawMarkdown);
+                        System.out.println("Parse completed! Raw length: " + rawMarkdown.length() +
+                                " | Cleaned length: " + cleanedMarkdown.length());
+                        return cleanedMarkdown;
                     }
                 } else if ("ERROR".equals(status)) {
                     throw new CustomException(ErrorCode.FILE_PARSE_FAILED);
@@ -212,6 +235,35 @@ public class LlamaParseClient {
         }
 
         throw new CustomException(ErrorCode.FILE_PARSE_FAILED);
+    }
+
+    // Clean markdown
+    private String cleanMarkdown(String rawMarkdown) {
+        if (rawMarkdown == null || rawMarkdown.isEmpty()) {
+            return rawMarkdown;
+        }
+
+        String cleaned = rawMarkdown;
+
+        // 1. Loại bỏ các code fence bị thừa
+        cleaned = cleaned.replaceAll("```(?:true)?```\\s*markdown\\s*\\n", "");
+        cleaned = cleaned.replaceAll("```\\s*$", "");
+        cleaned = cleaned.replaceAll("^\\s*```markdown\\s*\\n", "");
+
+        // 2. Fix markdown headers bị sai
+        cleaned = cleaned.replaceAll("(?m)^```true```markdown\\s*\\n\\s*#", "#");
+
+        // 3. Loại bỏ các dòng chứa chỉ "true" hoặc empty code blocks
+        cleaned = cleaned.replaceAll("(?m)^true\\s*$", "");
+        cleaned = cleaned.replaceAll("(?m)^```\\s*$", "");
+
+        // 4. Chuẩn hóa line breaks (không quá 2 dòng trống liên tiếp)
+        cleaned = cleaned.replaceAll("\\n{3,}", "\n\n");
+
+        // 5. Trim whitespace đầu cuối
+        cleaned = cleaned.trim();
+
+        return cleaned;
     }
 
     // Regex extract email
@@ -239,36 +291,43 @@ public class LlamaParseClient {
     private String extractName(String text) {
         if (text == null || text.isEmpty()) return null;
 
+        // Loại bỏ ký tự đặc biệt cơ bản trong text
+        String cleanedText = text.replaceAll("[#%@\\-!$^&*()_+=\\[\\]{}|\\\\;:\"'<>,/?~`]", " ");
+
         // Regex chính – tìm các dạng "Name:", "Full Name:", "Họ tên:", "Fullname:"
         Pattern namePattern = Pattern.compile(
                 "(?i)(?:^|\\b)(?:name|full name|họ tên)[:\\s]+([A-ZĐ][a-zA-ZĐđ\\s]+?)(?=\\b(?:date|dob|birth|email|phone|address|\\r?\\n|$))"
         );
-        Matcher matcher = namePattern.matcher(text);
+        Matcher matcher = namePattern.matcher(cleanedText);
         if (matcher.find()) {
             String name = matcher.group(1).trim();
 
             // Loại bỏ các phần thừa (nếu có)
             name = name.replaceAll("(?i)\\b(date of birth|dob|email|phone|address).*", "").trim();
 
-            // Giới hạn độ dài hợp lý (tránh match quá dài)
+            // Loại bỏ các ký tự không phải chữ và space
+            name = name.replaceAll("[^a-zA-ZĐđ\\s]", "").trim();
+
+            // Giới hạn độ dài hợp lý
             if (name.length() > 50) name = name.substring(0, 50).trim();
             return name;
         }
 
         // Fallback #1: Dòng đầu tiên
-        String[] lines = text.split("\\r?\\n");
+        String[] lines = cleanedText.split("\\r?\\n");
         if (lines.length > 0) {
             String firstLine = lines[0].trim();
-            // Chỉ nhận nếu dòng đầu ngắn và không chứa ký hiệu email/số/địa chỉ
             if (firstLine.length() <= 40 && !firstLine.matches(".*[@0-9,.:/].*")) {
-                return firstLine;
+                // Chỉ giữ chữ và space
+                return firstLine.replaceAll("[^a-zA-ZĐđ\\s]", "").trim();
             }
         }
 
         // Fallback #2: Dòng nào đó có dạng chữ
-        Matcher fallbackMatcher = Pattern.compile("\\b([A-ZĐ][a-zA-ZĐđ]+\\s+[A-ZĐ][a-zA-ZĐđ]+(?:\\s+[A-ZĐ][a-zA-ZĐđ]+)?)\\b").matcher(text);
+        Matcher fallbackMatcher = Pattern.compile("\\b([A-ZĐ][a-zA-ZĐđ]+\\s+[A-ZĐ][a-zA-ZĐđ]+(?:\\s+[A-ZĐ][a-zA-ZĐđ]+)?)\\b")
+                .matcher(cleanedText);
         if (fallbackMatcher.find()) {
-            return fallbackMatcher.group(1).trim();
+            return fallbackMatcher.group(1).replaceAll("[^a-zA-ZĐđ\\s]", "").trim();
         }
 
         return null;
