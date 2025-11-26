@@ -1,15 +1,14 @@
 package org.example.recruitmentservice.services.chunking.strategy;
 
-
 import lombok.extern.slf4j.Slf4j;
 import org.example.recruitmentservice.dto.request.ChunkPayload;
 import org.example.recruitmentservice.models.entity.CandidateCV;
+import org.example.recruitmentservice.services.chunking.config.CVSchema;
 import org.example.recruitmentservice.services.chunking.config.ChunkingConfig;
 import org.example.recruitmentservice.services.metadata.model.CVMetadata;
 import org.example.recruitmentservice.services.text.EntityExtractor;
 import org.example.recruitmentservice.services.text.EntityExtractor.Entity;
 import org.example.recruitmentservice.services.text.SectionExtractor;
-import org.example.recruitmentservice.services.text.SentenceSplitter;
 import org.example.recruitmentservice.utils.TextUtils;
 import org.springframework.stereotype.Component;
 import lombok.RequiredArgsConstructor;
@@ -23,8 +22,8 @@ import java.util.Map;
 /**
  * Hybrid chunking strategy:
  * - Section-based: Split by markdown headers
- * - Entity-based: Each project/job/education = chunk(s)
- * - Sentence-based: Fallback for unstructured sections
+ * - Entity-based: Projects split into individual chunks
+ * - Keep semantic units intact
  */
 @Component
 @RequiredArgsConstructor
@@ -34,8 +33,8 @@ public class HybridChunkingStrategy implements ChunkingStrategy {
     private final ChunkingConfig config;
     private final SectionExtractor sectionExtractor;
     private final EntityExtractor entityExtractor;
-    private final SentenceSplitter sentenceSplitter;
     private final TextUtils textUtils;
+    private final CVSchema cvSchema;
 
     @Override
     public List<ChunkPayload> chunk(CandidateCV candidateCV, String normalizedText, CVMetadata metadata) {
@@ -67,12 +66,6 @@ public class HybridChunkingStrategy implements ChunkingStrategy {
             // Extract sections by markdown headers
             Map<String, String> sections = sectionExtractor.extractSections(normalizedText);
 
-            // Check if section extraction failed (only 'FullText' returned)
-            boolean extractionFailed = sections.size() == 1 && sections.containsKey("FullText");
-            if (extractionFailed) {
-                log.warn("Section extraction failed. Attempting entity-based extraction as fallback.");
-            }
-
             // Process each section
             for (Map.Entry<String, String> entry : sections.entrySet()) {
                 String sectionName = entry.getKey();
@@ -82,30 +75,9 @@ public class HybridChunkingStrategy implements ChunkingStrategy {
 
                 log.debug("Processing section '{}' ({} chars)", sectionName, sectionText.length());
 
-                // If extraction failed (FullText), try entity extraction from entire CV
-                List<Entity> entities = new ArrayList<>();
-                if (extractionFailed) {
-                    log.debug("Attempting aggressive entity extraction on 'FullText' fallback");
-                    entities = attemptAllEntityExtractions(normalizedText);
-
-                    if (!entities.isEmpty()) {
-                        log.info("Successfully extracted {} entities from FullText fallback", entities.size());
-                        for (Entity entity : entities) {
-                            List<ChunkPayload> entityChunks = chunkEntity(
-                                    candidateCV, entity.getType(), entity, globalIndex, metadata
-                            );
-                            result.addAll(entityChunks);
-                            globalIndex += entityChunks.size();
-                        }
-                        continue;
-                    } else {
-                        log.debug("Entity extraction on FullText fallback returned no entities");
-                    }
-                }
-
-                // Try normal entity-based chunking for structured sections
-                if (config.shouldChunkByEntity(sectionName)) {
-                    entities = entityExtractor.extractEntities(sectionName, sectionText);
+                // Try entity-based chunking for PROJECTS only
+                if (cvSchema.isEntitySection(sectionName)) {
+                    List<Entity> entities = entityExtractor.extractEntities(sectionName, sectionText);
 
                     if (!entities.isEmpty() && !entities.get(0).getType().equals("SECTION")) {
                         log.debug("Using entity-based chunking for '{}' ({} entities)",
@@ -122,8 +94,7 @@ public class HybridChunkingStrategy implements ChunkingStrategy {
                     }
                 }
 
-                // For non-entity sections, create single chunk per section
-                // (Don't split by sentences to preserve semantic units)
+                // For all other sections, create single chunk per section
                 int sectionWords = textUtils.countWords(sectionText);
                 int sectionTokens = textUtils.estimateTokensFromWords(sectionWords);
 
@@ -136,7 +107,7 @@ public class HybridChunkingStrategy implements ChunkingStrategy {
                     log.debug("Created single chunk for section '{}' ({} tokens)",
                             sectionName, sectionTokens);
                 } else {
-                    // Section too large - need to split carefully
+                    // Section too large - split carefully
                     log.warn("Section '{}' exceeds max tokens ({} tokens), attempting careful split",
                             sectionName, sectionTokens);
                     List<ChunkPayload> sectionChunks = splitLargeSection(
@@ -158,38 +129,7 @@ public class HybridChunkingStrategy implements ChunkingStrategy {
     }
 
     /**
-     * Attempt ALL entity extraction strategies on the full text.
-     * Used as aggressive fallback when section extraction completely fails.
-     */
-    private List<Entity> attemptAllEntityExtractions(String fullText) {
-        List<Entity> allEntities = new ArrayList<>();
-
-        // Try Projects
-        List<Entity> projects = entityExtractor.extractEntities("PROJECTS", fullText);
-        if (!projects.isEmpty() && !projects.get(0).getType().equals("SECTION")) {
-            allEntities.addAll(projects);
-            log.debug("Extracted {} projects from full text", projects.size());
-        }
-
-        // Try Experience
-        List<Entity> jobs = entityExtractor.extractEntities("EXPERIENCE", fullText);
-        if (!jobs.isEmpty() && !jobs.get(0).getType().equals("SECTION")) {
-            allEntities.addAll(jobs);
-            log.debug("Extracted {} jobs from full text", jobs.size());
-        }
-
-        // Try Education
-        List<Entity> education = entityExtractor.extractEntities("EDUCATION", fullText);
-        if (!education.isEmpty() && !education.get(0).getType().equals("SECTION")) {
-            allEntities.addAll(education);
-            log.debug("Extracted {} education entries from full text", education.size());
-        }
-
-        return allEntities;
-    }
-
-    /**
-     * Chunk a single entity (project, job, education)
+     * Chunk a single entity (project)
      * Keeps entity intact as single chunk to preserve semantic meaning
      */
     private List<ChunkPayload> chunkEntity(
@@ -201,7 +141,6 @@ public class HybridChunkingStrategy implements ChunkingStrategy {
 
         int tokens = textUtils.estimateTokensFromWords(textUtils.countWords(entity.getContent()));
 
-        // Keep entity as single chunk (don't split semantic units)
         ChunkPayload chunk = buildPayload(
                 candidateCV, sectionName, startIndex, entity.getContent(), metadata
         );
@@ -248,7 +187,6 @@ public class HybridChunkingStrategy implements ChunkingStrategy {
                 int paraTokens = textUtils.estimateTokensFromWords(paraWords);
                 int currentTokens = textUtils.estimateTokensFromWords(currentWords);
 
-                // Can we add this paragraph to current chunk?
                 if (currentTokens + paraTokens <= config.getMaxTokens()) {
                     if (!currentChunk.isEmpty()) {
                         currentChunk.append("\n\n");
@@ -264,7 +202,7 @@ public class HybridChunkingStrategy implements ChunkingStrategy {
                         ));
                     }
 
-                    // Start new chunk with current paragraph
+                    // Start new chunk
                     currentChunk = new StringBuilder(paragraph);
                     currentWords = paraWords;
                 }
@@ -281,7 +219,7 @@ public class HybridChunkingStrategy implements ChunkingStrategy {
             return chunks;
         }
 
-        // Second attempt: Split by single newlines (bullet points / lines)
+        // Second attempt: Split by single newlines
         String[] lines = sectionText.split("\n");
 
         if (lines.length > 1) {
@@ -332,7 +270,7 @@ public class HybridChunkingStrategy implements ChunkingStrategy {
             return chunks;
         }
 
-        // Last resort: Keep as single large chunk (preserve semantic integrity)
+        // Last resort: Keep as single large chunk
         log.warn("Cannot split section '{}' without breaking semantic units, keeping as single chunk",
                 sectionName);
         chunks.add(buildPayload(
@@ -343,8 +281,7 @@ public class HybridChunkingStrategy implements ChunkingStrategy {
     }
 
     /**
-     * Builds a chunk payload with all metadata.
-     * NO SUMMARIES - only original text.
+     * Builds a chunk payload with all metadata
      */
     private ChunkPayload buildPayload(
             CandidateCV cv,
@@ -362,7 +299,7 @@ public class HybridChunkingStrategy implements ChunkingStrategy {
                 .position(cv.getPosition() != null ? cv.getPosition().getName() : null)
                 .section(section)
                 .chunkIndex(chunkIdx)
-                .chunkText(text)  // ORIGINAL TEXT ONLY
+                .chunkText(text)
                 .words(words)
                 .tokensEstimate(tokens)
                 .email(cv.getEmail())
@@ -376,7 +313,6 @@ public class HybridChunkingStrategy implements ChunkingStrategy {
                 .companies(metadata.getCompanies())
                 .degrees(metadata.getDegrees())
                 .dateRanges(metadata.getDateRanges())
-                // NO documentSummary, sectionSummary, chunkSummary fields
                 .build();
     }
 }
