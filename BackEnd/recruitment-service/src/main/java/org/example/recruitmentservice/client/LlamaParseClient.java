@@ -109,11 +109,6 @@ public class LlamaParseClient {
             // Update batch
             processingBatchService.incrementProcessed(event.getBatchId(), true);
 
-            // Debug: Log 500 ký tự đầu để kiểm tra format
-            System.out.println("=== Parsed Content Preview ===");
-            System.out.println(parsedText.substring(0, Math.min(500, parsedText.length())));
-            System.out.println("=== End Preview ===");
-
             System.out.println("CV parsed successfully - ID: " + cvId +
                     " | Name: " + extractedName +
                     " | Email: " + extractedEmail +
@@ -213,11 +208,9 @@ public class LlamaParseClient {
 
                     Map<String, Object> resultBody = resultResponse.getBody();
                     if (resultBody.containsKey("markdown")) {
-                        String rawMarkdown = (String) resultBody.get("markdown");
-                        String cleanedMarkdown = cleanMarkdown(rawMarkdown);
-                        System.out.println("Parse completed! Raw length: " + rawMarkdown.length() +
-                                " | Cleaned length: " + cleanedMarkdown.length());
-                        return cleanedMarkdown;
+                        String markdown = (String) resultBody.get("markdown");
+                        System.out.println("Parse completed! Text length: " + markdown.length());
+                        return markdown;
                     }
                 } else if ("ERROR".equals(status)) {
                     throw new CustomException(ErrorCode.FILE_PARSE_FAILED);
@@ -235,35 +228,6 @@ public class LlamaParseClient {
         }
 
         throw new CustomException(ErrorCode.FILE_PARSE_FAILED);
-    }
-
-    // Clean markdown
-    private String cleanMarkdown(String rawMarkdown) {
-        if (rawMarkdown == null || rawMarkdown.isEmpty()) {
-            return rawMarkdown;
-        }
-
-        String cleaned = rawMarkdown;
-
-        // 1. Loại bỏ các code fence bị thừa
-        cleaned = cleaned.replaceAll("```(?:true)?```\\s*markdown\\s*\\n", "");
-        cleaned = cleaned.replaceAll("```\\s*$", "");
-        cleaned = cleaned.replaceAll("^\\s*```markdown\\s*\\n", "");
-
-        // 2. Fix markdown headers bị sai
-        cleaned = cleaned.replaceAll("(?m)^```true```markdown\\s*\\n\\s*#", "#");
-
-        // 3. Loại bỏ các dòng chứa chỉ "true" hoặc empty code blocks
-        cleaned = cleaned.replaceAll("(?m)^true\\s*$", "");
-        cleaned = cleaned.replaceAll("(?m)^```\\s*$", "");
-
-        // 4. Chuẩn hóa line breaks (không quá 2 dòng trống liên tiếp)
-        cleaned = cleaned.replaceAll("\\n{3,}", "\n\n");
-
-        // 5. Trim whitespace đầu cuối
-        cleaned = cleaned.trim();
-
-        return cleaned;
     }
 
     // Regex extract email
