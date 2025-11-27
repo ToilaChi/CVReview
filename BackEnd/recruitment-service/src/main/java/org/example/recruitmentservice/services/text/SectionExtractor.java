@@ -24,7 +24,7 @@ public class SectionExtractor {
 
         // Pattern chỉ lấy level 1-2 headers (# hoặc ##)
         Pattern headerPattern = Pattern.compile(
-                "(?:^|\\n)\\s*(#{1,2})\\s+([^#\\n\\r]+?)(?=\\s*\\n|$)",
+                "(?:^|\\n)\\s*(#{1,2})(?!#)\\s+([^#\\n\\r]+?)(?=\\s*\\n|$)",
                 Pattern.MULTILINE
         );
 
@@ -37,6 +37,7 @@ public class SectionExtractor {
             int level = hashes.length();
             int headerStart = matcher.start();
 
+            // Skip headers quá dài
             if (headerName.length() > 100) continue;
 
             // Normalize và validate
@@ -48,8 +49,8 @@ public class SectionExtractor {
             }
 
             boundaries.add(new SectionBoundary(normalizedSection, headerStart, level));
-            log.debug("Found section: '{}' (normalized: '{}') at position {}",
-                    headerName, normalizedSection, headerStart);
+            log.debug("Found section: '{}' (normalized: '{}', level: {}) at position {}",
+                    headerName, normalizedSection, level, headerStart);
         }
 
         if (boundaries.isEmpty()) {
@@ -95,8 +96,17 @@ public class SectionExtractor {
         }
 
         if (sections.isEmpty()) {
+            log.warn("No sections found! Checking raw text...");
+            logHeadersFound(normalizedText);  // Debug helper
             return Map.of("FullText", normalizedText);
         }
+
+        // For logging
+//        log.info("Extracted {} sections: {}", sections.size(), sections.keySet());
+//        sections.forEach((key, value) ->
+//                log.debug("Section '{}': {} chars, starts with: '{}'",
+//                        key, value.length(), value.substring(0, Math.min(50, value.length())))
+//        );
 
         // Split entities CHỈ cho PROJECTS và EXPERIENCE
         Map<String, String> finalSections = new LinkedHashMap<>();
@@ -114,6 +124,18 @@ public class SectionExtractor {
 
         log.info("Extracted {} sections: {}", finalSections.size(), finalSections.keySet());
         return finalSections;
+    }
+
+    private void logHeadersFound(String text) {
+        Pattern allHeaders = Pattern.compile("(?m)^\\s*(#{1,6})\\s+(.+)$");
+        Matcher matcher = allHeaders.matcher(text);
+
+        log.debug("=== All headers found in text ===");
+        int count = 0;
+        while (matcher.find() && count++ < 20) {
+            log.debug("Header: '{}' {}", matcher.group(1), matcher.group(2));
+        }
+        log.debug("=== End headers ===");
     }
 
     private Map<String, String> splitIntoEntities(String sectionName, String sectionText) {

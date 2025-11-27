@@ -8,6 +8,7 @@ import org.example.recruitmentservice.services.chunking.config.ChunkingConfig;
 import org.example.recruitmentservice.services.metadata.model.CVMetadata;
 import org.example.recruitmentservice.services.text.EntityExtractor;
 import org.example.recruitmentservice.services.text.EntityExtractor.Entity;
+import org.example.recruitmentservice.services.text.MarkdownNormalizer;
 import org.example.recruitmentservice.services.text.SectionExtractor;
 import org.example.recruitmentservice.utils.TextUtils;
 import org.springframework.stereotype.Component;
@@ -35,6 +36,7 @@ public class HybridChunkingStrategy implements ChunkingStrategy {
     private final EntityExtractor entityExtractor;
     private final TextUtils textUtils;
     private final CVSchema cvSchema;
+    private final MarkdownNormalizer markdownNormalizer;
 
     @Override
     public List<ChunkPayload> chunk(CandidateCV candidateCV, String normalizedText, CVMetadata metadata) {
@@ -44,6 +46,9 @@ public class HybridChunkingStrategy implements ChunkingStrategy {
         }
 
         try {
+            normalizedText = markdownNormalizer.normalize(normalizedText);
+            log.debug("Applied markdown normalization");
+
             List<ChunkPayload> result = new ArrayList<>();
             int globalIndex = 0;
 
