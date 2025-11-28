@@ -3,6 +3,7 @@ package org.example.recruitmentservice.services.chunking.strategy;
 import lombok.extern.slf4j.Slf4j;
 import org.example.recruitmentservice.dto.request.ChunkPayload;
 import org.example.recruitmentservice.models.entity.CandidateCV;
+import org.example.recruitmentservice.services.chunking.ChunkEnricher;
 import org.example.recruitmentservice.services.chunking.config.CVSchema;
 import org.example.recruitmentservice.services.chunking.config.ChunkingConfig;
 import org.example.recruitmentservice.services.metadata.model.CVMetadata;
@@ -37,6 +38,7 @@ public class HybridChunkingStrategy implements ChunkingStrategy {
     private final TextUtils textUtils;
     private final CVSchema cvSchema;
     private final MarkdownNormalizer markdownNormalizer;
+    private final ChunkEnricher chunkEnricher;
 
     @Override
     public List<ChunkPayload> chunk(CandidateCV candidateCV, String normalizedText, CVMetadata metadata) {
@@ -52,12 +54,14 @@ public class HybridChunkingStrategy implements ChunkingStrategy {
             List<ChunkPayload> result = new ArrayList<>();
             int globalIndex = 0;
 
-            // ALWAYS create FullText chunk first (requirement)
-            ChunkPayload fullTextChunk = buildPayload(
-                    candidateCV, "FullText", globalIndex++, normalizedText, metadata
+            String executiveSummary = chunkEnricher.createExecutiveSummary(
+                    candidateCV, normalizedText, metadata
             );
-            result.add(fullTextChunk);
-            log.debug("Created mandatory FullText chunk ({} words)", fullTextChunk.getWords());
+            ChunkPayload summaryChunk = buildPayload(
+                    candidateCV, "EXECUTIVE_SUMMARY", globalIndex++, executiveSummary, metadata
+            );
+            result.add(summaryChunk);
+            log.debug("Created Executive Summary chunk ({} words)", summaryChunk.getWords());
 
             // Check if entire CV is too short to further chunk
             int totalWords = textUtils.countWords(normalizedText);
@@ -294,8 +298,11 @@ public class HybridChunkingStrategy implements ChunkingStrategy {
             int chunkIdx,
             String text,
             CVMetadata metadata) {
+        String enrichedText = section.equals("EXECUTIVE_SUMMARY")
+                ? text
+                : chunkEnricher.enrichChunkText(cv, section, text, metadata);
 
-        int words = textUtils.countWords(text);
+        int words = textUtils.countWords(enrichedText);
         int tokens = textUtils.estimateTokensFromWords(words);
 
         return ChunkPayload.builder()
@@ -304,7 +311,7 @@ public class HybridChunkingStrategy implements ChunkingStrategy {
                 .position(cv.getPosition() != null ? cv.getPosition().getName() : null)
                 .section(section)
                 .chunkIndex(chunkIdx)
-                .chunkText(text)
+                .chunkText(enrichedText)
                 .words(words)
                 .tokensEstimate(tokens)
                 .email(cv.getEmail())

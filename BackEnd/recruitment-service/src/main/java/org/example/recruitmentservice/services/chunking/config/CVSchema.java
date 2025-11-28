@@ -8,6 +8,7 @@ import java.util.regex.Pattern;
 public class CVSchema {
 
     private static final List<String> MAIN_SECTIONS = List.of(
+            "EXECUTIVE_SUMMARY",
             "CONTACT",
             "SUMMARY",
             "SKILLS",

@@ -19,6 +19,9 @@ public class ChunkingConfig {
     private int overlapTokens = 30;
     private double tokensPerWord = 1.3;
 
+    private boolean enrichChunkText = true;
+    private boolean includeExecutiveSummary = true;
+
     // Entity chunking parameters (NEW)
     private boolean enableEntityChunking = true;
     private Set<String> entityChunkingSections = Set.of(
