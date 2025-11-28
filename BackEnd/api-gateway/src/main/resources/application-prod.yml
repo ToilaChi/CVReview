@@ -1,36 +1,29 @@
 spring:
   cloud:
     gateway:
-      server:
-        webflux:
-          httpclient:
-            connect-timeout: 30000
-            response-timeout: 300s
+      routes:
+        - id: auth-service
+          uri: ${AUTH_SERVICE_URL}
+          predicates:
+            - Path=/auth/**
+            - Method=GET,POST,PUT,DELETE
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: authServiceCircuitBreaker
+                statusCodes: 500,502,503
 
-          routes:
-            - id: auth-service
-              uri: ${AUTH_SERVICE_URL}
-              predicates:
-                - Path=/auth/**
-                - Method=GET
-                - Method=POST
-                - Method=PUT
-                - Method=DELETE
-              filters:
-                - name: CircuitBreaker
-                  args:
-                    name: authServiceCircuitBreaker
-                    statusCodes: 500,502,503
+        - id: recruitment-service
+          uri: ${RECRUITMENT_SERVICE_URL}
+          predicates:
+            - Path=/positions/**,/cv/**,/upload/**,/analysis/**,/tracking/**,/debug/**
+            - Method=GET,POST,PUT,DELETE
+          filters: []
 
-            - id: recruitment-service
-              uri: ${RECRUITMENT_SERVICE_URL}
-              predicates:
-                - Path=/positions/**,/cv/**,/upload/**,/analysis/**,/tracking/**,/debug/**
-                - Method=GET
-                - Method=POST
-                - Method=PUT
-                - Method=DELETE
-              filters: []
+      httpclient:
+        connect-timeout: 30000
+        response-timeout: 300s
+
   http:
     codecs:
       max-in-memory-size: 52428800  # 50MB in bytes
