@@ -24,5 +24,13 @@ spring:
     generate-ddl: true
     defer-datasource-initialization: true
 
+  codec:
+    max-in-memory-size: 52428800  # 50MB
+
+  servlet:
+    multipart:
+      max-file-size: 50MB
+      max-request-size: 50MB
+
 jwt:
   secret: ${JWT_SECRET}
