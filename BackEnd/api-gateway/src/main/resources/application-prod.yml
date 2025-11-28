@@ -4,9 +4,12 @@ spring:
       server:
         webflux:
           httpclient:
-            connect-timeout: 90000  
-            response-timeout: 90s
-            wiretap: true
+            pool:
+              type: elastic
+              max-idle-time: 10s
+            connect-timeout: 30000
+            response-timeout: 60s
+            wiretap: false  # Tắt để giảm overhead
           routes:
             - id: auth-service
               uri: ${AUTH_SERVICE_URL}
@@ -14,13 +17,10 @@ spring:
                 - Path=/auth/**
                 - Method=GET,POST,PUT,DELETE
               filters:
-                - name: Retry
+                - StripPrefix=0
+                - name: RequestSize
                   args:
-                    retries: 3
-                    statuses: BAD_GATEWAY,SERVICE_UNAVAILABLE
-                    backoff:
-                      firstBackoff: 50ms
-                      maxBackoff: 500ms
+                    maxSize: 50MB
 
             - id: recruitment-service
               uri: ${RECRUITMENT_SERVICE_URL}
@@ -28,18 +28,19 @@ spring:
                 - Path=/positions/**,/cv/**,/upload/**,/analysis/**,/tracking/**,/debug/**
                 - Method=GET,POST,PUT,DELETE
               filters:
-                - name: Retry
-                  args:
-                    retries: 3
-                    statuses: BAD_GATEWAY,SERVICE_UNAVAILABLE
+                - StripPrefix=0
 
   http:
     codecs:
-      max-in-memory-size: 52428800  # 50MB in bytes
+      max-in-memory-size: 52428800
+
+  webflux:
+    base-path: /
 
 logging:
   level:
-    reactor.netty.http.client: DEBUG
+    reactor.netty.http.client: INFO  # Giảm logging
+    org.springframework.cloud.gateway: INFO
 
 jwt:
   secret: ${JWT_SECRET}

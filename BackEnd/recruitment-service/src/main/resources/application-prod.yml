@@ -23,6 +23,14 @@ spring:
     generate-ddl: true
     defer-datasource-initialization: true
 
+  codec:
+    max-in-memory-size: 52428800  # 50MB
+
+  servlet:
+    multipart:
+      max-file-size: 50MB
+      max-request-size: 50MB
+
   rabbitmq:
     host: "${RABBITMQ_HOST}"
     port: "${RABBITMQ_PORT}"
@@ -55,8 +63,3 @@ google:
   drive:
     folder-id: ${FOLDER_ID}
     use-shared-drive: false
-
-
-server:
-  address: 0.0.0.0
-  port: 8082

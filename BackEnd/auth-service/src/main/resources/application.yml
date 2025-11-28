@@ -7,6 +7,22 @@ spring:
 server:
   address: 0.0.0.0
   port: 8081
+  tomcat:
+    connection-timeout: 90000
+    max-http-post-size: 52428800  # 50MB
+    threads:
+      max: 200
+      min-spare: 10
+  max-http-header-size: 65536
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always
 
 jwt:
   secret: ${JWT_SECRET}
