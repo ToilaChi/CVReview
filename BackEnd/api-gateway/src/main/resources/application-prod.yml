@@ -4,8 +4,9 @@ spring:
       server:
         webflux:
           httpclient:
-            connect-timeout: 60000
-            response-timeout: 60s
+            connect-timeout: 90000  
+            response-timeout: 90s
+            wiretap: true
           routes:
             - id: auth-service
               uri: ${AUTH_SERVICE_URL}
@@ -13,21 +14,32 @@ spring:
                 - Path=/auth/**
                 - Method=GET,POST,PUT,DELETE
               filters:
-                - name: CircuitBreaker
+                - name: Retry
                   args:
-                    name: authServiceCircuitBreaker
-                    statusCodes: 500,502,503
+                    retries: 3
+                    statuses: BAD_GATEWAY,SERVICE_UNAVAILABLE
+                    backoff:
+                      firstBackoff: 50ms
+                      maxBackoff: 500ms
 
             - id: recruitment-service
               uri: ${RECRUITMENT_SERVICE_URL}
               predicates:
                 - Path=/positions/**,/cv/**,/upload/**,/analysis/**,/tracking/**,/debug/**
                 - Method=GET,POST,PUT,DELETE
-              filters: []
+              filters:
+                - name: Retry
+                  args:
+                    retries: 3
+                    statuses: BAD_GATEWAY,SERVICE_UNAVAILABLE
 
   http:
     codecs:
       max-in-memory-size: 52428800  # 50MB in bytes
+
+logging:
+  level:
+    reactor.netty.http.client: DEBUG
 
 jwt:
   secret: ${JWT_SECRET}
