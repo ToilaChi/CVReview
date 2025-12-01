@@ -6,6 +6,7 @@ import org.example.authservice.dto.request.RefreshTokenRequest;
 import org.example.authservice.dto.response.LoginData;
 import org.example.authservice.dto.response.LogoutData;
 import org.example.authservice.dto.response.RefreshTokenResponse;
+import org.example.authservice.dto.response.Userdata;
 import org.example.authservice.models.RefreshToken;
 import org.example.authservice.models.Users;
 import org.example.authservice.security.JwtUtil;
@@ -13,11 +14,9 @@ import org.example.authservice.services.AuthService;
 import org.example.authservice.services.RefreshTokenService;
 import org.example.commonlibrary.dto.response.ApiResponse;
 import org.example.commonlibrary.dto.response.ErrorCode;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/auth")
@@ -66,5 +65,16 @@ public class AuthController {
 
             return ResponseEntity.badRequest().body(errorResponse);
         }
+    }
+
+    @GetMapping("/user-detail")
+    public ApiResponse<Userdata> getUserDetail(
+            @RequestHeader(name = "Authorization", required = false) String authHeader) {
+        String refreshTokenString = authHeader.substring(7); // bỏ "Bearer "
+
+        RefreshToken refreshToken = new RefreshToken();
+        refreshToken.setToken(refreshTokenString);
+
+        return authService.getUserDetail(refreshToken);
     }
 }

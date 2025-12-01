@@ -9,6 +9,15 @@ The project will be composed of the following microservices:
 - Recruitment-service: Manage recruitment positions (position/JD) and candidate profiles (CV)
 - AI-service: Analyze CV content with AI/LLM, save evaluation results and feedback to the system.
 ## 3. API endpoints
+User:
+| email           | name   | phone       | role |
+|-----------------|--------|-------------|----------|
+| can1@gmail.com  | CAN1   | 0000000001  | CANDIDATE |
+| can2@gmail.com  | CAN2   | 0000000002  | CANDIDATE |
+| can3@gmail.com  | CAN3   | 0000000003  | CANDIDATE |
+| hr1@gmail.com   | HR1    | 0000000004  | HR |
+| hr2@gmail.com   | HR2    | 0000000005  | HR |
+| hr3@gmail.com   | HR3    | 0000000006  | HR |
 1. **Auth service**
 - **Login For All**
   - **Name:** `/login` 
@@ -78,6 +87,63 @@ The project will be composed of the following microservices:
                }
         }
       ```
+- **Get User Data For All**
+- **Name:** `/user-detail` 
+  - Endpoint: /auth/user-detail
+  - Method: GET
+  - Description: Get user detail
+  - Header:
+    | Key            | Value                     | Required |
+    |----------------|---------------------------|----------|
+    | Authorization  | Bearer <accessToken> | Yes      |
+  - Response:
+   - Success: 
+     ```json
+        {
+            "statusCode": 200,
+            "message": "User detail fetched successfully",
+            "data": {
+                "accessToken": "eyJhbGciOiJIUz..MF95Lec4YW48GlVbl4GXdq45_iY",
+                "account": {
+                    "id": "02e0d5f5-bf95-11f0-a427-de261a5dec2c",
+                    "name": " Nguyen Van B",
+                    "email": "vanb@example.com",
+                    "phone": "0123456789",
+                    "role": "CANDIDATE",
+                    "createdAt": "2025-11-12T06:58:36"
+                }
+            },
+            "timestamp": "2025-12-01T17:29:24.8982526"
+        }
+      ```
+    - Fail:
+     - Invalid request
+    ```json
+        {
+            "statusCode": 1007,
+            "message": "Refresh token is required",
+            "data": null,
+            "timestamp": "2025-10-02T17:15:29.8681381"  
+        }
+    ``` 
+     - Unauthorized
+    ```json
+        {
+            "statusCode": 1001,
+            "message": "Unauthorized",
+            "data": null,
+            "timestamp": "2025-10-02T17:15:29.8681381"  
+        }
+    ``` 
+     - User not found
+    ```json
+        {
+            "statusCode": 1003,
+            "message": "User not found",
+            "data": null,
+            "timestamp": "2025-10-02T17:15:29.8681381"  
+        }
+    ``` 
 2. **Recruitment service**
 - **Create Position For HR**
   - **Name:** `/positions` 

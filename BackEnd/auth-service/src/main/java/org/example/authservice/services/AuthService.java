@@ -5,6 +5,7 @@ import org.example.authservice.dto.request.LoginRequest;
 import org.example.authservice.dto.response.LoginData;
 import org.example.authservice.dto.request.LogoutRequest;
 import org.example.authservice.dto.response.LogoutData;
+import org.example.authservice.dto.response.Userdata;
 import org.example.authservice.models.RefreshToken;
 import org.example.authservice.models.Users;
 import org.example.authservice.repository.UserRepository;
@@ -118,7 +119,53 @@ public class AuthService {
         }
     }
 
+    @Transactional
+    public ApiResponse<Userdata> getUserDetail(RefreshToken refreshToken) {
+        try {
+            if (refreshToken == null || refreshToken.getToken() == null || refreshToken.getToken().trim().isEmpty()) {
+                return new ApiResponse<>(ErrorCode.INVALID_REQUEST.getCode(), "Refresh token is required", null);
+            }
 
+            // Kiểm tra refresh token còn hợp lệ
+            RefreshToken storedToken = refreshTokenService.findByToken(refreshToken.getToken());
+            if (storedToken == null) {
+                return new ApiResponse<>(ErrorCode.UNAUTHORIZED.getCode(), "Refresh token is invalid or expired", null);
+            }
+
+            Users user = storedToken.getUser();
+            if (user == null) {
+                return new ApiResponse<>(ErrorCode.USER_NOT_FOUND.getCode(), "User not found", null);
+            }
+
+            // Tạo access token mới dù token cũ còn hạn
+            String newAccessToken = jwtUtil.generateAccessToken(user.getId(), user.getPhone(), user.getRole());
+            if (newAccessToken == null) {
+                return new ApiResponse<>(ErrorCode.UNAUTHORIZED.getCode(), "Failed to generate access token", null);
+            }
+
+            Userdata.UserInfo userInfo = new Userdata.UserInfo(
+                    user.getId(),
+                    user.getName(),
+                    user.getEmail(),
+                    user.getPhone(),
+                    user.getRole(),
+                    user.getCreatedAt()
+            );
+
+            Userdata userdata = new Userdata();
+            userdata.setAccount(userInfo);
+            userdata.setAccessToken(newAccessToken);
+
+            return new ApiResponse<>(ErrorCode.SUCCESS.getCode(), "User detail fetched successfully", userdata);
+
+        } catch (Exception e) {
+            System.err.println("Failed to get user detail: " + e.getMessage());
+            e.printStackTrace();
+            return new ApiResponse<>(500, "Failed to fetch user detail", null);
+        }
+    }
+
+    // HELPER METHOD
     private boolean isPasswordValid(Users user, String rawPassword) {
         if (user.getPassword().startsWith("$2a$") ||
                 user.getPassword().startsWith("$2b$") ||
