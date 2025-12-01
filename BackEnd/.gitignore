@@ -2,3 +2,4 @@ uploads/
 tokens/
 token.txt
 chatbot-service/.env
+chatbot-service/venv/
