@@ -20,6 +20,7 @@ public class PositionsResponse {
     private String positionName;
     private String jdPath;
     private String driveFileUrl;
+    private Integer totalCVs;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 
@@ -33,12 +34,4 @@ public class PositionsResponse {
         this.createdAt = positions.getCreatedAt();
         this.updatedAt = positions.getUpdatedAt();
     }
-//
-//    public PositionsResponse(int id, String name, String language, String level, String jdPath) {
-//        this.id = id;
-//        this.name = name;
-//        this.language = language;
-//        this.level = level;
-//        this.jdPath = jdPath;
-//    }
 }

@@ -65,10 +65,10 @@ public class PositionController {
     }
 
     @PreAuthorize("hasRole('HR')")
-    @DeleteMapping("/{positionId}")
+    @DeleteMapping("")
     public ResponseEntity<ApiResponse<Object>> deletePosition(
-            @PathVariable int positionId) {
-        positionService.deletePosition(positionId);
+            @RequestBody List<Integer> positionIds) {
+        positionService.deletePositions(positionIds);
         return ResponseEntity.ok(new ApiResponse<>(
                 ErrorCode.SUCCESS.getCode(),
                 "Deleted successfully"));

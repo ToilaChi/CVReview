@@ -172,11 +172,9 @@ public class PositionService {
     }
 
     @Transactional
-    public void updatePosition(int positionId, PositionsRequest positionsRequest) {
-        Positions position = positionRepository.findById(positionId);
-        if (position == null) {
-            throw new CustomException(ErrorCode.POSITION_NOT_FOUND);
-        }
+    public void updatePosition(Integer positionId, PositionsRequest positionsRequest) {
+        Positions position = positionRepository.findById(positionId)
+                .orElseThrow(() -> new CustomException(ErrorCode.POSITION_NOT_FOUND));
 
         String name = positionsRequest.getName();
         String language = positionsRequest.getLanguage();
@@ -265,32 +263,35 @@ public class PositionService {
     }
 
     @Transactional
-    public void deletePosition(int positionId) {
-        Positions position = positionRepository.findById(positionId);
-        if(position == null) {
-            throw new CustomException(ErrorCode.POSITION_NOT_FOUND);
-        }
+    public void deletePositions(List<Integer> positionIds) {
 
-        List<CandidateCV> candidateCVS = candidateCVRepository.findListCVsByPositionId(positionId);
-        if (!candidateCVS.isEmpty()) {
-            throw new CustomException(ErrorCode.CAN_NOT_DELETE_POSITION);
-        }
+        for (Integer positionId : positionIds) {
+            Positions position = positionRepository.findById(positionId)
+                    .orElseThrow(() -> new CustomException(ErrorCode.POSITION_NOT_FOUND));
 
-        // Xóa file trên Drive
-        try {
-            if (position.getDriveFileId() != null) {
-                storageService.deleteFile(position.getDriveFileId());
+            boolean hasCV = !candidateCVRepository.findListCVsByPositionId(positionId).isEmpty();
+            if (hasCV) {
+                throw new CustomException(ErrorCode.CAN_NOT_DELETE_POSITION);
             }
-        } catch (Exception e) {
-            throw new CustomException(ErrorCode.FILE_DELETE_FAILED);
-        }
 
-        positionRepository.delete(position);
+            // Xóa file trên Drive
+            try {
+                if (position.getDriveFileId() != null) {
+                    storageService.deleteFile(position.getDriveFileId());
+                }
+            } catch (Exception e) {
+                throw new CustomException(ErrorCode.FILE_DELETE_FAILED);
+            }
+
+            positionRepository.delete(position);
+        }
     }
 
     // HELPER METHOD
 
     private PositionsResponse toResponse(Positions position) {
+        int totalCVs = candidateCVRepository.countByPositionId(position.getId());
+
         return PositionsResponse.builder()
                 .id(position.getId())
                 .name(position.getName())
@@ -303,6 +304,7 @@ public class PositionService {
                 ))
                 .jdPath(position.getJdPath())
                 .driveFileUrl(position.getDriveFileUrl())
+                .totalCVs(totalCVs)
                 .createdAt(position.getCreatedAt())
                 .build();
     }

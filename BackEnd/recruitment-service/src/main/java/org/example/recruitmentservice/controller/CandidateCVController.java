@@ -63,10 +63,10 @@ public class CandidateCVController {
     }
 
     @PreAuthorize("hasAnyRole('HR', 'CANDIDATE')")
-    @DeleteMapping("/{cvId}")
-    public ResponseEntity<ApiResponse<Object>> deleteCandidateCV(
-            @PathVariable int cvId) {
-        candidateCVService.deleteCandidateCV(cvId);
+    @DeleteMapping("")
+    public ResponseEntity<ApiResponse<Object>> deleteCandidateCVs(
+            @RequestBody List<Integer> cvIds) {
+        candidateCVService.deleteCandidateCVs(cvIds);
         return ResponseEntity.ok(new ApiResponse<>(
                 ErrorCode.SUCCESS.getCode(),
                 "Deleted Candidate CV successfully"));

@@ -19,4 +19,5 @@ public interface CandidateCVRepository extends JpaRepository<CandidateCV, Intege
     List<CandidateCV> findByPositionIdAndCvStatus(int positionId, CVStatus cvStatus);
     List<CandidateCV> findByPositionIdAndCvStatusAndBatchId(int positionId, CVStatus cvStatus, String batchId);
     List<CandidateCV> findByBatchIdAndCvStatus(String batchId, CVStatus cvStatus);
+    int countByPositionId(int positionId);
 }

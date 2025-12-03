@@ -76,11 +76,9 @@ public class CandidateCVService {
         );
     }
 
-    public ApiResponse<PageResponse<CandidateCVResponse>> getAllCVsByPositionId(int positionId, List<CVStatus> statuses, int page, int size) {
-        Positions position = positionRepository.findById(positionId);
-        if(position == null) {
-            throw new CustomException(ErrorCode.POSITION_NOT_FOUND);
-        }
+    public ApiResponse<PageResponse<CandidateCVResponse>> getAllCVsByPositionId(Integer positionId, List<CVStatus> statuses, int page, int size) {
+        Positions position = positionRepository.findById(positionId)
+                .orElseThrow(() -> new CustomException(ErrorCode.POSITION_NOT_FOUND));
 
         if (statuses == null || statuses.isEmpty()) {
             statuses = List.of(CVStatus.PARSED, CVStatus.SCORED, CVStatus.FAILED);
@@ -188,16 +186,22 @@ public class CandidateCVService {
     }
 
     @Transactional
-    public void deleteCandidateCV(int cvId) {
-        CandidateCV cv = candidateCVRepository.findById(cvId)
-                .orElseThrow(() -> new CustomException(ErrorCode.CV_NOT_FOUND));
+    public void deleteCandidateCVs(List<Integer> cvIds) {
 
-        try {
-            storageService.deleteFile(cv.getCvPath());
-        } catch (Exception e) {
-            throw new CustomException(ErrorCode.FILE_DELETE_FAILED);
+        for (Integer cvId : cvIds) {
+
+            CandidateCV cv = candidateCVRepository.findById(cvId)
+                    .orElseThrow(() -> new CustomException(ErrorCode.CV_NOT_FOUND));
+
+            try {
+                if (cv.getCvPath() != null) {
+                    storageService.deleteFile(cv.getCvPath());
+                }
+            } catch (Exception e) {
+                throw new CustomException(ErrorCode.FILE_DELETE_FAILED);
+            }
+
+            candidateCVRepository.delete(cv);
         }
-
-        candidateCVRepository.delete(cv);
     }
 }

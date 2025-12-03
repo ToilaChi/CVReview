@@ -6,6 +6,7 @@ import org.example.authservice.models.Users;
 import org.example.authservice.repository.RefreshTokenRepository;
 import org.example.authservice.repository.UserRepository;
 import org.example.authservice.security.JwtUtil;
+import org.example.commonlibrary.dto.response.ErrorCode;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -41,7 +42,7 @@ public class RefreshTokenService {
     public RefreshToken verifyExpiration(RefreshToken token) {
         if(token.getExpiresAt().compareTo(Instant.now()) < 0) {
             refreshTokenRepository.delete(token);
-            throw new RuntimeException("Refresh token was expired. Please login again.");
+            throw new RuntimeException(ErrorCode.REFRESH_TOKEN_EXPIRED.getMessage());
         }
         return token;
     }
@@ -53,7 +54,7 @@ public class RefreshTokenService {
 
     public RefreshToken findByToken(String token) {
         return refreshTokenRepository.findByToken(token)
-                .orElseThrow(() -> new RuntimeException("Refresh token not found"));
+                .orElseThrow(() -> new RuntimeException(ErrorCode.REFRESH_TOKEN_NOT_FOUND.getMessage()));
     }
 
     @Transactional
