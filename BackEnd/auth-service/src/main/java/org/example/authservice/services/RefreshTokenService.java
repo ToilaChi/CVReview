@@ -4,7 +4,6 @@ import jakarta.transaction.Transactional;
 import org.example.authservice.models.RefreshToken;
 import org.example.authservice.models.Users;
 import org.example.authservice.repository.RefreshTokenRepository;
-import org.example.authservice.repository.UserRepository;
 import org.example.authservice.security.JwtUtil;
 import org.example.commonlibrary.dto.response.ErrorCode;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -39,12 +38,11 @@ public class RefreshTokenService {
         return refreshTokenRepository.save(refreshToken);
     }
 
-    public RefreshToken verifyExpiration(RefreshToken token) {
+    public void verifyExpiration(RefreshToken token) {
         if(token.getExpiresAt().compareTo(Instant.now()) < 0) {
             refreshTokenRepository.delete(token);
             throw new RuntimeException(ErrorCode.REFRESH_TOKEN_EXPIRED.getMessage());
         }
-        return token;
     }
 
     @Transactional

@@ -51,15 +51,27 @@ User:
    - Missing phone or password:
      ```json
         {
-         "data": null,
-         "message": "Phone is required"
+            "statusCode": 1008,
+            "message": "Phone is required",
+            "data": null,
+            "timestamp": "2025-12-03T14:57:01.2784138"
         }
-     ``` 
+     ```
+     ```json 
+        {
+            "statusCode": 1008,
+            "message": "Password is required",
+            "data": null,
+            "timestamp": "2025-12-03T14:57:50.2941723"
+        }
+    ```
    - Wrong phone or password:
      ```json
         {
-         "data": null,
-         "message": "Phone is incorrect. Please enter again"
+            "statusCode": 1003,
+            "message": "User not found",
+            "data": null,
+            "timestamp": "2025-12-03T14:59:00.3273034"
         }
 - **Refresh Token For All**
 - **Name:** `/refresh-token` 
@@ -402,9 +414,9 @@ User:
             "timestamp": "2025-10-02T17:15:29.8681381"  
         }
     ``` 
-- **Delete Position For HR**
+- **Delete Positions For HR**
   - **Name:** `/positions` 
-  - Endpoint: /positions/{positionId}
+  - Endpoint: /positions
   - Method: DELETE
   - Description: Delete position.
   - Content-Type:  `multipart/form-data`
@@ -412,6 +424,12 @@ User:
     | Key            | Value                     | Required |
     |----------------|---------------------------|----------|
     | Authorization  | Bearer <accessToken> | Yes      |
+  - Request body:
+    ```json
+    {
+	    ["positionIds"]
+    }
+    ```
   - Response:
     - Success: 
     ```json
@@ -796,16 +814,22 @@ User:
             "timestamp": "2025-10-13T13:59:43.5713966"
         }
     ``` 
-- **Delete Candidate CV For All**
+- **Delete Candidate CVs For All**
   - **Name:** `/cv` 
-  - Endpoint: /cv/{cvId}
+  - Endpoint: /cv
   - Method: DELETE
-  - Description: Delete candidate CV.
+  - Description: Delete candidate CVs.
   - Content-Type:  `multipart/form-data`
   - Header:
     | Key            | Value                     | Required |
     |----------------|---------------------------|----------|
     | Authorization  | Bearer <accessToken> | Yes      |
+  - Request body:
+    ```json
+    {
+	    ["cvIds"]
+    }
+    ```
   - Response:
     - Success: 
     ```json
@@ -1091,8 +1115,27 @@ User:
             "timestamp": "2025-10-13T13:59:43.5713966"
         }
     ``` 
- 
-   
+## 4. Authentication & Authorization Errors
+| httpStatus | code | identifier              | message                                                     |
+| ---------- | ---- | ----------------------- | ----------------------------------------------------------- |
+| 401        | 1001 | UNAUTHORIZED            | Unauthorized                                                |
+| 403        | 1002 | FORBIDDEN               | Forbidden                                                   |
+| 404        | 1003 | USER_NOT_FOUND          | User not found                                              |
+| 400        | 1004 | INVALID_CREDENTIALS     | Invalid username or password                                |
+| 401        | 1005 | UNAUTHORIZED_ACTION     | Unauthorized action                                         |
+| 400        | 1006 | INVALID_EMAIL           | Invalid email                                               |
+| 400        | 1007 | INVALID_REQUEST         | Refresh token is required                                   |
+| 400        | 1008 | MISSING_REQUIRED_FIELD  | Required field is missing                                   |
+| 500        | 1009 | JWT_GENERATION_FAILED   | Failed to generate JWT token                                |
+| 401        | 1010 | REFRESH_TOKEN_EXPIRED   | Refresh token has expired, please login again               |
+| 400        | 1011 | REFRESH_TOKEN_INVALID   | Invalid refresh token                                       |
+| 404        | 1012 | REFRESH_TOKEN_NOT_FOUND | Refresh token not found                                     |
+| 500        | 1013 | INTERNAL_SERVER_ERROR   | Internal server error                                       |
+| 401        | 1014 | TOKEN_INVALID           | Invalid token format                                        |
+| 401        | 1015 | TOKEN_EXPIRED           | Token has expired. Please refresh your token or login again |
+| 401        | 1016 | TOKEN_MISSING           | Authorization token is required                             |
+
+
     
     
 
