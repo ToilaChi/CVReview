@@ -17,6 +17,15 @@ public enum ErrorCode {
     UNAUTHORIZED_ACTION(1005, "Unauthorized action", HttpStatus.UNAUTHORIZED),
     INVALID_EMAIL(1006, "Invalid email", HttpStatus.BAD_REQUEST),
     INVALID_REQUEST(1007, "Refresh token is required", HttpStatus.BAD_REQUEST),
+    MISSING_REQUIRED_FIELD(1008, "Required field is missing", HttpStatus.BAD_REQUEST),
+    JWT_GENERATION_FAILED(1009, "Failed to generate JWT token", HttpStatus.INTERNAL_SERVER_ERROR),
+    REFRESH_TOKEN_EXPIRED(1010, "Refresh token has expired, please login again", HttpStatus.UNAUTHORIZED),
+    REFRESH_TOKEN_INVALID(1011, "Invalid refresh token", HttpStatus.BAD_REQUEST),
+    REFRESH_TOKEN_NOT_FOUND(1012, "Refresh token not found", HttpStatus.NOT_FOUND),
+    INTERNAL_SERVER_ERROR(1013, "Internal server error", HttpStatus.INTERNAL_SERVER_ERROR),
+    TOKEN_INVALID(1014, "Invalid token format", HttpStatus.UNAUTHORIZED),
+    TOKEN_EXPIRED(1015, "Token has expired. Please refresh your token or login again", HttpStatus.UNAUTHORIZED),
+    TOKEN_MISSING(1016, "Authorization token is required", HttpStatus.UNAUTHORIZED),
 
     // CV errors
     CV_NOT_FOUND(2001, "CV not found", HttpStatus.NOT_FOUND),

@@ -37,44 +37,64 @@ public class AuthController {
     }
 
     @PostMapping("/logout")
-    public ApiResponse<LogoutData> logout(@RequestBody LogoutRequest logoutRequest) {
-        return authService.logout(logoutRequest);
+    public ApiResponse<LogoutData> logout(
+            @RequestHeader(value = "X-User-Id", required = true) String userId,
+            @RequestHeader(value = "X-User-Phone", required = false) String userPhone,
+            @RequestHeader(value = "X-User-Role", required = false) String userRole,
+            @RequestBody LogoutRequest logoutRequest) {
+
+        // LogoutRequest đã có cả accessToken và refreshToken rồi
+        return authService.logout(userId, logoutRequest);
     }
 
     @PostMapping("/refresh-token")
     public ResponseEntity<ApiResponse<RefreshTokenResponse>> refreshToken(
             @RequestBody RefreshTokenRequest refreshTokenRequest) {
         try {
-            RefreshToken refreshToken = refreshTokenService.findByToken(refreshTokenRequest.getRefreshToken());
+            RefreshToken refreshToken = refreshTokenService.findByToken(
+                    refreshTokenRequest.getRefreshToken());
             refreshTokenService.verifyExpiration(refreshToken);
 
-            // Create new access token
             Users user = refreshToken.getUser();
-            String newAccessToken = jwtUtil.generateAccessToken(user.getId(), user.getPhone(), user.getRole());
+            String newAccessToken = jwtUtil.generateAccessToken(
+                    user.getId(), user.getPhone(), user.getRole());
 
-            RefreshTokenResponse responseData =
-                    new RefreshTokenResponse(refreshToken.getToken(), newAccessToken);
+            RefreshTokenResponse responseData = new RefreshTokenResponse(
+                    refreshToken.getToken(), newAccessToken);
 
-            ApiResponse<RefreshTokenResponse> apiResponse =
-                    new ApiResponse<>(ErrorCode.SUCCESS.getCode(), "Token refreshed successfully", responseData);
+            ApiResponse<RefreshTokenResponse> apiResponse = new ApiResponse<>(
+                    ErrorCode.SUCCESS.getCode(),
+                    ErrorCode.SUCCESS.getMessage(),
+                    responseData);
 
             return ResponseEntity.ok(apiResponse);
-        } catch (Exception e) {
-            ApiResponse<RefreshTokenResponse> errorResponse =
-                    new ApiResponse<>(400, "Failed to refresh token: " + e.getMessage(), null);
 
-            return ResponseEntity.badRequest().body(errorResponse);
+        } catch (RuntimeException e) {
+            // Phân loại lỗi cụ thể
+            ErrorCode errorCode;
+            if (e.getMessage().contains("expired")) {
+                errorCode = ErrorCode.REFRESH_TOKEN_EXPIRED;
+            } else if (e.getMessage().contains("not found")) {
+                errorCode = ErrorCode.REFRESH_TOKEN_NOT_FOUND;
+            } else {
+                errorCode = ErrorCode.REFRESH_TOKEN_INVALID;
+            }
+
+            ApiResponse<RefreshTokenResponse> errorResponse = new ApiResponse<>(
+                    errorCode.getCode(),
+                    errorCode.getMessage(),
+                    null);
+
+            return ResponseEntity.status(errorCode.getHttpStatus()).body(errorResponse);
         }
     }
 
     @GetMapping("/user-detail")
     public ApiResponse<Userdata> getUserDetail(
-            @RequestHeader(name = "Authorization", required = false) String authHeader) {
-        String refreshTokenString = authHeader.substring(7); // bỏ "Bearer "
+            @RequestHeader(value = "X-User-Id", required = true) String userId,
+            @RequestHeader(value = "X-User-Phone", required = false) String userPhone,
+            @RequestHeader(value = "X-User-Role", required = false) String userRole) {
 
-        RefreshToken refreshToken = new RefreshToken();
-        refreshToken.setToken(refreshTokenString);
-
-        return authService.getUserDetail(refreshToken);
+        return authService.getUserDetail(userId);
     }
 }
