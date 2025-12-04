@@ -13,13 +13,14 @@ import java.time.LocalDateTime;
 @JsonInclude(JsonInclude.Include.NON_NULL)
 @Builder
 public class PositionsResponse {
-    private int id;
+    private Integer id;
     private String name;
     private String language;
     private String level;
     private String positionName;
     private String jdPath;
     private String driveFileUrl;
+    private String jdText;
     private Integer totalCVs;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;

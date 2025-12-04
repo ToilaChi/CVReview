@@ -11,7 +11,6 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
@@ -36,6 +35,13 @@ public class PositionController {
             @RequestParam(required = false) String level
     ) {
         return ResponseEntity.ok(positionService.getPositions(name, language, level));
+    }
+
+    @GetMapping("/jd/{positionId}/text")
+    public ResponseEntity<ApiResponse<PositionsResponse>> getJdText(
+            @PathVariable int positionId
+    ) {
+        return ResponseEntity.ok(positionService.getJdText(positionId));
     }
 
     @PreAuthorize("hasAnyRole('HR', 'CANDIDATE')")

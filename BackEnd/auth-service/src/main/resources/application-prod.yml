@@ -34,3 +34,5 @@ spring:
 
 jwt:
   secret: ${JWT_SECRET}
+  expiration: 300000    # 5 phút
+  refresh-expiration: 600000  # 10 p

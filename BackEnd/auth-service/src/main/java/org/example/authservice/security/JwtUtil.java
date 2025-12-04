@@ -52,38 +52,38 @@ public class JwtUtil {
                 .signWith(secretKey, Jwts.SIG.HS256)
                 .compact();
     }
-
-    public String validateTokenAndRetrieveSubject(String token) throws JwtException {
-        Claims claims = Jwts.parser()
-                .verifyWith(secretKey)
-                .build()
-                .parseSignedClaims(token)
-                .getPayload();
-
-        if(!"CV Review".equals(claims.getSubject())) {
-            throw new JwtException("Token không hợp lệ!!!");
-        }
-
-        return claims.get("Phone", String.class);
-    }
-
-    public String extractId(String token) {
-        Claims claims = Jwts.parser()
-                .verifyWith(secretKey)
-                .build()
-                .parseSignedClaims(token)
-                .getPayload();
-
-        return claims.get("Id", String.class);
-    }
-
-    public String extractRole(String token) {
-        Claims claims = Jwts.parser()
-                .verifyWith(secretKey)
-                .build()
-                .parseSignedClaims(token)
-                .getPayload();
-
-        return claims.get("Role", String.class);
-    }
+//
+//    public String validateTokenAndRetrieveSubject(String token) throws JwtException {
+//        Claims claims = Jwts.parser()
+//                .verifyWith(secretKey)
+//                .build()
+//                .parseSignedClaims(token)
+//                .getPayload();
+//
+//        if(!"CV Review".equals(claims.getSubject())) {
+//            throw new JwtException("Token không hợp lệ!!!");
+//        }
+//
+//        return claims.get("Phone", String.class);
+//    }
+//
+//    public String extractId(String token) {
+//        Claims claims = Jwts.parser()
+//                .verifyWith(secretKey)
+//                .build()
+//                .parseSignedClaims(token)
+//                .getPayload();
+//
+//        return claims.get("Id", String.class);
+//    }
+//
+//    public String extractRole(String token) {
+//        Claims claims = Jwts.parser()
+//                .verifyWith(secretKey)
+//                .build()
+//                .parseSignedClaims(token)
+//                .getPayload();
+//
+//        return claims.get("Role", String.class);
+//    }
 }

@@ -133,6 +133,24 @@ public class PositionService {
         );
     }
 
+    public ApiResponse<PositionsResponse> getJdText(int positionId) {
+        Positions position = positionRepository.findById(positionId);
+        if(position == null) {
+            throw new CustomException(ErrorCode.POSITION_NOT_FOUND);
+        }
+
+        PositionsResponse positionsResponse = PositionsResponse.builder()
+                .name(position.getName())
+                .jdText(position.getJobDescription())
+                .build();
+
+        return new ApiResponse<>(
+                ErrorCode.SUCCESS.getCode(),
+                ErrorCode.SUCCESS.getMessage(),
+                positionsResponse
+        );
+    }
+
     public ApiResponse<PageResponse<PositionsResponse>> getAllPositions(int page, int size) {
         Pageable pageable = PageRequest.of(page, size, Sort.by("createdAt").descending());
         Page<Positions> positionPage = positionRepository.findAll(pageable);
