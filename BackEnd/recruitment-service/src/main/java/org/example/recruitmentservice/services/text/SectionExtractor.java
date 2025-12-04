@@ -101,13 +101,6 @@ public class SectionExtractor {
             return Map.of("FullText", normalizedText);
         }
 
-        // For logging
-//        log.info("Extracted {} sections: {}", sections.size(), sections.keySet());
-//        sections.forEach((key, value) ->
-//                log.debug("Section '{}': {} chars, starts with: '{}'",
-//                        key, value.length(), value.substring(0, Math.min(50, value.length())))
-//        );
-
         // Split entities CHỈ cho PROJECTS và EXPERIENCE
         Map<String, String> finalSections = new LinkedHashMap<>();
         for (Map.Entry<String, String> entry : sections.entrySet()) {

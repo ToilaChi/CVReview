@@ -6,7 +6,6 @@ import org.example.recruitmentservice.models.entity.CandidateCV;
 import org.example.recruitmentservice.repository.CandidateCVRepository;
 import org.example.recruitmentservice.services.chunking.ChunkingService;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.HashMap;
@@ -14,20 +13,15 @@ import java.util.List;
 import java.util.Map;
 
 @RestController
-@RequestMapping("/debug")
+@RequestMapping("/chunking")
 @RequiredArgsConstructor
-public class TestChunkingController {
+public class ChunkingController {
 
     private final CandidateCVRepository cvRepository;
     private final ChunkingService chunkingService;
 
-    /**
-     * Test chunking với CV từ DB
-     * POST /api/debug/test-chunking
-     * Body: { "cvId": 123 }
-     */
-    @PostMapping("/test-chunking")
-    public ResponseEntity<?> testChunking(@RequestBody Map<String, Integer> request) {
+    @PostMapping("")
+    public ResponseEntity<?> chunking(@RequestBody Map<String, Integer> request) {
         Integer cvId = request.get("cvId");
 
         // 1. Lấy CV từ DB
@@ -60,12 +54,8 @@ public class TestChunkingController {
         return ResponseEntity.ok(response);
     }
 
-    /**
-     * Test với cvId trực tiếp trong URL
-     * GET /api/debug/test-chunking/123
-     */
-    @GetMapping("/test-chunking/{cvId}")
-    public ResponseEntity<?> testChunkingGet(@PathVariable Integer cvId) {
-        return testChunking(Map.of("cvId", cvId));
+    @GetMapping("/{cvId}")
+    public ResponseEntity<?> chunkingGet(@PathVariable Integer cvId) {
+        return chunking(Map.of("cvId", cvId));
     }
 }
