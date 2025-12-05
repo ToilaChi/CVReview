@@ -5,4 +5,9 @@ chatbot-service/.env
 chatbot-service/venv/
 __pycache__/
 *.pyc
+.idea/
+*.iml
+
+
+
 
