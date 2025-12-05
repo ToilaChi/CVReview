@@ -26,6 +26,12 @@ class Settings(BaseSettings):
     # Collections
     CV_COLLECTION_NAME: str = "cv_embeddings"
     JD_COLLECTION_NAME: str = "jd_embeddings"
+
+    # RabbitMQ
+    RABBITMQ_HOST: str = "localhost"
+    RABBITMQ_PORT: int = 5672
+    RABBITMQ_USER: str = "guest"
+    RABBITMQ_PASSWORD: str = "guest"
     
     class Config:
         env_file = ".env"

@@ -43,7 +43,7 @@ class HTTPClient:
             response.raise_for_status()
             
             data = response.json()
-            print(f"Fetched {data.get('totalChunks', 0)} chunks for CV {cv_id}")
+            print(f"Fetched {data.get('chunks', 0)} chunks for CV {cv_id}")
             return data
             
         except httpx.HTTPStatusError as e:

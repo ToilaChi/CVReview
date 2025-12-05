@@ -14,6 +14,7 @@ import java.time.LocalDateTime;
 @Builder
 public class PositionsResponse {
     private Integer id;
+    private String hrId;
     private String name;
     private String language;
     private String level;
