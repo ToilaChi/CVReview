@@ -20,13 +20,94 @@ import java.util.Map;
 @EnableRabbit
 public class RabbitMQConfig {
 
-    // ====== UPLOAD FLOW (Recruitment-service consumes) ======
+    /* ============================================================
+     * 1. UPLOAD FLOW (Recruitment-service OWN, consumes)
+     * ============================================================ */
     public static final String CV_UPLOAD_QUEUE = "cv.upload.queue";
     public static final String CV_UPLOAD_DLQ = "cv.upload.queue.dlq";
     public static final String CV_UPLOAD_EXCHANGE = "cv.upload.exchange.dlx";
     public static final String CV_UPLOAD_DLQ_ROUTING_KEY = "cv.upload.dlq";
 
-    // ====== ANALYSIS FLOW - CONSTANTS ONLY (AI-Service đã declare) ======
+    // Main upload queue
+    @Bean
+    public Queue cvUploadQueue() {
+        return QueueBuilder.durable(CV_UPLOAD_QUEUE)
+                .withArgument("x-dead-letter-exchange", CV_UPLOAD_EXCHANGE)
+                .withArgument("x-dead-letter-routing-key", CV_UPLOAD_DLQ_ROUTING_KEY)
+                .build();
+    }
+
+    @Bean
+    public Queue cvUploadDlqQueue() {
+        return QueueBuilder.durable(CV_UPLOAD_DLQ).build();
+    }
+
+    @Bean
+    public DirectExchange cvUploadExchange() {
+        return new DirectExchange(CV_UPLOAD_EXCHANGE);
+    }
+
+    @Bean
+    public Binding cvUploadBinding(Queue cvUploadQueue, DirectExchange cvUploadExchange) {
+        return BindingBuilder.bind(cvUploadQueue)
+                .to(cvUploadExchange)
+                .with(CV_UPLOAD_DLQ_ROUTING_KEY);
+    }
+
+    @Bean
+    public Binding cvUploadDlqBinding(Queue cvUploadDlqQueue, DirectExchange cvUploadExchange) {
+        return BindingBuilder.bind(cvUploadDlqQueue)
+                .to(cvUploadExchange)
+                .with(CV_UPLOAD_DLQ_ROUTING_KEY + ".dlq");
+    }
+
+
+    /* ============================================================
+     * 2. JD PARSED FLOW (Recruitment-service OWN, consumes)
+     * ============================================================ */
+    public static final String JD_PARSED_QUEUE = "jd.parsed.queue";
+    public static final String JD_PARSED_DLQ = "jd.parsed.queue.dlq";
+    public static final String JD_PARSED_EXCHANGE = "jd.parsed.exchange";
+    public static final String JD_PARSED_ROUTING_KEY = "jd.parsed";
+    public static final String JD_PARSED_DLQ_ROUTING_KEY = "jd.parsed.dlq";
+
+    @Bean
+    public Queue jdParsedQueue() {
+        return QueueBuilder.durable(JD_PARSED_QUEUE)
+                .withArgument("x-dead-letter-exchange", JD_PARSED_EXCHANGE)
+                .withArgument("x-dead-letter-routing-key", JD_PARSED_DLQ_ROUTING_KEY)
+                .build();
+    }
+
+    @Bean
+    public Queue jdParsedDlq() {
+        return QueueBuilder.durable(JD_PARSED_DLQ).build();
+    }
+
+    @Bean
+    public DirectExchange jdParsedExchange() {
+        return new DirectExchange(JD_PARSED_EXCHANGE);
+    }
+
+    @Bean
+    public Binding jdParsedBinding(Queue jdParsedQueue, DirectExchange jdParsedExchange) {
+        return BindingBuilder.bind(jdParsedQueue)
+                .to(jdParsedExchange)
+                .with(JD_PARSED_ROUTING_KEY);
+    }
+
+    @Bean
+    public Binding jdParsedDlqBinding(Queue jdParsedDlq, DirectExchange jdParsedExchange) {
+        return BindingBuilder.bind(jdParsedDlq)
+                .to(jdParsedExchange)
+                .with(JD_PARSED_DLQ_ROUTING_KEY);
+    }
+
+
+    /* ============================================================
+     * 3. AI ANALYSIS FLOW
+     *    Recruitment-service consumes, AI-service owns exchange
+     * ============================================================ */
     public static final String AI_EXCHANGE = "cv.analysis.exchange";
     public static final String AI_EXCHANGE_DLX = "cv.analysis.exchange.dlx";
 
@@ -41,40 +122,7 @@ public class RabbitMQConfig {
     public static final String CV_ANALYSIS_FAILED_QUEUE = "cv.analysis.failed.queue";
     public static final String CV_ANALYSIS_FAILED_ROUTING_KEY = "cv.analysis.failed";
 
-    // ====== UPLOAD QUEUE + DLQ (Recruitment-service owns) ======
-    @Bean
-    public Queue mainQueue() {
-        return QueueBuilder.durable(CV_UPLOAD_QUEUE)
-                .withArgument("x-dead-letter-exchange", CV_UPLOAD_EXCHANGE)
-                .withArgument("x-dead-letter-routing-key", CV_UPLOAD_DLQ_ROUTING_KEY)
-                .build();
-    }
-
-    @Bean
-    public Queue deadLetterQueue() {
-        return QueueBuilder.durable(CV_UPLOAD_DLQ).build();
-    }
-
-    @Bean
-    public DirectExchange mainExchange() {
-        return new DirectExchange(CV_UPLOAD_EXCHANGE);
-    }
-
-    @Bean
-    public Binding mainBinding(Queue mainQueue, DirectExchange mainExchange) {
-        return BindingBuilder.bind(mainQueue)
-                .to(mainExchange)
-                .with(CV_UPLOAD_DLQ_ROUTING_KEY);
-    }
-
-    @Bean
-    public Binding deadLetterBinding(Queue deadLetterQueue, DirectExchange mainExchange) {
-        return BindingBuilder.bind(deadLetterQueue)
-                .to(mainExchange)
-                .with(CV_UPLOAD_DLQ_ROUTING_KEY + ".dlq");
-    }
-
-    // ====== EXCHANGES (shared with AI-Service) ======
+    // Exchanges (AI-service owns but recruitment declares to consume)
     @Bean
     public DirectExchange aiExchange() {
         return new DirectExchange(AI_EXCHANGE);
@@ -85,7 +133,7 @@ public class RabbitMQConfig {
         return new DirectExchange(AI_EXCHANGE_DLX);
     }
 
-    // ====== ANALYSIS RESULT QUEUE (Recruitment-service consumes) ======
+    // Result queue
     @Bean
     public Queue cvAnalysisResultQueue() {
         return QueueBuilder.durable(CV_ANALYSIS_RESULT_QUEUE)
@@ -113,7 +161,7 @@ public class RabbitMQConfig {
                 .with(CV_ANALYSIS_RESULT_DLQ_ROUTING_KEY);
     }
 
-    // ====== ANALYSIS FAILED QUEUE (Recruitment-service consumes) ======
+    // Failed queue
     @Bean
     public Queue cvAnalysisFailedQueue() {
         return QueueBuilder.durable(CV_ANALYSIS_FAILED_QUEUE).build();
@@ -126,7 +174,11 @@ public class RabbitMQConfig {
                 .with(CV_ANALYSIS_FAILED_ROUTING_KEY);
     }
 
-    // ====== COMMON SETTINGS ======
+
+    /* ============================================================
+     * 4. COMMON SETTINGS
+     * ============================================================ */
+
     @Bean
     public Jackson2JsonMessageConverter messageConverter() {
         return new Jackson2JsonMessageConverter();

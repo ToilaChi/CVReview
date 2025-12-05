@@ -1,5 +1,6 @@
 package org.example.recruitmentservice.controller;
 
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import org.example.commonlibrary.dto.response.ApiResponse;
 import org.example.commonlibrary.dto.response.ErrorCode;
@@ -23,8 +24,9 @@ public class PositionController {
     @PreAuthorize("hasRole('HR')")
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<ApiResponse<PositionsResponse>> createPosition(
-            @ModelAttribute PositionsRequest positionsRequest) {
-        return ResponseEntity.ok(positionService.createPosition(positionsRequest));
+            @ModelAttribute PositionsRequest positionsRequest,
+            HttpServletRequest request) {
+        return ResponseEntity.ok(positionService.createPosition(positionsRequest, request));
     }
 
     @PreAuthorize("hasRole('HR')")

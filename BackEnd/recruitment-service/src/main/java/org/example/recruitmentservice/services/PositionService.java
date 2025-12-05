@@ -1,6 +1,10 @@
 package org.example.recruitmentservice.services;
 
+import jakarta.servlet.http.HttpServletRequest;
+import org.example.recruitmentservice.config.RabbitMQConfig;
+import org.example.recruitmentservice.dto.request.JDParsedEvent;
 import org.example.recruitmentservice.dto.response.DriveFileInfo;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.transaction.annotation.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.example.commonlibrary.dto.response.ApiResponse;
@@ -33,15 +37,18 @@ public class PositionService {
     private final LlamaParseClient llamaParseClient;
     private final StorageService storageService;
     private final CandidateCVRepository candidateCVRepository;
+    private final RabbitTemplate rabbitTemplate;
 
     @Transactional
-    public ApiResponse<PositionsResponse> createPosition(PositionsRequest positionsRequest) {
+    public ApiResponse<PositionsResponse> createPosition(PositionsRequest positionsRequest, HttpServletRequest request) {
         // Check duplicate
         Optional<Positions> existing = positionRepository.findByNameAndLanguageAndLevel(
                 positionsRequest.getName(),
                 positionsRequest.getLanguage(),
                 positionsRequest.getLevel()
         );
+
+        String hrId = extractUserId(request);
 
         String name = positionsRequest.getName();
         String level = positionsRequest.getLevel();
@@ -83,6 +90,7 @@ public class PositionService {
 
         // Save to DB
         Positions position = new Positions();
+        position.setHrId(hrId);
         position.setName(positionsRequest.getName());
         position.setLanguage(positionsRequest.getLanguage());
         position.setLevel(positionsRequest.getLevel());
@@ -98,8 +106,30 @@ public class PositionService {
 
         Positions positionSaved = positionRepository.save(position);
 
+        // Publish event to embed
+        try {
+            JDParsedEvent event = new JDParsedEvent(
+                    positionSaved.getId(),
+                    hrId,
+                    positionSaved.getName(),
+                    jdText
+            );
+
+            rabbitTemplate.convertAndSend(
+                    RabbitMQConfig.JD_PARSED_EXCHANGE,
+                    RabbitMQConfig.JD_PARSED_ROUTING_KEY,
+                    event
+            );
+
+            System.out.println("Published JD parsed event for position: " + positionSaved.getId());
+        } catch (Exception e) {
+            System.err.println("Failed to publish JD event: " + e.getMessage());
+            // Không throw exception - parse đã thành công
+        }
+
         PositionsResponse response = PositionsResponse.builder()
                 .id(positionSaved.getId())
+                .hrId(positionSaved.getHrId())
                 .name(positionSaved.getName())
                 .language(positionSaved.getLanguage())
                 .level(positionSaved.getLevel())
@@ -210,44 +240,58 @@ public class PositionService {
         }
 
         boolean isJDUpdated = (file != null && !file.isEmpty());
+        String jdText = null;
+        DriveFileInfo newFileInfo = null;
 
         if (isJDUpdated) {
-            // Upload file mới lên Drive
-            DriveFileInfo newFileInfo = storageService.uploadJD(file, finalName, finalLang, finalLevel);
 
-            String tempFilePath = null;
+            newFileInfo = storageService.uploadJD(file, finalName, finalLang, finalLevel);
+
+            String tempPath = null;
+
             try {
-                // Download về temp để parse
-                tempFilePath = storageService.downloadFileToTemp(newFileInfo.getFileId());
-                String jdText = llamaParseClient.parseJD(tempFilePath);
+                // 2. Download về temp
+                try {
+                    tempPath = storageService.downloadFileToTemp(newFileInfo.getFileId());
+                } catch (Exception e) {
+                    storageService.deleteFile(newFileInfo.getFileId());
+                    throw new CustomException(ErrorCode.FILE_DOWNLOAD_FAILED);
+                }
 
-                if (jdText == null || jdText.isEmpty()) {
+                // 3. Parse JD
+                try {
+                    jdText = llamaParseClient.parseJD(tempPath);
+                } catch (Exception e) {
                     storageService.deleteFile(newFileInfo.getFileId());
                     throw new CustomException(ErrorCode.FILE_PARSE_FAILED);
                 }
 
-                // Xóa file cũ trên Drive
-                String oldFileId = position.getDriveFileId();
-                if (oldFileId != null) {
-                    storageService.deleteFile(oldFileId);
+                if (jdText == null || jdText.trim().isEmpty()) {
+                    storageService.deleteFile(newFileInfo.getFileId());
+                    throw new CustomException(ErrorCode.FILE_PARSE_FAILED);
                 }
 
-                // Update position
-                position.setDriveFileId(newFileInfo.getFileId());
-                position.setDriveFileUrl(newFileInfo.getWebViewLink());
-                position.setJobDescription(jdText);
+                // 4. Xóa file cũ
+                try {
+                    if (position.getDriveFileId() != null) {
+                        storageService.deleteFile(position.getDriveFileId());
+                    }
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
 
-            } catch (Exception e) {
-                storageService.deleteFile(newFileInfo.getFileId());
-                throw new CustomException(ErrorCode.FILE_PARSE_FAILED);
             } finally {
-                if (tempFilePath != null) {
-                    storageService.deleteTempFile(tempFilePath);
+                if (tempPath != null) {
+                    storageService.deleteTempFile(tempPath);
                 }
             }
 
-        } else {
-            // Chỉ update metadata → move file trên Drive
+            position.setDriveFileId(newFileInfo.getFileId());
+            position.setDriveFileUrl(newFileInfo.getWebViewLink());
+            position.setJobDescription(jdText);
+        }
+
+        else {
             boolean hasMetadataChange =
                     !finalName.equals(position.getName()) ||
                             !finalLang.equals(position.getLanguage()) ||
@@ -261,12 +305,10 @@ public class PositionService {
                             finalLang,
                             finalLevel
                     );
-
                     if (movedInfo != null) {
                         position.setDriveFileUrl(movedInfo.getWebViewLink());
                     }
                 } catch (Exception e) {
-                    e.printStackTrace();
                     throw new CustomException(ErrorCode.FILE_MOVE_FAILED);
                 }
             }
@@ -278,6 +320,28 @@ public class PositionService {
         position.setUpdatedAt(LocalDateTime.now());
 
         positionRepository.save(position);
+
+        if (jdText != null) {
+            try {
+                JDParsedEvent event = new JDParsedEvent(
+                        position.getId(),
+                        position.getHrId(),
+                        position.getName(),
+                        jdText
+                );
+
+                rabbitTemplate.convertAndSend(
+                        RabbitMQConfig.JD_PARSED_EXCHANGE,
+                        RabbitMQConfig.JD_PARSED_ROUTING_KEY,
+                        event
+                );
+
+                System.out.println("Published JD update event for position: " + position.getId());
+
+            } catch (Exception e) {
+                System.err.println("Failed to publish JD update event: " + e.getMessage());
+            }
+        }
     }
 
     @Transactional
@@ -307,11 +371,23 @@ public class PositionService {
 
     // HELPER METHOD
 
+    /**
+     * Extract User ID từ request header
+     */
+    private String extractUserId(HttpServletRequest request) {
+        String userId = request.getHeader("X-User-Id");
+        if (userId == null || userId.isBlank()) {
+            throw new CustomException(ErrorCode.UNAUTHORIZED_ACTION);
+        }
+        return userId;
+    }
+
     private PositionsResponse toResponse(Positions position) {
         int totalCVs = candidateCVRepository.countByPositionId(position.getId());
 
         return PositionsResponse.builder()
                 .id(position.getId())
+                .hrId(position.getHrId())
                 .name(position.getName())
                 .language(position.getLanguage())
                 .level(position.getLevel())

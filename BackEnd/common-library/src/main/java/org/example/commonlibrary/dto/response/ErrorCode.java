@@ -51,6 +51,7 @@ public enum ErrorCode {
     // File errors
     FILE_DELETE_FAILED(5001, "File can not delete", HttpStatus.INTERNAL_SERVER_ERROR),
     FILE_MOVE_FAILED(5002, "File move failed", HttpStatus.INTERNAL_SERVER_ERROR),
+    FILE_DOWNLOAD_FAILED(5003, "File download failed", HttpStatus.INTERNAL_SERVER_ERROR),
 
     // Processing batch
     BATCH_NOT_FOUND(6001, "Batch not found", HttpStatus.NOT_FOUND),

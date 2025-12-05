@@ -19,6 +19,9 @@ public class Positions {
     @Column(nullable = false, unique = true)
     private int id;
 
+    @Column(nullable = false)
+    private String hrId;
+
     @OneToMany(mappedBy = "position", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     private List<CandidateCV> candidateCVs = new ArrayList<>();
 

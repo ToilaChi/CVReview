@@ -52,10 +52,8 @@ class CVEmbeddingResponse(BaseModel):
 # ===== JD Models =====
 class JDEmbeddingRequest(BaseModel):
     """Request to embed Job Description"""
-    jdId: int
     hrId: str
     position: str
-    jdText: str
 
 
 class JDEmbeddingResponse(BaseModel):
