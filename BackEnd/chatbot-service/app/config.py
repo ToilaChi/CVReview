@@ -4,7 +4,7 @@ from functools import lru_cache
 
 class Settings(BaseSettings):
     # Application
-    APP_NAME: str = "CV Embedding Service"
+    APP_NAME: str = "Embedding Service"
     VERSION: str = "1.0.0"
     DEBUG: bool = True
     

@@ -1,18 +1,23 @@
-fastapi
-uvicorn
-python-dotenv
+fastapi=0.123.0
+uvicorn=0.38.0
+python-dotenv=1.2.1
 
-langchain
-langgraph
+langchain=1.1.0
+langgraph=1.0.4
 
-qdrant-client
+qdrant-client=1.16.1
 
-openai
-sentence-transformers
-fastembed
+openai=2.8.1
+sentence-transformers=5.1.2
+fastembed=0.7.3
 
-pydantic
+pydantic=2.12.5
+pydantic-settings=2.12.0
 
-loguru
+loguru=0.7.3
 
-requests
+requests=2.32.5
+
+torch=2.9.1
+
+httpx=0.28.1
