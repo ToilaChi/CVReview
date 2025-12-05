@@ -29,6 +29,19 @@ spring:
                 - Method=GET,POST,PUT,DELETE
               filters: []
 
+            - id: ai-service
+              uri: http://localhost:8083
+              predicates:
+                - Method=GET,POST,PUT,DELETE
+              filters: []
+
+            - id: embedding-service
+              uri: http://localhost:8084
+              predicates:
+                - Path=/jd/embed/**,/jd/re-embed/**,/cv/embed/**,/cv/re-embed/**
+                - Method=GET,POST,PUT,DELETE
+              filters: []
+
   # WebFlux configuration for request body size
   http:
     codecs:

@@ -7,8 +7,8 @@ from datetime import datetime
 class CVChunk(BaseModel):
     """Single chunk from CV"""
     candidateId: Optional[str] = None
-    hrId: str
-    position: str
+    hrId: Optional[str] = None
+    position: Optional[str] = None
     section: str
     chunkIndex: int
     chunkText: str
@@ -56,10 +56,6 @@ class JDEmbeddingRequest(BaseModel):
     hrId: str
     position: str
     jdText: str
-    skills: List[str] = []
-    experienceYears: Optional[int] = None
-    seniorityLevel: Optional[str] = None
-    createdAt: Optional[str] = None
 
 
 class JDEmbeddingResponse(BaseModel):

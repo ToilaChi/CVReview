@@ -34,7 +34,7 @@ public class RefreshTokenService {
         String refreshTokenString = jwtUtil.generateRefreshToken(user.getId(), user.getPhone(), user.getRole());
         refreshToken.setToken(refreshTokenString);
 
-        refreshToken.setExpiresAt(Instant.now().plusSeconds(refreshDuration));
+        refreshToken.setExpiresAt(Instant.now().plusMillis(refreshDuration));
         return refreshTokenRepository.save(refreshToken);
     }
 
