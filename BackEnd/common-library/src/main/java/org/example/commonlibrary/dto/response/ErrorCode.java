@@ -35,6 +35,7 @@ public enum ErrorCode {
     CV_NOT_FAILED(2005, "CV not failed", HttpStatus.CONFLICT),
     NO_FAILED_CVS_IN_BATCH(2006, "No failed CVs in batch", HttpStatus.NOT_FOUND),
     CVS_NOT_SAME_POSITION(2007, "CVs not same position", HttpStatus.CONFLICT),
+    CV_CHUNKING_FAILED(2008, "CV chunking failed", HttpStatus.INTERNAL_SERVER_ERROR),
 
     // Position errors
     POSITION_NOT_FOUND(3001, "Position not found", HttpStatus.NOT_FOUND),

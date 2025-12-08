@@ -4,26 +4,31 @@ import lombok.RequiredArgsConstructor;
 import org.example.commonlibrary.dto.response.ErrorCode;
 import org.example.commonlibrary.exception.CustomException;
 import org.example.recruitmentservice.config.RabbitMQConfig;
+import org.example.recruitmentservice.dto.request.CVChunkedEvent;
 import org.example.recruitmentservice.dto.request.CVUploadEvent;
+import org.example.recruitmentservice.dto.request.ChunkPayload;
 import org.example.recruitmentservice.models.enums.CVStatus;
 import org.example.recruitmentservice.models.entity.CandidateCV;
-import org.example.recruitmentservice.models.enums.SourceType;
 import org.example.recruitmentservice.repository.CandidateCVRepository;
 import org.example.recruitmentservice.services.ProcessingBatchService;
 import org.example.recruitmentservice.services.StorageService;
+import org.example.recruitmentservice.services.chunking.ChunkingService;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.http.*;
-import org.springframework.retry.annotation.Backoff;
-import org.springframework.retry.annotation.Retryable;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.RestTemplate;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.springframework.transaction.support.TransactionSynchronization;
 
 import java.io.File;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -39,6 +44,8 @@ public class LlamaParseClient {
     private final CandidateCVRepository candidateCVRepository;
     private final StorageService storageService;
     private final ProcessingBatchService processingBatchService;
+    private final ChunkingService chunkingService;
+    private final RabbitTemplate rabbitTemplate;
 
     /**
      * Parse JD từ file path (temp file đã download từ Drive)
@@ -69,6 +76,7 @@ public class LlamaParseClient {
      * RabbitMQ Listener - Parse CV từ Drive
      */
     @RabbitListener(queues = RabbitMQConfig.CV_UPLOAD_QUEUE, containerFactory = "rabbitListenerContainerFactory")
+    @Transactional
     public void parseCV(CVUploadEvent event) {
         int cvId = event.getCvId();
 
@@ -96,6 +104,17 @@ public class LlamaParseClient {
             // Extract information
             String extractedName = extractName(parsedText);
             String extractedEmail = extractEmail(parsedText);
+            
+            // Chunking
+            System.out.println("Starting chunking for CV: " + cvId);
+            List<ChunkPayload> chunks = chunkingService.chunk(cv, parsedText);
+
+            if (chunks == null || chunks.isEmpty()) {
+                System.err.println("Warning: No chunks generated for CV " + cvId);
+                throw new CustomException(ErrorCode.CV_CHUNKING_FAILED);
+            }
+
+            System.out.println("Generated " + chunks.size() + " chunks for CV: " + cvId);
 
             // Update CV entity
             cv.setCvContent(parsedText);
@@ -115,9 +134,12 @@ public class LlamaParseClient {
                     " | Source: " + cv.getSourceType() +
                     " | Position: " + (cv.getPosition() != null ? cv.getPosition().getId() : "N/A"));
 
+            publishCVChunkedEvent(cv, chunks);
+
         } catch (Exception e) {
             System.err.println("CV parse failed for cvId " + cvId + ": " + e.getMessage());
             cv.setCvStatus(CVStatus.FAILED);
+            cv.setErrorMessage(e.getMessage());
             cv.setUpdatedAt(LocalDateTime.now());
             candidateCVRepository.save(cv);
 
@@ -132,6 +154,8 @@ public class LlamaParseClient {
             }
         }
     }
+
+    // HELPER METHOD
 
     private String uploadFile(String absolutePath) {
         File file = new File(absolutePath);
@@ -228,6 +252,58 @@ public class LlamaParseClient {
         }
 
         throw new CustomException(ErrorCode.FILE_PARSE_FAILED);
+    }
+
+    private void publishCVChunkedEvent(CandidateCV cv, List<ChunkPayload> chunks) {
+        // Calculate total tokens
+        int totalTokens = chunks.stream()
+                .mapToInt(ChunkPayload::getTokensEstimate)
+                .sum();
+
+        // Prepare event
+        CVChunkedEvent event = new CVChunkedEvent(
+                cv.getId(),
+                cv.getCandidateId(),
+                cv.getHrId(),
+                cv.getPosition() != null ? cv.getPosition().getName() : null,
+                chunks,
+                chunks.size(),
+                totalTokens
+        );
+
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(
+                    new TransactionSynchronization() {
+                        @Override
+                        public void afterCommit() {
+                            try {
+                                rabbitTemplate.convertAndSend(
+                                        RabbitMQConfig.CV_CHUNKED_EXCHANGE,
+                                        RabbitMQConfig.CV_CHUNKED_ROUTING_KEY,
+                                        event
+                                );
+                                System.out.println("Published CV chunked event for CV: " + cv.getId() +
+                                        " with " + chunks.size() + " chunks");
+                            } catch (Exception e) {
+                                System.err.println("Failed to publish CV chunked event: " + e.getMessage());
+                                e.printStackTrace();
+                            }
+                        }
+                    }
+            );
+        } else {
+            // Fallback if no transaction (shouldn't happen with @Transactional)
+            try {
+                rabbitTemplate.convertAndSend(
+                        RabbitMQConfig.CV_CHUNKED_EXCHANGE,
+                        RabbitMQConfig.CV_CHUNKED_ROUTING_KEY,
+                        event
+                );
+                System.out.println("Published CV chunked event (no tx) for CV: " + cv.getId());
+            } catch (Exception e) {
+                System.err.println("Failed to publish CV chunked event (no tx): " + e.getMessage());
+            }
+        }
     }
 
     // Regex extract email
