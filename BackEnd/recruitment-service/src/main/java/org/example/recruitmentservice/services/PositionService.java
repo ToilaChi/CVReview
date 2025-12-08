@@ -5,6 +5,7 @@ import org.example.recruitmentservice.config.RabbitMQConfig;
 import org.example.recruitmentservice.dto.request.JDParsedEvent;
 import org.example.recruitmentservice.dto.response.DriveFileInfo;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.transaction.annotation.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.example.commonlibrary.dto.response.ApiResponse;
@@ -15,13 +16,15 @@ import org.example.commonlibrary.utils.PageUtil;
 import org.example.recruitmentservice.client.LlamaParseClient;
 import org.example.recruitmentservice.dto.request.PositionsRequest;
 import org.example.recruitmentservice.dto.response.PositionsResponse;
-import org.example.recruitmentservice.models.entity.CandidateCV;
 import org.example.recruitmentservice.models.entity.Positions;
 import org.example.recruitmentservice.repository.CandidateCVRepository;
 import org.example.recruitmentservice.repository.PositionRepository;
 import org.springframework.data.domain.*;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestTemplate;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.springframework.transaction.support.TransactionSynchronization;
 
 import java.time.LocalDateTime;
 import java.util.Arrays;
@@ -38,6 +41,10 @@ public class PositionService {
     private final StorageService storageService;
     private final CandidateCVRepository candidateCVRepository;
     private final RabbitTemplate rabbitTemplate;
+    private final RestTemplate restTemplate;
+
+    @Value("${EMBEDDING_SERVICE_URL}")
+    private String embeddingServiceUrl;
 
     @Transactional
     public ApiResponse<PositionsResponse> createPosition(PositionsRequest positionsRequest, HttpServletRequest request) {
@@ -107,24 +114,15 @@ public class PositionService {
         Positions positionSaved = positionRepository.save(position);
 
         // Publish event to embed
-        try {
-            JDParsedEvent event = new JDParsedEvent(
-                    positionSaved.getId(),
-                    hrId,
-                    positionSaved.getName(),
-                    jdText
-            );
-
-            rabbitTemplate.convertAndSend(
-                    RabbitMQConfig.JD_PARSED_EXCHANGE,
-                    RabbitMQConfig.JD_PARSED_ROUTING_KEY,
-                    event
-            );
-
-            System.out.println("Published JD parsed event for position: " + positionSaved.getId());
-        } catch (Exception e) {
-            System.err.println("Failed to publish JD event: " + e.getMessage());
-            // Không throw exception - parse đã thành công
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    publishJDParsedEvent(positionSaved, jdText);
+                }
+            });
+        } else {
+            publishJDParsedEvent(positionSaved, jdText);
         }
 
         PositionsResponse response = PositionsResponse.builder()
@@ -322,24 +320,18 @@ public class PositionService {
         positionRepository.save(position);
 
         if (jdText != null) {
-            try {
-                JDParsedEvent event = new JDParsedEvent(
-                        position.getId(),
-                        position.getHrId(),
-                        position.getName(),
-                        jdText
-                );
+            String finalJdText = jdText;
+            Positions finalPosition = position;
 
-                rabbitTemplate.convertAndSend(
-                        RabbitMQConfig.JD_PARSED_EXCHANGE,
-                        RabbitMQConfig.JD_PARSED_ROUTING_KEY,
-                        event
-                );
-
-                System.out.println("Published JD update event for position: " + position.getId());
-
-            } catch (Exception e) {
-                System.err.println("Failed to publish JD update event: " + e.getMessage());
+            if (TransactionSynchronizationManager.isSynchronizationActive()) {
+                TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                    @Override
+                    public void afterCommit() {
+                        publishJDParsedEvent(finalPosition, finalJdText);
+                    }
+                });
+            } else {
+                publishJDParsedEvent(finalPosition, finalJdText);
             }
         }
     }
@@ -354,6 +346,16 @@ public class PositionService {
             boolean hasCV = !candidateCVRepository.findListCVsByPositionId(positionId).isEmpty();
             if (hasCV) {
                 throw new CustomException(ErrorCode.CAN_NOT_DELETE_POSITION);
+            }
+
+            // Xóa embeddings trên Python service
+            try {
+                String url = embeddingServiceUrl + "/jd/" + positionId;
+                restTemplate.delete(url);
+                System.out.println("Deleted embeddings for position: " + positionId);
+            } catch (Exception e) {
+                System.err.println("Failed to delete embeddings for position " + positionId + ": " + e.getMessage());
+                // Continue anyway - không block việc xóa position
             }
 
             // Xóa file trên Drive
@@ -401,6 +403,27 @@ public class PositionService {
                 .totalCVs(totalCVs)
                 .createdAt(position.getCreatedAt())
                 .build();
+    }
+
+    private void publishJDParsedEvent(Positions position, String jdText) {
+        try {
+            JDParsedEvent event = new JDParsedEvent(
+                    position.getId(),
+                    position.getHrId(),
+                    position.getName(),
+                    jdText
+            );
+
+            rabbitTemplate.convertAndSend(
+                    RabbitMQConfig.JD_PARSED_EXCHANGE,
+                    RabbitMQConfig.JD_PARSED_ROUTING_KEY,
+                    event
+            );
+
+            System.out.println("Published JD parsed event for position: " + position.getId());
+        } catch (Exception e) {
+            System.err.println("Failed to publish JD event: " + e.getMessage());
+        }
     }
 
     private String buildPositionName(String name, String language, String level) {

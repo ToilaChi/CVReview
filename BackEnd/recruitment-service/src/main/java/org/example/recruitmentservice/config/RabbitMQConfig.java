@@ -103,9 +103,50 @@ public class RabbitMQConfig {
                 .with(JD_PARSED_DLQ_ROUTING_KEY);
     }
 
+    /* ============================================================
+     * 3. CV CHUNKED FLOW
+     * ============================================================ */
+    public static final String CV_CHUNKED_QUEUE = "cv.chunked.queue";
+    public static final String CV_CHUNKED_DLQ = "cv.chunked.queue.dlq";
+    public static final String CV_CHUNKED_EXCHANGE = "cv.chunked.exchange";
+    public static final String CV_CHUNKED_ROUTING_KEY = "cv.chunked";
+    public static final String CV_CHUNKED_DLQ_ROUTING_KEY = "cv.chunked.dlq";
+
+    @Bean
+    public Queue cvChunkedQueue() {
+        return QueueBuilder.durable(CV_CHUNKED_QUEUE)
+                .withArgument("x-dead-letter-exchange", CV_CHUNKED_EXCHANGE)
+                .withArgument("x-dead-letter-routing-key", CV_CHUNKED_DLQ_ROUTING_KEY)
+                .build();
+    }
+
+    @Bean
+    public Queue cvChunkedDlq() {
+        return QueueBuilder.durable(CV_CHUNKED_DLQ).build();
+    }
+
+    @Bean
+    public DirectExchange cvChunkedExchange() {
+        return new DirectExchange(CV_CHUNKED_EXCHANGE);
+    }
+
+    @Bean
+    public Binding cvChunkedBinding(Queue cvChunkedQueue, DirectExchange cvChunkedExchange) {
+        return BindingBuilder.bind(cvChunkedQueue)
+                .to(cvChunkedExchange)
+                .with(CV_CHUNKED_ROUTING_KEY);
+    }
+
+    @Bean
+    public Binding cvChunkedDlqBinding(Queue cvChunkedDlq, DirectExchange cvChunkedExchange) {
+        return BindingBuilder.bind(cvChunkedDlq)
+                .to(cvChunkedExchange)
+                .with(CV_CHUNKED_DLQ_ROUTING_KEY);
+    }
+
 
     /* ============================================================
-     * 3. AI ANALYSIS FLOW
+     * 4. AI ANALYSIS FLOW
      *    Recruitment-service consumes, AI-service owns exchange
      * ============================================================ */
     public static final String AI_EXCHANGE = "cv.analysis.exchange";
@@ -176,7 +217,7 @@ public class RabbitMQConfig {
 
 
     /* ============================================================
-     * 4. COMMON SETTINGS
+     * 5. COMMON SETTINGS
      * ============================================================ */
 
     @Bean
