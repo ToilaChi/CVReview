@@ -92,9 +92,11 @@ public class AuthController {
     @GetMapping("/user-detail")
     public ApiResponse<Userdata> getUserDetail(
             @RequestHeader(value = "X-User-Id", required = true) String userId,
+            @RequestHeader(value = "Authorization", required = true) String authorizationHeader,
             @RequestHeader(value = "X-User-Phone", required = false) String userPhone,
             @RequestHeader(value = "X-User-Role", required = false) String userRole) {
+        String token = authorizationHeader.replace("Bearer ", "");
 
-        return authService.getUserDetail(userId);
+        return authService.getUserDetail(userId, token);
     }
 }
