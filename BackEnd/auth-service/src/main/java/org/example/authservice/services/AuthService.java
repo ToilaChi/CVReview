@@ -78,8 +78,11 @@ public class AuthService {
             // Build response
             LoginData.AccountInfo accountInfo = new LoginData.AccountInfo(
                     user.getId(),
+                    user.getEmail(),
                     user.getName(),
-                    user.getRole()
+                    user.getPhone(),
+                    user.getRole(),
+                    user.getCreatedAt()
             );
 
             LoginData loginData = new LoginData(
@@ -141,7 +144,7 @@ public class AuthService {
     }
 
     @Transactional
-    public ApiResponse<Userdata> getUserDetail(String userId) {
+    public ApiResponse<Userdata> getUserDetail(String userId, String token) {
         try {
             // Validate userId
             if (userId == null || userId.trim().isEmpty()) {
@@ -167,6 +170,7 @@ public class AuthService {
             );
 
             Userdata userdata = new Userdata();
+            userdata.setAccessToken(token);
             userdata.setAccount(userInfo);
 
             return new ApiResponse<>(ErrorCode.SUCCESS.getCode(), "User detail fetched successfully", userdata);
