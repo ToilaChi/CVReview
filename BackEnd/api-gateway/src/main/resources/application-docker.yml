@@ -1,0 +1,51 @@
+spring:
+  config:
+    import: optional:classpath:.env[.properties]
+
+  cloud:
+    gateway:
+      server:
+        webflux:
+          httpclient:
+            connect-timeout: 30000
+            response-timeout: 300s
+
+          routes:
+            - id: auth-service
+              uri: http://auth-service:8081  # Use service name in Docker
+              predicates:
+                - Path=/auth/**
+                - Method=GET,POST,PUT,DELETE
+              filters:
+                - name: CircuitBreaker
+                  args:
+                    name: authServiceCircuitBreaker
+                    statusCodes: 500,502,503
+
+            - id: recruitment-service
+              uri: http://recruitment-service:8082  # Use service name in Docker
+              predicates:
+                - Path=/positions/**,/cv/**,/upload/**,/analysis/**,/tracking/**,/chunking/**
+                - Method=GET,POST,PUT,DELETE
+              filters: []
+
+            - id: ai-service
+              uri: http://ai-service:8083  # Use service name in Docker
+              predicates:
+                - Method=GET,POST,PUT,DELETE
+              filters: []
+
+            - id: embedding-service
+              uri: http://embedding-api:8084  # Use service name in Docker
+              predicates:
+                - Path=/jd/**,/cv/**
+                - Method=GET,POST,PUT,DELETE
+              filters: []
+
+  # WebFlux configuration for request body size
+  http:
+    codecs:
+      max-in-memory-size: 52428800  # 50MB in bytes
+
+jwt:
+  secret: LJ8WPZjFNSfnoD5g+JZXSFiQaMY6gfNvBfR8w9HwT9OI0yEg2RfH2t9mpR7C2Ij7

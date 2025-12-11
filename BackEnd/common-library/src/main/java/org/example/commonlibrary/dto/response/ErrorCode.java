@@ -50,7 +50,7 @@ public enum ErrorCode {
     REVIEW_FAILED(4001, "AI review failed", HttpStatus.INTERNAL_SERVER_ERROR),
 
     // File errors
-    FILE_DELETE_FAILED(5001, "File can not delete", HttpStatus.INTERNAL_SERVER_ERROR),
+    FILE_DELETE_FAILED(5001, "File delete failed in Google Drive", HttpStatus.INTERNAL_SERVER_ERROR),
     FILE_MOVE_FAILED(5002, "File move failed", HttpStatus.INTERNAL_SERVER_ERROR),
     FILE_DOWNLOAD_FAILED(5003, "File download failed", HttpStatus.INTERNAL_SERVER_ERROR),
 

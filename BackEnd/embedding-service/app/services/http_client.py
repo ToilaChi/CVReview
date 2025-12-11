@@ -7,11 +7,9 @@ settings = get_settings()
 class HTTPClient:
     """HTTP client for calling external services"""
     
-    def __init__(self, base_url: str = "http://localhost:8082", timeout: float = 30.0):
-        self.base_url = base_url.rstrip("/")
+    def __init__(self, timeout: float = 30.0):
         self.timeout = timeout
         self.client = httpx.AsyncClient(timeout=timeout)
-        self.auth_token: Optional[str] = None
 
     async def close(self):
         """Close HTTP client"""

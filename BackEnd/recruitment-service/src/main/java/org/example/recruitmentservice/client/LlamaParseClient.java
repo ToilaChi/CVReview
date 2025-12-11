@@ -55,8 +55,7 @@ public class LlamaParseClient {
             System.out.println("API Key: " + (apiKey != null ? "exists" : "null"));
             System.out.println("File path: " + filePath);
 
-            // Upload file
-            String jobId = uploadFile(filePath);
+            String jobId = uploadFileForJD(filePath);
             System.out.println("Job ID: " + jobId);
 
             // Poll result
@@ -89,7 +88,7 @@ public class LlamaParseClient {
             candidateCVRepository.save(cv);
 
             // Download file từ Drive về temp
-            String fileId = event.getFileId(); // Giờ đây là fileId, không phải path
+            String fileId = event.getFileId();
             tempFilePath = storageService.downloadFileToTemp(fileId);
 
             File file = new File(tempFilePath);
@@ -97,14 +96,13 @@ public class LlamaParseClient {
                 throw new CustomException(ErrorCode.FILE_NOT_FOUND);
             }
 
-            // Parse CV
-            String jobId = uploadFile(tempFilePath);
+            String jobId = uploadFileForCV(tempFilePath);
             String parsedText = pollResult(jobId);
 
             // Extract information
             String extractedName = extractName(parsedText);
             String extractedEmail = extractEmail(parsedText);
-            
+
             // Chunking
             System.out.println("Starting chunking for CV: " + cvId);
             List<ChunkPayload> chunks = chunkingService.chunk(cv, parsedText);
@@ -155,9 +153,12 @@ public class LlamaParseClient {
         }
     }
 
-    // HELPER METHOD
+    // HELPER METHODS
 
-    private String uploadFile(String absolutePath) {
+    /**
+     * Upload file cho JD - Config đơn giản, chỉ cần parse đầy đủ text và giữ structure
+     */
+    private String uploadFileForJD(String absolutePath) {
         File file = new File(absolutePath);
         if (!file.exists()) {
             throw new CustomException(ErrorCode.FILE_NOT_FOUND);
@@ -170,19 +171,116 @@ public class LlamaParseClient {
         MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
         body.add("file", new FileSystemResource(file));
         body.add("parsing_instruction",
-                "Extract all text content preserving document structure. " +
-                        "Use proper markdown headers (# for main titles, ## for sections, ### for subsections). " +
-                        "Preserve lists, tables, and formatting. " +
-                        "Do NOT wrap output in code blocks or backticks.");
+                "Extract all text from this Job Description document. " +
+                        "Preserve the original structure and formatting. " +
+                        "Include all sections, requirements, and details.");
+        body.add("result_type", "markdown");
+        body.add("invalidate_cache", "true");
+
+        HttpEntity<MultiValueMap<String, Object>> request = new HttpEntity<>(body, headers);
+
+        ResponseEntity<Map> response = restTemplate.postForEntity(
+                "https://api.cloud.llamaindex.ai/api/parsing/upload",
+                request,
+                Map.class
+        );
+
+        return (String) response.getBody().get("id");
+    }
+
+    /**
+     * Upload file cho CV - Config chi tiết với parsing instruction đầy đủ
+     */
+    private String uploadFileForCV(String absolutePath) {
+        File file = new File(absolutePath);
+        if (!file.exists()) {
+            throw new CustomException(ErrorCode.FILE_NOT_FOUND);
+        }
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.MULTIPART_FORM_DATA);
+        headers.set("Authorization", "Bearer " + apiKey);
+
+        MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
+        body.add("file", new FileSystemResource(file));
+        body.add("parsing_instruction",
+                "Extract text from this CV/Resume and structure it in markdown format following these STRICT rules:\n\n" +
+
+                        "HEADER HIERARCHY (MUST FOLLOW):\n" +
+                        "- Use ## (level 2) ONLY for main sections: Contact, Summary, Skills, Education, Experience, Projects, Certificates, Languages, Awards, Objective\n" +
+                        "- Use ### (level 3) ONLY for entity names: project names, company names, job titles, school names, degree names, award names\n" +
+                        "- DO NOT use #### (level 4) headers at all\n" +
+                        "- DO NOT use # (level 1) headers at all\n" +
+                        "- For entity details (Duration, Description, Role, etc.), use **Bold:** format, NOT headers\n\n" +
+
+                        "EXAMPLES:\n\n" +
+
+                        "## Contact\n" +
+                        "- Name: John Doe\n" +
+                        "- Email: john@example.com\n" +
+                        "- Phone: +84 123456789\n\n" +
+
+                        "## Skills\n" +
+                        "- Java, Python, React, Node.js\n" +
+                        "- MySQL, PostgreSQL, MongoDB\n" +
+                        "- Docker, Kubernetes, AWS\n\n" +
+
+                        "## Education\n\n" +
+                        "### Bachelor of Computer Science\n" +
+                        "**School:** ABC University\n" +
+                        "**Duration:** 2015/09 - 2019/06\n" +
+                        "**GPA:** 3.5/4.0\n\n" +
+
+                        "## Experience\n\n" +
+                        "### Software Engineer\n" +
+                        "**Company:** Tech Corp JSC\n" +
+                        "**Duration:** 2020/01 - Present\n" +
+                        "**Responsibilities:**\n" +
+                        "- Developed backend APIs using Spring Boot\n" +
+                        "- Led team of 3 developers\n" +
+                        "- Improved system performance by 40%\n\n" +
+
+                        "## Projects\n\n" +
+
+                        "### E-commerce Platform\n" +
+                        "**Duration:** 2021/06 - 2022/12\n" +
+                        "**Description:** Built a full-stack e-commerce platform with payment integration\n" +
+                        "**Role:** Full-stack Developer\n" +
+                        "**Technologies:**\n" +
+                        "- Frontend: React, Redux, Tailwind CSS\n" +
+                        "- Backend: Spring Boot, PostgreSQL, Redis\n" +
+                        "- Infrastructure: Docker, AWS EC2, S3\n" +
+                        "**Responsibilities:**\n" +
+                        "- Designed RESTful APIs\n" +
+                        "- Implemented payment gateway\n" +
+                        "- Deployed using Docker\n\n" +
+
+                        "## Awards\n\n" +
+                        "### Best Innovation Award 2022\n" +
+                        "**Date:** 2022/08\n" +
+                        "**Result:** 1st place\n" +
+                        "**Description:** Won first place in company hackathon\n\n" +
+
+                        "IMPORTANT FORMATTING RULES:\n" +
+                        "- Main sections (##) should have NO content immediately after, add blank line\n" +
+                        "- Entity names (###) should be followed by entity details in **Bold:** format\n" +
+                        "- Use **Duration:**, **Description:**, **Role:**, **Technologies:**, **Responsibilities:**, **Company:**, **School:**, **Date:**, etc.\n" +
+                        "- Use '-' for bullet points (not *, •, or numbers)\n" +
+                        "- Keep consistent spacing: blank line after each entity\n" +
+                        "- Extract ALL text content from the CV\n" +
+                        "- Do NOT wrap output in code blocks or backticks\n" +
+                        "- Do NOT add any preamble or explanation\n" +
+                        "- Do NOT use person's name or job title as headers"
+        );
         body.add("result_type", "markdown");
         body.add("target_pages", "");
         body.add("invalidate_cache", "true");
         body.add("gpt4o_mode", "false");
         body.add("skip_diagonal_text", "true");
         body.add("extract_all_pages", "true");
-        body.add("do_not_unroll_columns", "true");
-        body.add("page_separator", "true");
-        body.add("prefix_or_suffix", "true");
+        body.add("do_not_unroll_columns", "false");
+        body.add("page_separator", "false");
+        body.add("prefix_or_suffix", "false");
         body.add("continuous_mode", "true");
         body.add("fast_mode", "false");
 
