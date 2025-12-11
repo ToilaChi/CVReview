@@ -22,9 +22,8 @@ public class SectionExtractor {
         String normalizedText = normalizeTextFromLlamaParse(text);
         Map<String, String> sections = new LinkedHashMap<>();
 
-        // Pattern chỉ lấy level 1-2 headers (# hoặc ##)
         Pattern headerPattern = Pattern.compile(
-                "(?:^|\\n)\\s*(#{1,2})(?!#)\\s+([^#\\n\\r]+?)(?=\\s*\\n|$)",
+                "(?:^|\\n)\\s*(#{1,3})\\s+([^#\\n\\r]+?)(?=\\s*\\n|$)",  // Lấy ##, ###
                 Pattern.MULTILINE
         );
 
@@ -37,20 +36,21 @@ public class SectionExtractor {
             int level = hashes.length();
             int headerStart = matcher.start();
 
-            // Skip headers quá dài
             if (headerName.length() > 100) continue;
 
-            // Normalize và validate
-            String normalizedSection = cvSchema.normalizeSection(headerName);
+            // Chỉ validate và lưu level 2 headers (main sections)
+            if (level == 2) {
+                String normalizedSection = cvSchema.normalizeSection(headerName);
 
-            if (normalizedSection == null) {
-                log.debug("Skipped unknown section: '{}'", headerName);
-                continue;
+                if (normalizedSection == null) {
+                    log.debug("Skipped unknown section: '{}'", headerName);
+                    continue;
+                }
+
+                boundaries.add(new SectionBoundary(normalizedSection, headerStart, level));
+                log.debug("Found section: '{}' (normalized: '{}') at position {}",
+                        headerName, normalizedSection, headerStart);
             }
-
-            boundaries.add(new SectionBoundary(normalizedSection, headerStart, level));
-            log.debug("Found section: '{}' (normalized: '{}', level: {}) at position {}",
-                    headerName, normalizedSection, level, headerStart);
         }
 
         if (boundaries.isEmpty()) {

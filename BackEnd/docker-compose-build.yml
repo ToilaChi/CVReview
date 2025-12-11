@@ -1,16 +1,12 @@
 version: '3.8'
 
 services:
-  # ============================================
-  # INFRASTRUCTURE SERVICES
-  # ============================================
-
   rabbitmq:
     image: rabbitmq:3-management
     container_name: rabbitmq
     ports:
-      - "5672:5672"   # AMQP port
-      - "15672:15672" # Management UI
+      - "5672:5672"
+      - "15672:15672"
     environment:
       - RABBITMQ_DEFAULT_USER=guest
       - RABBITMQ_DEFAULT_PASS=guest
@@ -24,12 +20,11 @@ services:
       start_period: 30s
     restart: unless-stopped
 
-  # ============================================
-  # JAVA MICROSERVICES
-  # ============================================
-
   auth-service:
-    image: toilachi1604/auth-service:v1.0.0
+    build:
+      context: .
+      dockerfile: ./auth-service/Dockerfile
+    image: auth-service:latest  # ⬅️ Tag local để sau này push
     container_name: auth-service
     hostname: auth-service
     ports:
@@ -45,7 +40,7 @@ services:
       - SPRING_PROFILES_ACTIVE=local
       - SPRING_RABBITMQ_HOST=rabbitmq
     env_file:
-      - ./env/auth-service.env
+      - ./auth-service/src/main/resources/.env
     healthcheck:
       test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8081/actuator/health || exit 1"]
       interval: 15s
@@ -55,7 +50,10 @@ services:
     restart: unless-stopped
 
   recruitment-service:
-    image: toilachi1604/recruitment-service:v1.0.0
+    build:
+      context: .
+      dockerfile: ./recruitment-service/Dockerfile
+    image: recruitment-service:latest
     container_name: recruitment-service
     hostname: recruitment-service
     ports:
@@ -71,7 +69,7 @@ services:
       - SPRING_PROFILES_ACTIVE=local
       - SPRING_RABBITMQ_HOST=rabbitmq
     env_file:
-      - ./env/recruitment-service.env
+      - ./recruitment-service/src/main/resources/.env
     healthcheck:
       test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8082/actuator/health || exit 1"]
       interval: 15s
@@ -81,7 +79,10 @@ services:
     restart: unless-stopped
 
   ai-service:
-    image: toilachi1604/ai-service:v1.0.0
+    build:
+      context: .
+      dockerfile: ./ai-service/Dockerfile
+    image: ai-service:latest
     container_name: ai-service
     hostname: ai-service
     ports:
@@ -97,7 +98,7 @@ services:
       - SPRING_PROFILES_ACTIVE=local
       - SPRING_RABBITMQ_HOST=rabbitmq
     env_file:
-      - ./env/ai-service.env
+      - ./ai-service/src/main/resources/.env
     healthcheck:
       test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8083/actuator/health || exit 1"]
       interval: 15s
@@ -106,12 +107,11 @@ services:
       start_period: 60s
     restart: unless-stopped
 
-  # ============================================
-  # PYTHON MICROSERVICES (EMBEDDING SERVICE)
-  # ============================================
-
   embedding-api:
-    image: toilachi1604/embedding-api:v1.0.0
+    build:
+      context: ./embedding-service
+      dockerfile: Dockerfile
+    image: embedding-api:latest
     container_name: embedding-api
     hostname: embedding-api
     ports:
@@ -124,7 +124,7 @@ services:
         aliases:
           - embedding-api
     env_file:
-      - ./env/embedding-service.env
+      - ./embedding-service/.env.docker
     command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8084"]
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8084/health"]
@@ -135,7 +135,7 @@ services:
     restart: unless-stopped
 
   embedding-worker-cv:
-    image: toilachi1604/embedding-api:v1.0.1
+    image: embedding-api:latest  # ⬅️ Reuse API image
     container_name: embedding-worker-cv
     hostname: embedding-worker-cv
     depends_on:
@@ -146,7 +146,7 @@ services:
     networks:
       - microservice-network
     env_file:
-      - ./env/embedding-service.env
+      - ./embedding-service/.env.docker
     command: ["python", "app/worker_cv.py"]
     healthcheck:
       test: ["CMD-SHELL", "ps aux | grep 'worker_cv.py' | grep -v grep || exit 1"]
@@ -157,7 +157,7 @@ services:
     restart: unless-stopped
 
   embedding-worker-jd:
-    image: toilachi1604/embedding-api:v1.0.0
+    image: embedding-api:latest  # ⬅️ Reuse API image
     container_name: embedding-worker-jd
     hostname: embedding-worker-jd
     depends_on:
@@ -168,7 +168,7 @@ services:
     networks:
       - microservice-network
     env_file:
-      - ./env/embedding-service.env
+      - ./embedding-service/.env.docker
     command: ["python", "app/worker_jd.py"]
     healthcheck:
       test: ["CMD-SHELL", "ps aux | grep 'worker_jd.py' | grep -v grep || exit 1"]
@@ -178,12 +178,11 @@ services:
       start_period: 60s
     restart: unless-stopped
 
-  # ============================================
-  # API GATEWAY (Must start last)
-  # ============================================
-
   api-gateway:
-    image: toilachi1604/api-gateway:v1.0.0
+    build:
+      context: .
+      dockerfile: ./api-gateway/Dockerfile
+    image: api-gateway:latest
     container_name: api-gateway
     hostname: api-gateway
     ports:
@@ -211,10 +210,6 @@ services:
       retries: 5
       start_period: 90s
     restart: on-failure:3
-
-# ============================================
-# NETWORKS
-# ============================================
 
 networks:
   microservice-network:

@@ -1,8 +1,8 @@
 uploads/
 tokens/
 token.txt
-chatbot-service/.env
-chatbot-service/venv/
+embedding-service/.env
+embedding-service/venv/
 __pycache__/
 *.pyc
 
