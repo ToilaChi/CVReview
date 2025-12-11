@@ -12,6 +12,8 @@ class EmbeddingService:
     _instance: Optional['EmbeddingService'] = None
     _model: Optional[SentenceTransformer] = None
     
+    QUERY_INSTRUCTION = "Represent this sentence for searching relevant passages: "
+
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super().__new__(cls)
@@ -24,7 +26,7 @@ class EmbeddingService:
             self._model = SentenceTransformer(settings.EMBEDDING_MODEL_NAME)
             print(f"Model loaded successfully! Dimension: {settings.EMBEDDING_DIMENSION}")
     
-    def embed_text(self, text: str) -> List[float]:
+    def embed_text(self, text: str, is_query: bool = False) -> List[float]:
         """
         Embed a single text
         
@@ -35,10 +37,23 @@ class EmbeddingService:
             List of floats representing the embedding vector
         """
         self._load_model()
-        embedding = self._model.encode(text, convert_to_numpy=True)
+
+        if is_query:
+            text = self.QUERY_INSTRUCTION + text
+
+        embedding = self._model.encode(
+            text, 
+            convert_to_numpy=True,
+            normalize_embeddings=True 
+        )
         return embedding.tolist()
     
-    def embed_batch(self, texts: List[str], show_progress: bool = False) -> List[List[float]]:
+    def embed_batch(
+        self, 
+        texts: List[str], 
+        is_query: bool = False,
+        show_progress: bool = False
+    ) -> List[List[float]]:
         """
         Embed a batch of texts
         
@@ -50,11 +65,16 @@ class EmbeddingService:
             List of embedding vectors
         """
         self._load_model()
+
+        if is_query:
+            texts = [self.QUERY_INSTRUCTION + text for text in texts]
+
         embeddings = self._model.encode(
             texts,
             convert_to_numpy=True,
+            normalize_embeddings=True,  
             show_progress_bar=show_progress,
-            batch_size=32  # Internal batch size for model inference
+            batch_size=32
         )
         return embeddings.tolist()
     
