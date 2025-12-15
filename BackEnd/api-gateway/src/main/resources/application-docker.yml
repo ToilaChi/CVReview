@@ -41,6 +41,13 @@ spring:
                 - Path=/jd/**,/cv/**
                 - Method=GET,POST,PUT,DELETE
               filters: []
+            # Chatbot Service
+            - id: chatbot-service
+              uri: http://chatbot-service:8085
+              predicates:
+                - Path=/chatbot/**
+              filters:
+                - RewritePath=/chatbot/(?<segment>.*), /api/v1/$\{segment}
 
   # WebFlux configuration for request body size
   http:

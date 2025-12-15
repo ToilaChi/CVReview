@@ -18,7 +18,10 @@ public class RouterValidator {
             "/auth/login",
             "/auth/register",
             "/actuator/health",
-            "/actuator/info"
+            "/actuator/info",
+            "/chatbot/health",
+            "/chatbot/health/ready",
+            "/chatbot/health/live"
     );
 
     /**

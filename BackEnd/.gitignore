@@ -3,6 +3,8 @@ tokens/
 token.txt
 embedding-service/.env
 embedding-service/venv/
+chatbot-service/.env
+chatbot-service/venv/
 __pycache__/
 *.pyc
 

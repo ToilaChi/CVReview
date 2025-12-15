@@ -178,6 +178,32 @@ services:
       start_period: 60s
     restart: unless-stopped
 
+  chatbot-service:
+    build:
+      context: ./chatbot-service
+      dockerfile: Dockerfile
+    image: chatbot-service:latest
+    container_name: chatbot-service
+    hostname: chatbot-service
+    ports:
+      - "8085:8085"
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      microservice-network:
+        aliases:
+          - chatbot-service
+    env_file:
+      - ./chatbot-service/.env.docker
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8085/chatbot/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    restart: unless-stopped
+
   api-gateway:
     build:
       context: .
@@ -195,6 +221,8 @@ services:
       ai-service:
         condition: service_healthy
       embedding-api:
+        condition: service_healthy
+      chatbot-service:
         condition: service_healthy
     networks:
       microservice-network:

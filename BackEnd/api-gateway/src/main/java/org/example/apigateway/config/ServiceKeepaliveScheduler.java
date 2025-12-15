@@ -17,6 +17,7 @@ public class ServiceKeepaliveScheduler {
     private final String recruitmentServiceUrl;
     private final String aiServiceUrl;
     private final String embeddingServiceUrl;
+    private final String chatbotServiceUrl;
 
     public ServiceKeepaliveScheduler() {
         this.webClient = WebClient.builder()
@@ -28,6 +29,7 @@ public class ServiceKeepaliveScheduler {
         this.recruitmentServiceUrl = System.getenv("RECRUITMENT_SERVICE_URL");
         this.aiServiceUrl = System.getenv("AI_SERVICE_URL");
         this.embeddingServiceUrl = System.getenv("EMBEDDING_SERVICE_URL");
+        this.chatbotServiceUrl = System.getenv("CHATBOT_SERVICE_URL");
     }
 
     // Ping mỗi 10 phút
@@ -37,6 +39,7 @@ public class ServiceKeepaliveScheduler {
         pingService(recruitmentServiceUrl, "Recruitment Service");
         pingService(aiServiceUrl, "AI Service");
         pingService(embeddingServiceUrl, "Embedding Service");
+        pingService(chatbotServiceUrl, "Chatbot Service");
     }
 
     private void pingService(String baseUrl, String serviceName) {

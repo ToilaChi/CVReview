@@ -4,92 +4,160 @@ from pathlib import Path
 # Add parent directory to path
 sys.path.append(str(Path(__file__).parent.parent))
 
-from app.services.qdrant import qdrant_service
+"""
+Fix Qdrant indexes với đúng field types
+Chạy script này để tạo lại indexes
+"""
+from qdrant_client import QdrantClient
+from qdrant_client.models import PayloadSchemaType, TextIndexParams, TokenizerType
 from app.config import get_settings
-from qdrant_client.models import PayloadSchemaType
 
 settings = get_settings()
 
-def add_indexes():
-    """Add indexes to existing collection"""
+def create_indexes():
+    """Create proper indexes for CV and JD collections"""
+    
+    # Connect to Qdrant
+    if settings.QDRANT_USE_CLOUD:
+        client = QdrantClient(
+            url=settings.QDRANT_URL,
+            api_key=settings.QDRANT_API_KEY
+        )
+    else:
+        client = QdrantClient(
+            host=settings.QDRANT_HOST,
+            port=settings.QDRANT_PORT
+        )
+    
+    print("Connected to Qdrant")
+    
+    # ========================================
+    # CV COLLECTION INDEXES
+    # ========================================
+    print("\n📋 Creating indexes for cv_embeddings...")
+    
+    cv_indexes = {
+        # Integer fields
+        "cvId": PayloadSchemaType.INTEGER,
+        
+        # Keyword fields (exact match) - cho UUID strings
+        "candidateId": PayloadSchemaType.KEYWORD,
+        "hrId": PayloadSchemaType.KEYWORD,
+        "section": PayloadSchemaType.KEYWORD,
+        "seniorityLevel": PayloadSchemaType.KEYWORD,
+        "cvStatus": PayloadSchemaType.KEYWORD,
+        "sourceType": PayloadSchemaType.KEYWORD,
+        
+        # Boolean fields
+        "is_latest": PayloadSchemaType.BOOL,
+        
+        # Integer fields
+        "chunkIndex": PayloadSchemaType.INTEGER,
+        "version": PayloadSchemaType.INTEGER,
+        "experienceYears": PayloadSchemaType.INTEGER,
+    }
+    
+    for field_name, field_type in cv_indexes.items():
+        try:
+            client.create_payload_index(
+                collection_name=settings.CV_COLLECTION_NAME,
+                field_name=field_name,
+                field_schema=field_type
+            )
+            print(f"  ✅ Created index: {field_name} ({field_type})")
+        except Exception as e:
+            if "already exists" in str(e).lower():
+                print(f"  ⏭️  Index exists: {field_name}")
+            else:
+                print(f"  ❌ Error creating {field_name}: {e}")
+    
+    # Text index for full-text search on chunkText
     try:
-        # Get Qdrant client
-        client = qdrant_service.get_client()
-        
-        # Check if collection exists
-        try:
-            client.get_collection(settings.JD_COLLECTION_NAME)
-            print(f"Collection {settings.JD_COLLECTION_NAME} exists")
-        except Exception:
-            print(f"Collection {settings.JD_COLLECTION_NAME} does not exist")
-            return
-        
-        # Add index for positionId
-        print(f"Creating index for positionId...")
-        try:
-            client.create_payload_index(
-                collection_name=settings.JD_COLLECTION_NAME,
-                field_name="positionId",
-                field_schema=PayloadSchemaType.INTEGER
+        client.create_payload_index(
+            collection_name=settings.CV_COLLECTION_NAME,
+            field_name="chunkText",
+            field_schema=TextIndexParams(
+                type="text",
+                tokenizer=TokenizerType.WORD,
+                min_token_len=2,
+                max_token_len=20
             )
-            print("Index created for positionId")
-        except Exception as e:
-            if "already exists" in str(e).lower():
-                print("Index for positionId already exists")
-            else:
-                raise
-        
-        # Add index for hrId
-        print(f"Creating index for hrId...")
-        try:
-            client.create_payload_index(
-                collection_name=settings.JD_COLLECTION_NAME,
-                field_name="hrId",
-                field_schema=PayloadSchemaType.KEYWORD
-            )
-            print("Index created for hrId")
-        except Exception as e:
-            if "already exists" in str(e).lower():
-                print("Index for hrId already exists")
-            else:
-                raise
-        
-        # Add index for is_latest
-        print(f"Creating index for is_latest...")
-        try:
-            client.create_payload_index(
-                collection_name=settings.JD_COLLECTION_NAME,
-                field_name="is_latest",
-                field_schema=PayloadSchemaType.BOOL
-            )
-            print("Index created for is_latest")
-        except Exception as e:
-            if "already exists" in str(e).lower():
-                print("Index for is_latest already exists")
-            else:
-                raise
-        
-        # Add index for jdId (nếu cần)
-        print(f"Creating index for jdId...")
-        try:
-            client.create_payload_index(
-                collection_name=settings.JD_COLLECTION_NAME,
-                field_name="jdId",
-                field_schema=PayloadSchemaType.INTEGER
-            )
-            print("Index created for jdId")
-        except Exception as e:
-            if "already exists" in str(e).lower():
-                print("Index for jdId already exists")
-            else:
-                raise
-        
-        print("\nAll indexes created successfully!")
-        
+        )
+        print(f"  ✅ Created text index: chunkText")
     except Exception as e:
-        print(f"Error creating indexes: {e}")
-        import traceback
-        traceback.print_exc()
+        if "already exists" in str(e).lower():
+            print(f"  ⏭️  Text index exists: chunkText")
+        else:
+            print(f"  ❌ Error creating text index: {e}")
+    
+    # ========================================
+    # JD COLLECTION INDEXES
+    # ========================================
+    print("\n📋 Creating indexes for jd_embeddings...")
+    
+    jd_indexes = {
+        # Integer fields
+        "jdId": PayloadSchemaType.INTEGER,
+        "positionId": PayloadSchemaType.INTEGER,
+        "version": PayloadSchemaType.INTEGER,
+        "textLength": PayloadSchemaType.INTEGER,
+        
+        # Keyword fields
+        "hrId": PayloadSchemaType.KEYWORD,
+        "position": PayloadSchemaType.KEYWORD,
+        
+        # Boolean fields
+        "is_latest": PayloadSchemaType.BOOL,
+    }
+    
+    for field_name, field_type in jd_indexes.items():
+        try:
+            client.create_payload_index(
+                collection_name=settings.JD_COLLECTION_NAME,
+                field_name=field_name,
+                field_schema=field_type
+            )
+            print(f"  ✅ Created index: {field_name} ({field_type})")
+        except Exception as e:
+            if "already exists" in str(e).lower():
+                print(f"  ⏭️  Index exists: {field_name}")
+            else:
+                print(f"  ❌ Error creating {field_name}: {e}")
+    
+    # Text index for JD text
+    try:
+        client.create_payload_index(
+            collection_name=settings.JD_COLLECTION_NAME,
+            field_name="jdText",
+            field_schema=TextIndexParams(
+                type="text",
+                tokenizer=TokenizerType.WORD,
+                min_token_len=2,
+                max_token_len=20
+            )
+        )
+        print(f"  ✅ Created text index: jdText")
+    except Exception as e:
+        if "already exists" in str(e).lower():
+            print(f"  ⏭️  Text index exists: jdText")
+        else:
+            print(f"  ❌ Error creating text index: {e}")
+    
+    print("\n✅ All indexes created successfully!")
+    
+    # Verify
+    print("\n📊 Verifying collections...")
+    cv_info = client.get_collection(settings.CV_COLLECTION_NAME)
+    jd_info = client.get_collection(settings.JD_COLLECTION_NAME)
+    
+    print(f"\nCV Collection:")
+    print(f"  Points: {cv_info.points_count}")
+    print(f"  Indexed fields: {len(cv_info.payload_schema)}")
+    
+    print(f"\nJD Collection:")
+    print(f"  Points: {jd_info.points_count}")
+    print(f"  Indexed fields: {len(jd_info.payload_schema)}")
+
 
 if __name__ == "__main__":
-    add_indexes()
+    create_indexes()
