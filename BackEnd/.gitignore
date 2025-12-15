@@ -2,8 +2,10 @@ uploads/
 tokens/
 token.txt
 embedding-service/.env
+embedding-service/.env.docker
 embedding-service/venv/
 chatbot-service/.env
+chatbot-service/.env.docker
 chatbot-service/venv/
 __pycache__/
 *.pyc
