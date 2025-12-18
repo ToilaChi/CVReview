@@ -80,8 +80,34 @@ services:
       start_period: 60s
     restart: unless-stopped
 
+#  chatbot-service:
+#    image: toilachi1604/chatbot-service:v1.0.0
+#    container_name: chatbot-service
+#    hostname: chatbot-service
+#    ports:
+#      - "8085:8085"
+#    depends_on:
+#      rabbitmq:
+#        condition: service_healthy
+#    networks:
+#      microservice-network:
+#        aliases:
+#          - ai-service
+#    environment:
+#      - SPRING_PROFILES_ACTIVE=local
+#      - SPRING_RABBITMQ_HOST=rabbitmq
+#    env_file:
+#      - ./env/chatbot-service.env
+#    healthcheck:
+#      test: [ "CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8085/chatbot/health || exit 1" ]
+#      interval: 15s
+#      timeout: 10s
+#      retries: 10
+#      start_period: 60s
+#    restart: unless-stopped
+
   ai-service:
-    image: toilachi1604/ai-service:v1.0.0
+    image: toilachi1604/ai-service:v1.0.1
     container_name: ai-service
     hostname: ai-service
     ports:

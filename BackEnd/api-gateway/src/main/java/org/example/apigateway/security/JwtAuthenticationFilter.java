@@ -42,14 +42,14 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
 
         // Nếu endpoint KHÔNG cần bảo mật → forward luôn
         if (!routerValidator.isSecured.test(request)) {
-            System.out.println("✅ Open endpoint, forwarding to downstream: " + path);
+            System.out.println("Open endpoint, forwarding to downstream: " + path);
             return chain.filter(exchange)
-                    .doOnSuccess(aVoid -> System.out.println("✅ Successfully forwarded to: " + uri))
-                    .doOnError(error -> System.out.println("❌ Error forwarding to " + uri + ": " + error.getMessage()));
+                    .doOnSuccess(aVoid -> System.out.println("Successfully forwarded to: " + uri))
+                    .doOnError(error -> System.out.println("Error forwarding to " + uri + ": " + error.getMessage()));
         }
 
         // Nếu CẦN bảo mật → xác thực JWT
-        System.out.println("🔒 Secured endpoint, checking authentication: " + path);
+        System.out.println("Secured endpoint, checking authentication: " + path);
         return handleAuthentication(exchange, chain);
     }
 
@@ -60,13 +60,13 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
 
         // Check authorization header
         if (!request.getHeaders().containsKey(HttpHeaders.AUTHORIZATION)) {
-            System.out.println("❌ Missing authorization header for: " + path);
+            System.out.println("Missing authorization header for: " + path);
             return onError(exchange, ErrorCode.TOKEN_MISSING);
         }
 
         String authHeader = request.getHeaders().getFirst(HttpHeaders.AUTHORIZATION);
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-            System.out.println("❌ Invalid authorization header format for: " + path);
+            System.out.println("Invalid authorization header format for: " + path);
             return onError(exchange, ErrorCode.TOKEN_INVALID);
         }
 
@@ -76,12 +76,12 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
 
             if (!validationResult.isValid()) {
                 if (validationResult.isExpired()) {
-                    System.out.println("❌ Token expired for: " + path);
+                    System.out.println("Token expired for: " + path);
                     return onError(exchange, ErrorCode.TOKEN_EXPIRED);
                 }
 
                 ErrorCode errorCode = mapToErrorCode(validationResult.getErrorCode());
-                System.out.println("❌ Token validation failed for: " + path);
+                System.out.println("Token validation failed for: " + path);
                 return onError(exchange, errorCode);
             }
 
@@ -91,12 +91,12 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
             String id = jwtUtil.extractId(token);
 
             if (path.startsWith("/chatbot") && "HR".equalsIgnoreCase(role)) {
-                System.out.println("❌ HR role blocked from chatbot service: " + path);
+                System.out.println("HR role blocked from chatbot service: " + path);
                 return onError(exchange, ErrorCode.FORBIDDEN);
             }
 
-            System.out.println("✅ JWT valid - Id: " + id + ", Phone: " + phone + ", Role: " + role);
-            System.out.println("🔄 Forwarding to downstream: " + uri);
+            System.out.println("JWT valid - Id: " + id + ", Phone: " + phone + ", Role: " + role);
+            System.out.println("Forwarding to downstream: " + uri);
 
             ServerHttpRequest modifiedRequest = exchange.getRequest().mutate()
                     .header("X-User-Phone", phone)
@@ -105,11 +105,11 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
                     .build();
 
             return chain.filter(exchange.mutate().request(modifiedRequest).build())
-                    .doOnSuccess(aVoid -> System.out.println("✅ Successfully forwarded to: " + uri))
-                    .doOnError(error -> System.out.println("❌ Error forwarding to " + uri + ": " + error.getMessage()));
+                    .doOnSuccess(aVoid -> System.out.println("Successfully forwarded to: " + uri))
+                    .doOnError(error -> System.out.println("Error forwarding to " + uri + ": " + error.getMessage()));
 
         } catch (Exception e) {
-            System.out.println("❌ Token validation exception for " + path + ": " + e.getMessage());
+            System.out.println("Token validation exception for " + path + ": " + e.getMessage());
             e.printStackTrace();
             return onError(exchange, ErrorCode.INTERNAL_SERVER_ERROR);
         }

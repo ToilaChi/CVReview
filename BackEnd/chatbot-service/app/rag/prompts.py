@@ -12,6 +12,7 @@ SYSTEM_PROMPT = """You are an expert Career Counselor Assistant specializing in 
 Your expertise:
 - Matching candidate CVs to suitable job positions
 - Analyzing job descriptions and requirements
+- Analyzing candidate profiles and skills
 - Identifying skill gaps and providing learning roadmap
 - Suggesting career development paths
 
@@ -33,6 +34,38 @@ CRITICAL RULES:
 # ============================================================
 # INTENT-SPECIFIC PROMPTS
 # ============================================================
+
+CV_ANALYSIS_PROMPT = """You are analyzing a candidate's profile and skills.
+
+CANDIDATE PROFILE (CV):
+{cv_context}
+
+USER QUESTION:
+{query}
+
+Analyze and respond comprehensively:
+
+**For skill/experience questions:**
+- Extract relevant skills from CV
+- Provide proficiency levels if mentioned
+- List specific projects or work experience
+- Highlight strengths and expertise areas
+
+**For assessment questions:**
+- Evaluate based on CV content
+- Be specific about what's documented
+- Note any gaps or areas for improvement
+- Suggest next steps for skill development
+
+**For comparison questions:**
+- Compare against typical market standards
+- Identify competitive advantages
+- Point out differentiators
+
+Format clearly with sections. Be encouraging but realistic.
+
+Your analysis:"""
+
 
 JD_ANALYSIS_PROMPT = """You are analyzing a specific job position.
 
@@ -94,12 +127,18 @@ Analyze and respond based on the question type:
   * Estimated timeline for each
 - Prioritize by importance
 
+**If asking about readiness or suitability:**
+- Assess match between CV and available positions
+- Give honest assessment of readiness
+- Suggest which positions to focus on
+- Provide development plan for gaps
+
 Format clearly with sections and bullet points.
 
 Your response:"""
 
 
-GENERAL_PROMPT = """You are a helpful job matching assistant.
+GENERAL_PROMPT = """You are a helpful career counseling assistant.
 
 CONTEXT:
 {context}
@@ -214,6 +253,7 @@ def get_prompt_for_intent(
         query: User query
         cv_context: Retrieved CV chunks
         jd_context: Retrieved JD documents
+        conversation_history: Previous conversation turns
         
     Returns:
         Tuple of (system_prompt, user_prompt)
@@ -221,19 +261,26 @@ def get_prompt_for_intent(
     cv_context = cv_context or []
     jd_context = jd_context or []
     
-    # Build context với conversation history nếu có
+    # Build context
     cv_ctx = build_cv_context(cv_context)
     jd_ctx = build_jd_context(jd_context)
     
-    # Thêm conversation history vào user_prompt nếu có
+    # Build conversation history
     history_text = ""
     if conversation_history:
         history_text = "\n\nPREVIOUS CONVERSATION:\n" + "\n".join([
             f"User: {turn['query']}\nAssistant: {turn['answer'][:200]}..."
-            for turn in conversation_history[-3:]  # Giữ 3 turn gần nhất
+            for turn in conversation_history[-3:]  # Keep last 3 turns
         ]) + "\n"
     
-    if intent == "jd_search":
+    # Select prompt based on intent
+    if intent == "cv_analysis":
+        user_prompt = CV_ANALYSIS_PROMPT.format(
+            cv_context=cv_ctx,
+            query=query
+        ) + history_text
+    
+    elif intent == "jd_search":
         user_prompt = JD_SEARCH_PROMPT.format(
             cv_context=cv_ctx,
             jd_context=jd_ctx,
@@ -243,7 +290,7 @@ def get_prompt_for_intent(
     elif intent == "jd_analysis":
         user_prompt = JD_ANALYSIS_PROMPT.format(
             jd_context=jd_ctx,
-            cv_context=cv_ctx,  # Để gap analysis
+            cv_context=cv_ctx,  # For gap analysis
             query=query
         ) + history_text
     
@@ -279,15 +326,25 @@ if __name__ == "__main__":
         }
     }
     
+    # Test CV Analysis
+    print("=" * 80)
+    print("TEST: CV ANALYSIS PROMPT")
+    print("=" * 80)
     system, user = get_prompt_for_intent(
-        intent="cv_jd_match",
-        query="Am I qualified for this position?",
+        intent="cv_analysis",
+        query="What Python skills do I have?",
+        cv_context=[mock_cv_chunk],
+        jd_context=[]
+    )
+    print(user[:500])
+    
+    print("\n" + "=" * 80)
+    print("TEST: JD SEARCH PROMPT")
+    print("=" * 80)
+    system, user = get_prompt_for_intent(
+        intent="jd_search",
+        query="What jobs match my skills?",
         cv_context=[mock_cv_chunk],
         jd_context=[mock_jd]
     )
-    
-    print("SYSTEM PROMPT:")
-    print(system)
-    print("\n" + "="*80 + "\n")
-    print("USER PROMPT:")
-    print(user)
+    print(user[:500])

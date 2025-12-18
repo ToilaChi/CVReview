@@ -101,6 +101,12 @@ public class UploadCVService {
             throw new CustomException(ErrorCode.UNAUTHORIZED_ACTION);
         }
 
+        String candidateId = extractUserId(request);
+        CandidateCV candidateCV = candidateCVRepository.findByCandidateId(candidateId);
+        if(candidateCV != null) {
+            throw new CustomException(ErrorCode.DUPLICATE_CV);
+        }
+
         String userId = extractUserId(request);
 
         if (file == null || file.isEmpty()) {

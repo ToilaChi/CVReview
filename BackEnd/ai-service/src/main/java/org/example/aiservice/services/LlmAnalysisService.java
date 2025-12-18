@@ -24,28 +24,35 @@ import java.util.List;
 @Component
 @RequiredArgsConstructor
 public class LlmAnalysisService {
-    @Value("${gemini.api-key}")
+    @Value("${groq.api-key}")
     private String apiKey;
 
-    private static final String GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=%s";
+    private static final String GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
+
+    // Các model Groq có thể dùng:
+    // - llama-3.3-70b-versatile (mới nhất, khuyến nghị)
+    // - llama-3.1-70b-versatile
+    // - llama-3.1-8b-instant (nhanh nhất)
+    // - mixtral-8x7b-32768
+    private static final String MODEL = "llama-3.3-70b-versatile";
 
     public CVAnalysisResult analyze(CVAnalysisRequest req) {
         try {
             String prompt = buildPrompt(req.getJdText(), req.getCvText());
 
-            String response = callGemini(prompt, req.getCvId());
-            log.info("[LLM] Raw Gemini response: {}", response);
+            String response = callGroq(prompt, req.getCvId());
+            log.info("[LLM-GROQ] Raw Groq response: {}", response);
 
-            // Parse Json
-            CVAnalysisResult cvAnalysisResult = parseGeminiResponse(response);
+            // Parse JSON
+            CVAnalysisResult cvAnalysisResult = parseGroqResponse(response);
             cvAnalysisResult.setCvId(req.getCvId());
             cvAnalysisResult.setBatchId(req.getBatchId());
             cvAnalysisResult.setAnalyzedAt(LocalDateTime.now());
 
             return cvAnalysisResult;
         } catch (Exception e) {
-            log.error("[LLM] Error analyzing CV {}: {}", req.getCvId(), e.getMessage(), e);
-            throw new RuntimeException("Gemini analysis failed", e);
+            log.error("[LLM-GROQ] Error analyzing CV {}: {}", req.getCvId(), e.getMessage(), e);
+            throw new RuntimeException("Groq analysis failed", e);
         }
     }
 
@@ -85,24 +92,29 @@ public class LlmAnalysisService {
            \s""".formatted(jd, cv);
     }
 
-    private String callGemini(String prompt, int cvId) throws IOException, InterruptedException {
+    private String callGroq(String prompt, int cvId) throws IOException, InterruptedException {
         HttpClient client = HttpClient.newHttpClient();
 
+        // Groq sử dụng format OpenAI-compatible
         String requestBody = """
             {
-              "contents": [
+              "model": "%s",
+              "messages": [
                 {
-                  "parts": [
-                    {"text": "%s"}
-                  ]
+                  "role": "user",
+                  "content": %s
                 }
-              ]
+              ],
+              "temperature": 0.3,
+              "max_tokens": 2000,
+              "response_format": {"type": "json_object"}
             }
-            """.formatted(escapeJson(prompt));
+            """.formatted(MODEL, escapeJsonContent(prompt));
 
         HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(String.format(GEMINI_URL, apiKey)))
+                .uri(URI.create(GROQ_URL))
                 .header("Content-Type", "application/json")
+                .header("Authorization", "Bearer " + apiKey)
                 .POST(HttpRequest.BodyPublishers.ofString(requestBody))
                 .build();
 
@@ -111,43 +123,41 @@ public class LlmAnalysisService {
 
         // Check for API errors
         if (response.statusCode() != 200) {
-            log.error("[LLM] Gemini API error for cvId={}: status={}, body={}",
+            log.error("[LLM-GROQ] Groq API error for cvId={}: status={}, body={}",
                     cvId, response.statusCode(), body);
-            throw new RuntimeException("Gemini API returned status " + response.statusCode());
+
+            // Parse error message
+            try {
+                JSONObject errorJson = new JSONObject(body);
+                String errorMessage = errorJson.getJSONObject("error").getString("message");
+                throw new RuntimeException("Groq API error: " + errorMessage);
+            } catch (Exception e) {
+                throw new RuntimeException("Groq API returned status " + response.statusCode());
+            }
         }
 
-        // Check for quota exceeded in response body
-        if (body.contains("Quota exceeded") || body.contains("quota_exceeded")) {
-            log.error("[LLM] Quota exceeded for cvId={}", cvId);
-            throw new RuntimeException("Gemini API quota exceeded - will retry via RabbitMQ");
+        // Check for rate limit (Groq trả về 429)
+        if (body.contains("rate_limit_exceeded") || body.contains("Rate limit")) {
+            log.error("[LLM-GROQ] Rate limit hit for cvId={}", cvId);
+            throw new RuntimeException("Groq API rate limited - will retry via RabbitMQ");
         }
-
-        // Check for rate limit
-        if (body.contains("Rate limit") || body.contains("rate_limit")) {
-            log.error("[LLM] Rate limit hit for cvId={}", cvId);
-            throw new RuntimeException("Gemini API rate limited - will retry via RabbitMQ");
-        }
-
-//        if (body.contains("Quota exceeded")) {
-//            log.warn("[LLM] Quota exceeded for cvId {}, retrying after 10s...", cvId);
-//            Thread.sleep(10000);
-//            return client.send(request, HttpResponse.BodyHandlers.ofString()).body();
-//        }
 
         return body;
     }
 
-    private CVAnalysisResult parseGeminiResponse(String rawResponse) {
+    private CVAnalysisResult parseGroqResponse(String rawResponse) {
         try {
             JSONObject json = new JSONObject(rawResponse);
-            String text = json
-                    .getJSONArray("candidates")
-                    .getJSONObject(0)
-                    .getJSONObject("content")
-                    .getJSONArray("parts")
-                    .getJSONObject(0)
-                    .getString("text");
 
+            // Groq format: response.choices[0].message.content
+            String text = json
+                    .getJSONArray("choices")
+                    .getJSONObject(0)
+                    .getJSONObject("message")
+                    .getString("content");
+
+            // Groq với response_format: json_object sẽ trả về pure JSON
+            // nhưng vẫn cần extract để chắc chắn
             text = extractJson(text);
 
             JSONObject resultJson = new JSONObject(text);
@@ -157,15 +167,19 @@ public class LlmAnalysisService {
             result.setFeedback(resultJson.optString("feedback", ""));
             result.setSkillMatch(jsonArrayToList(resultJson.optJSONArray("skillMatch")));
             result.setSkillMiss(jsonArrayToList(resultJson.optJSONArray("skillMiss")));
+
+            log.info("[LLM-GROQ] Parsed result: score={}, skillMatch={}, skillMiss={}",
+                    result.getScore(), result.getSkillMatch().size(), result.getSkillMiss().size());
+
             return result;
 
         } catch (Exception ex) {
-            log.error("[LLM] Failed to parse Gemini response: {}", ex.getMessage());
-            throw new RuntimeException("Failed to parse Gemini response: " + ex.getMessage(), ex);
+            log.error("[LLM-GROQ] Failed to parse Groq response: {}", ex.getMessage());
+            throw new RuntimeException("Failed to parse Groq response: " + ex.getMessage(), ex);
         }
     }
 
-    // --- HELPER METHOD ---
+    // --- HELPER METHODS ---
 
     private List<String> jsonArrayToList(JSONArray arr) {
         List<String> list = new ArrayList<>();
@@ -177,15 +191,31 @@ public class LlmAnalysisService {
         return list;
     }
 
-    private String escapeJson(String s) {
-        return s.replace("\"", "\\\"").replace("\n", "\\n");
+    private String escapeJsonContent(String s) {
+        // Escape cho JSON string value
+        return new JSONObject()
+                .put("temp", s)
+                .toString()
+                .replaceAll("^\\{\"temp\":", "")
+                .replaceAll("\\}$", "");
     }
 
     private String extractJson(String text) {
         text = text.trim();
+
+        // Remove markdown code blocks nếu có
         if (text.startsWith("```")) {
             text = text.replaceAll("^```[a-zA-Z]*\\n?", "").replaceAll("```$", "");
         }
+
+        // Tìm JSON object đầu tiên
+        int start = text.indexOf('{');
+        int end = text.lastIndexOf('}');
+
+        if (start != -1 && end != -1 && end > start) {
+            text = text.substring(start, end + 1);
+        }
+
         return text.trim();
     }
 }

@@ -31,8 +31,9 @@ class ChatState(TypedDict):
     conversation_history: Optional[List[Dict[str, str]]]
     
     # Processing
-    intent: Literal["jd_search", "jd_analysis", "general"]
+    intent: Literal["jd_search", "jd_analysis", "cv_analysis", "general"]
     intent_confidence: float
+    domain: str
     
     # Retrieved context
     cv_context: List[Dict[str, Any]]
@@ -55,17 +56,18 @@ class ChatState(TypedDict):
 
 def classify_intent_node(state: ChatState) -> ChatState:
     """
-    Node 1: Classify user intent
+    Node 1: Classify user intent with two-stage approach
     """
     query = state["query"]
     
     # Classify
     result = intent_classifier.classify(query)
     
-    print(f"Intent: {result['intent']} (confidence: {result['confidence']:.2f})")
+    print(f"Intent: {result['intent']} (confidence: {result['confidence']:.2f}, domain: {result['domain']})")
     
     state["intent"] = result["intent"]
     state["intent_confidence"] = result["confidence"]
+    state["domain"] = result["domain"]
     
     return state
 
@@ -79,6 +81,14 @@ async def retrieve_context_node(state: ChatState) -> ChatState:
     
     print(f"Retrieving context for intent: {intent}")
     
+    # Determine top_k based on intent
+    if intent == "cv_analysis":
+        top_k = 5  # More CV chunks for detailed analysis
+    elif intent == "jd_search":
+        top_k = 3  # Fewer JDs for recommendations
+    else:  # jd_analysis
+        top_k = 2  # Usually analyzing 1 specific JD
+    
     # Retrieve based on intent
     result = await retriever.retrieve_for_intent(
         query=query,
@@ -86,7 +96,7 @@ async def retrieve_context_node(state: ChatState) -> ChatState:
         candidate_id=state.get("candidate_id"),
         cv_id=state.get("cv_id"),
         jd_id=state.get("jd_id"),
-        top_k=5 if intent == "cv_analysis" else 3,
+        top_k=top_k,
         score_threshold=0.5
     )
     
@@ -108,6 +118,7 @@ def build_prompts_node(state: ChatState) -> ChatState:
     intent = state["intent"]
     cv_context = state["cv_context"]
     jd_context = state["jd_context"]
+    conversation_history = state.get("conversation_history")
     
     print(f"Building prompts for intent: {intent}")
     
@@ -116,7 +127,8 @@ def build_prompts_node(state: ChatState) -> ChatState:
         intent=intent,
         query=query,
         cv_context=cv_context,
-        jd_context=jd_context
+        jd_context=jd_context,
+        conversation_history=conversation_history
     )
     
     state["system_prompt"] = system_prompt
@@ -169,6 +181,7 @@ def format_response_node(state: ChatState) -> ChatState:
     state["metadata"] = {
         "intent": state["intent"],
         "intent_confidence": state["intent_confidence"],
+        "domain": state["domain"],
         "cv_chunks_used": len(state["cv_context"]),
         "jd_docs_used": len(state["jd_context"]),
         "retrieval_stats": state["retrieval_stats"]
@@ -183,18 +196,25 @@ def format_response_node(state: ChatState) -> ChatState:
 
 def should_retrieve(state: ChatState) -> Literal["retrieve", "skip_retrieve"]:
     """
-    Decide if retrieval is needed based on intent
+    Decide if retrieval is needed based on intent and domain
+    
+    New logic:
+    - Always retrieve for career intents (jd_search, jd_analysis, cv_analysis)
+    - Only skip for general chitchat with high confidence
     """
     intent = state["intent"]
+    domain = state.get("domain", "career")
+    confidence = state["intent_confidence"]
     
-    # Luôn retrieve cho jd_search và jd_analysis
-    if intent in ["jd_search", "jd_analysis"]:
+    # Career intents ALWAYS retrieve
+    if intent in ["jd_search", "jd_analysis", "cv_analysis"]:
         return "retrieve"
     
-    # Skip cho general với confidence thấp
-    if intent == "general" and state["intent_confidence"] < 0.5:
+    # General with high confidence → skip
+    if intent == "general" and domain == "general" and confidence > 0.7:
         return "skip_retrieve"
     
+    # Default: retrieve (safe approach)
     return "retrieve"
 
 
@@ -207,7 +227,7 @@ def create_career_counselor_graph():
     Create the LangGraph workflow
     
     Flow:
-    1. Classify Intent
+    1. Classify Intent (two-stage: domain → career intent)
     2. (Conditional) Retrieve Context
     3. Build Prompts
     4. LLM Reasoning
@@ -277,6 +297,7 @@ class CareerChatbot:
             candidate_id: Optional candidate UUID
             cv_id: Optional specific CV ID
             jd_id: Optional specific JD ID
+            conversation_history: Optional list of previous turns
             
         Returns:
             Dict with answer and metadata
@@ -312,31 +333,3 @@ class CareerChatbot:
 
 # Global instance
 chatbot = CareerChatbot()
-
-
-# # ============================================================
-# # TESTING
-# # ============================================================
-
-# if __name__ == "__main__":
-#     import asyncio
-    
-#     async def test():
-#         bot = CareerChatbot()
-        
-#         # Test query
-#         result = await bot.chat(
-#             query="What Python skills does this candidate have?",
-#             candidate_id="02e0d5f5-bf95-11f0-a427-de261a5dec2c"
-#         )
-        
-#         print("\n" + "="*80)
-#         print("FINAL ANSWER:")
-#         print("="*80)
-#         print(result["answer"])
-#         print("\n" + "="*80)
-#         print("METADATA:")
-#         print("="*80)
-#         print(result["metadata"])
-    
-#     asyncio.run(test())
