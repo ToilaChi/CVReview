@@ -9,8 +9,7 @@ class Settings(BaseSettings):
     DEBUG: bool = True
     
     # Embedding Model
-    EMBEDDING_MODEL_NAME: str = "BAAI/bge-small-en-v1.5"  # 384 dims, good for semantic search
-    # Alternative: "sentence-transformers/all-MiniLM-L6-v2" (faster, lighter)
+    EMBEDDING_MODEL_NAME: str = "BAAI/bge-small-en-v1.5"  
     EMBEDDING_DIMENSION: int = 384
     BATCH_SIZE: int = 100  # Batch size for Qdrant upsert
     
