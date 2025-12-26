@@ -242,6 +242,13 @@ public class PositionService {
         DriveFileInfo newFileInfo = null;
 
         if (isJDUpdated) {
+            try {
+                String url = embeddingServiceUrl + "/jd/" + positionId;
+                restTemplate.delete(url);
+                System.out.println("Deleted old embeddings for position: " + positionId);
+            } catch (Exception e) {
+                System.err.println("Failed to delete old embeddings for position " + positionId + ": " + e.getMessage());
+            }
 
             newFileInfo = storageService.uploadJD(file, finalName, finalLang, finalLevel);
 

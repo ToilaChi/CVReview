@@ -1,6 +1,7 @@
 package org.example.recruitmentservice.services;
 
 import org.example.recruitmentservice.dto.response.DriveFileInfo;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.transaction.annotation.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -22,6 +23,7 @@ import org.example.recruitmentservice.repository.PositionRepository;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.data.domain.*;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestTemplate;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDate;
@@ -40,6 +42,10 @@ public class CandidateCVService {
     private final CVAnalysisRepository cvAnalysisRepository;
     private final StorageService storageService;
     private final RabbitTemplate rabbitTemplate;
+    private final RestTemplate restTemplate;
+
+    @Value("${EMBEDDING_SERVICE_URL}")
+    private String embeddingServiceUrl;
 
     public ApiResponse<CandidateCVResponse> getCVDetail(int cvId) {
         CandidateCV cv = candidateCVRepository.findById(cvId)
@@ -131,6 +137,14 @@ public class CandidateCVService {
 
         // Upload new file
         try {
+            try {
+                String url = embeddingServiceUrl + "/cv/" + cvId;
+                restTemplate.delete(url);
+                System.out.println("Deleted old embeddings for CV: " + cvId);
+            } catch (Exception e) {
+                System.err.println("Failed to delete old embeddings for CV " + cvId + ": " + e.getMessage());
+            }
+
             String oldFileId = cv.getDriveFileId();
             if (oldFileId != null && !oldFileId.isEmpty()) {
                 storageService.deleteFile(oldFileId);  // deleteFile nhận fileId
@@ -193,6 +207,17 @@ public class CandidateCVService {
             CandidateCV cv = candidateCVRepository.findById(cvId)
                     .orElseThrow(() -> new CustomException(ErrorCode.CV_NOT_FOUND));
 
+            // Xóa embeddings trên Python service
+            try {
+                String url = embeddingServiceUrl + "/cv/" + cvId;
+                restTemplate.delete(url);
+                System.out.println("Deleted embeddings for candidate CV: " + cvId);
+            } catch (Exception e) {
+                System.err.println("Failed to delete embeddings for candidate CV " + cvId + ": " + e.getMessage());
+                // Continue anyway - không block việc xóa candidate CV
+            }
+
+            // Xóa file trên GG Drive
             try {
                 if (cv.getCvPath() != null) {
                     storageService.deleteFile(cv.getCvPath());
