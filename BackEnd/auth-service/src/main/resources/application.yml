@@ -9,11 +9,11 @@ server:
   port: 8081
   tomcat:
     connection-timeout: 90000
-    max-http-post-size: 52428800  # 50MB
+    max-http-form-post-size: 52428800  # 50MB
     threads:
       max: 200
       min-spare: 10
-  max-http-header-size: 65536
+  max-http-request-header-size: 65536
 
 management:
   endpoints:

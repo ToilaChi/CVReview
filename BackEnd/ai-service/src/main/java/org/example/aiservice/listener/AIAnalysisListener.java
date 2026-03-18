@@ -10,11 +10,7 @@ import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.messaging.handler.annotation.Payload;
-import org.springframework.retry.annotation.Backoff;
-import org.springframework.retry.annotation.Retryable;
 import org.springframework.stereotype.Component;
-
-import java.time.LocalDateTime;
 
 @Slf4j
 @Component
@@ -25,9 +21,10 @@ public class AIAnalysisListener {
 
     @RabbitListener(queues = RabbitMQConfig.CV_ANALYZE_QUEUE, containerFactory = "rabbitListenerContainerFactory")
     public void handleAnalyzeRequest(@Payload CVAnalysisRequest request,
-                                     @Header(value = "x-retry-count", required = false) Integer retryCount) {
+            @Header(value = "x-retry-count", required = false) Integer retryCount) {
 
-        if (retryCount == null) retryCount = 0;
+        if (retryCount == null)
+            retryCount = 0;
 
         log.info("[AI-LISTENER] Processing cvId={}, retry attempt={}/3",
                 request.getCvId(), retryCount);
@@ -40,9 +37,7 @@ public class AIAnalysisListener {
             rabbitTemplate.convertAndSend(
                     RabbitMQConfig.AI_EXCHANGE,
                     RabbitMQConfig.CV_ANALYSIS_RESULT_ROUTING_KEY,
-                    result
-            );
-
+                    result);
 
             log.info("[AI-LISTENER] Successfully published analysis result: cvId={}, batchId={}, score={}",
                     request.getCvId(), request.getBatchId(), result.getScore());

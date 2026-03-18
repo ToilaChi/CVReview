@@ -1,19 +1,19 @@
-package org.example.authservice.services;
+// package org.example.authservice.services;
 
-import org.springframework.stereotype.Service;
+// import org.springframework.stereotype.Service;
+// import java.util.Set;
+// import java.util.concurrent.ConcurrentHashMap;
 
-import java.util.HashSet;
-import java.util.Set;
+// @Service
+// public class TokenBlackListService {
 
-@Service
-public class TokenBlackListService {
-    private final Set<String> blacklistedTokens = new HashSet<>();
+// private final Set<String> blacklistedTokens = ConcurrentHashMap.newKeySet();
 
-    public void addBlacklistToken (String token) {
-        blacklistedTokens.add(token);
-    }
+// public void addBlacklistToken(String token) {
+// blacklistedTokens.add(token);
+// }
 
-    public boolean isBlacklisted(String token) {
-        return blacklistedTokens.contains(token);
-    }
-}
+// public boolean isBlacklisted(String token) {
+// return blacklistedTokens.contains(token);
+// }
+// }

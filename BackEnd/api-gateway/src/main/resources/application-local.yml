@@ -9,6 +9,11 @@ spring:
           httpclient:
             connect-timeout: 30000
             response-timeout: 300s
+            pool:
+              type: fixed
+              max-connections: 500
+              pending-acquire-max-count: 1000
+              pending-acquire-timeout: 10000
 
           routes:
             - id: auth-service
@@ -53,6 +58,23 @@ spring:
   http:
     codecs:
       max-in-memory-size: 52428800  # 50MB in bytes
+
+resilience4j:
+  timelimiter:
+    instances:
+      authServiceCircuitBreaker:
+        timeout-duration: 10s        
+        cancel-running-future: true
+  circuitbreaker:
+    instances:
+      authServiceCircuitBreaker:
+        sliding-window-size: 20
+        failure-rate-threshold: 60
+        wait-duration-in-open-state: 10s
+        minimum-number-of-calls: 10
+        permitted-number-of-calls-in-half-open-state: 3 
+        slow-call-duration-threshold: 3s
+        slow-call-rate-threshold: 80
 
 jwt:
   secret: LJ8WPZjFNSfnoD5g+JZXSFiQaMY6gfNvBfR8w9HwT9OI0yEg2RfH2t9mpR7C2Ij7
