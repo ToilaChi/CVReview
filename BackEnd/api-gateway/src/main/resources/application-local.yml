@@ -32,27 +32,33 @@ spring:
               predicates:
                 - Path=/positions/**,/cv/**,/upload/**,/analysis/**,/tracking/**,/chunking/**
                 - Method=GET,POST,PUT,DELETE
-              filters: []
+              filters:
+                - name: CircuitBreaker
+                  args:
+                    name: defaultCircuitBreaker
+                    statusCodes: 500,502,503
 
             - id: chatbot-service
               uri: http://localhost:8085
               predicates:
                 - Path=/chatbot/**
                 - Method=GET,POST,PUT,DELETE
-              filters: []
-
-            - id: ai-service
-              uri: http://localhost:8083
-              predicates:
-                - Method=GET,POST,PUT,DELETE
-              filters: []
+              filters:
+                - name: CircuitBreaker
+                  args:
+                    name: defaultCircuitBreaker
+                    statusCodes: 500,502,503
 
             - id: embedding-service
               uri: http://localhost:8084
               predicates:
                 - Path=/jd/embed/**,/jd/re-embed/**,/cv/embed/**,/cv/re-embed/**
                 - Method=GET,POST,PUT,DELETE
-              filters: []
+              filters:
+                - name: CircuitBreaker
+                  args:
+                    name: defaultCircuitBreaker
+                    statusCodes: 500,502,503
 
   # WebFlux configuration for request body size
   http:
@@ -65,6 +71,9 @@ resilience4j:
       authServiceCircuitBreaker:
         timeout-duration: 10s        
         cancel-running-future: true
+      defaultCircuitBreaker:
+        timeout-duration: 30s        
+        cancel-running-future: true
   circuitbreaker:
     instances:
       authServiceCircuitBreaker:
@@ -74,6 +83,14 @@ resilience4j:
         minimum-number-of-calls: 10
         permitted-number-of-calls-in-half-open-state: 3 
         slow-call-duration-threshold: 3s
+        slow-call-rate-threshold: 80
+      defaultCircuitBreaker:
+        sliding-window-size: 20
+        failure-rate-threshold: 60
+        wait-duration-in-open-state: 10s
+        minimum-number-of-calls: 10
+        permitted-number-of-calls-in-half-open-state: 3 
+        slow-call-duration-threshold: 5s
         slow-call-rate-threshold: 80
 
 jwt:

@@ -32,9 +32,8 @@ public class RouterValidator {
     public Predicate<ServerHttpRequest> isSecured = request -> {
         String path = request.getURI().getPath();
 
-        // Kiểm tra xem path có bắt đầu bằng bất kỳ endpoint nào trong danh sách không
-        boolean isOpenEndpoint = openEndpoints.stream()
-                .anyMatch(path::startsWith);
+        // Kiểm tra xem path có chính xác bằng bất kỳ endpoint nào trong danh sách public hay không
+        boolean isOpenEndpoint = openEndpoints.contains(path);
 
         if (isOpenEndpoint) {
             return false;

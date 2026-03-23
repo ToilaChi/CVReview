@@ -14,7 +14,6 @@ import org.example.authservice.services.AuthService;
 import org.example.authservice.services.RefreshTokenService;
 import org.example.commonlibrary.dto.response.ApiResponse;
 import org.example.commonlibrary.dto.response.ErrorCode;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 

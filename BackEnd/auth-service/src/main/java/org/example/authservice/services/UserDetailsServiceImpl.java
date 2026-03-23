@@ -22,6 +22,7 @@ public class UserDetailsServiceImpl implements UserDetailsService {
         if (user == null) {
             throw new UsernameNotFoundException("User not found with username: " + phone);
         }
+        System.out.println("Loading user from DB...");
         return new User(user.getPhone(), user.getPassword(), new ArrayList<>());
     }
 }

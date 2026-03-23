@@ -27,20 +27,22 @@ spring:
               predicates:
                 - Path=/positions/**,/cv/**,/upload/**,/analysis/**,/tracking/**,/chunking/**
                 - Method=GET,POST,PUT,DELETE
-              filters: []
-
-            - id: ai-service
-              uri: http://ai-service:8083  # Use service name in Docker
-              predicates:
-                - Method=GET,POST,PUT,DELETE
-              filters: []
+              filters:
+                - name: CircuitBreaker
+                  args:
+                    name: defaultCircuitBreaker
+                    statusCodes: 500,502,503
 
             - id: embedding-service
               uri: http://embedding-api:8084  # Use service name in Docker
               predicates:
                 - Path=/jd/**,/cv/**
                 - Method=GET,POST,PUT,DELETE
-              filters: []
+              filters:
+                - name: CircuitBreaker
+                  args:
+                    name: defaultCircuitBreaker
+                    statusCodes: 500,502,503
             # Chatbot Service
             - id: chatbot-service
               uri: http://chatbot-service:8085
@@ -48,6 +50,10 @@ spring:
                 - Path=/chatbot/**
               filters:
                 - RewritePath=/chatbot/(?<segment>.*), /api/v1/$\{segment}
+                - name: CircuitBreaker
+                  args:
+                    name: defaultCircuitBreaker
+                    statusCodes: 500,502,503
 
   # WebFlux configuration for request body size
   http:

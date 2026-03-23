@@ -35,11 +35,6 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
         String path = request.getURI().getPath();
         String uri = request.getURI().toString();
 
-        System.out.println("=== Gateway Filter Debug ===");
-        System.out.println("Path: " + path);
-        System.out.println("Full URI: " + uri);
-        System.out.println("Method: " + request.getMethod());
-
         // Nếu endpoint KHÔNG cần bảo mật → forward luôn
         if (!routerValidator.isSecured.test(request)) {
             System.out.println("Open endpoint, forwarding to downstream: " + path);
@@ -89,11 +84,6 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
             String phone = jwtUtil.extractPhone(token);
             String role = jwtUtil.extractRole(token);
             String id = jwtUtil.extractId(token);
-
-            if (path.startsWith("/chatbot") && "HR".equalsIgnoreCase(role)) {
-                System.out.println("HR role blocked from chatbot service: " + path);
-                return onError(exchange, ErrorCode.FORBIDDEN);
-            }
 
             System.out.println("JWT valid - Id: " + id + ", Phone: " + phone + ", Role: " + role);
             System.out.println("Forwarding to downstream: " + uri);
@@ -161,8 +151,7 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
             String fallbackJson = String.format(
                     "{\"status\":%d,\"message\":\"%s\",\"data\":null}",
                     errorCode.getCode(),
-                    errorCode.getMessage()
-            );
+                    errorCode.getMessage());
 
             byte[] bytes = fallbackJson.getBytes(StandardCharsets.UTF_8);
             DataBuffer buffer = response.bufferFactory().wrap(bytes);
