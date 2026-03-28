@@ -53,7 +53,7 @@ public class AnalysisService {
 
         List<CandidateCV> cvs;
 
-        if(cvIds == null || cvIds.isEmpty()) {
+        if (cvIds == null || cvIds.isEmpty()) {
             cvs = candidateCVRepository.findByPositionIdAndCvStatus(positionId, CVStatus.PARSED);
             log.info("[AI_ANALYSIS] Auto-select all CVs of Position {} -> total {}", positionId, cvs.size());
         } else {
@@ -74,8 +74,7 @@ public class AnalysisService {
                 batchId,
                 positionId,
                 cvs.size(),
-                BatchType.SCORING
-        );
+                BatchType.SCORING);
 
         List<List<CandidateCV>> batches = partitionList(cvs, batchSize);
         int batchIndex = 0;
@@ -105,8 +104,7 @@ public class AnalysisService {
                 rabbitTemplate.convertAndSend(
                         RabbitMQConfig.AI_EXCHANGE,
                         RabbitMQConfig.CV_ANALYZE_ROUTING_KEY,
-                        request
-                );
+                        request);
 
                 log.info("[AI_ANALYSIS] Sent CV {} to queue (batch={})", cv.getId(), subBatchId);
             }
@@ -214,8 +212,7 @@ public class AnalysisService {
         return new ApiResponse<>(
                 ErrorCode.SUCCESS.getCode(),
                 "The retry request was sent successfully. Please wait a moment.",
-                response
-        );
+                response);
     }
 
     @Transactional
@@ -249,8 +246,7 @@ public class AnalysisService {
                 newBatchId,
                 firstPositionId,
                 cvs.size(),
-                BatchType.SCORING
-        );
+                BatchType.SCORING);
 
         int successCount = 0;
         int failCount = 0;
@@ -317,12 +313,11 @@ public class AnalysisService {
         return new ApiResponse<>(
                 ErrorCode.SUCCESS.getCode(),
                 "The retry request was sent successfully. Please wait a moment.",
-                response
-        );
+                response);
     }
 
     @Transactional
-    public ApiResponse<CandidateCVResponse>  manualScore(ManualScoreRequest request) {
+    public ApiResponse<CandidateCVResponse> manualScore(ManualScoreRequest request) {
         CandidateCV cv = candidateCVRepository.findById(request.getCvId())
                 .orElseThrow(() -> new CustomException(ErrorCode.CV_NOT_FOUND));
 
@@ -358,7 +353,8 @@ public class AnalysisService {
 
         analysis.setCandidateCV(cv);
         analysis.setPositionId(cv.getPosition().getId());
-        analysis.setPositionName(cv.getPosition().getName() + " " + cv.getPosition().getLanguage() + " " + cv.getPosition().getLevel());
+        analysis.setPositionName(
+                cv.getPosition().getName() + " " + cv.getPosition().getLanguage() + " " + cv.getPosition().getLevel());
         analysis.setScore(request.getScore());
         analysis.setFeedback(request.getFeedback());
         analysis.setSkillMatch(request.getSkillMatch());
@@ -372,8 +368,7 @@ public class AnalysisService {
         return new ApiResponse<>(
                 ErrorCode.SUCCESS.getCode(),
                 "CV scored manually successfully",
-                toResponse(cv)
-        );
+                toResponse(cv));
     }
 
     @Transactional
@@ -419,20 +414,6 @@ public class AnalysisService {
             parts.add(list.subList(i, Math.min(list.size(), i + size)));
         }
         return parts;
-    }
-
-    private void updateBatchCountersForRetry(String batchId) {
-        ProcessingBatch batch = processingBatchRepository.findByBatchId(batchId)
-                .orElseThrow(() -> new CustomException(ErrorCode.BATCH_NOT_FOUND));
-
-        batch.setFailedCv(batch.getFailedCv() - 1);
-
-        if (batch.getStatus() == BatchStatus.COMPLETED) {
-            batch.setStatus(BatchStatus.PROCESSING);
-            batch.setCompletedAt(null);
-        }
-
-        processingBatchRepository.save(batch);
     }
 
     private void updateBatchCountersForManualScore(String batchId) {

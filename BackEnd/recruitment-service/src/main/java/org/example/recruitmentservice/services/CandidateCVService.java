@@ -31,7 +31,6 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Optional;
-import java.util.UUID;
 
 @Slf4j
 @Service
@@ -57,7 +56,8 @@ public class CandidateCVService {
         CandidateCVResponse response = CandidateCVResponse.builder()
                 .cvId(cv.getId())
                 .positionId(cv.getPosition().getId())
-                .positionName(cv.getPosition().getName() + " " + cv.getPosition().getLanguage() + " " + cv.getPosition().getLevel())
+                .positionName(cv.getPosition().getName() + " " + cv.getPosition().getLanguage() + " "
+                        + cv.getPosition().getLevel())
                 .name(cv.getName())
                 .email(cv.getEmail())
                 .batchId(cv.getBatchId())
@@ -78,11 +78,11 @@ public class CandidateCVService {
         return new ApiResponse<>(
                 ErrorCode.SUCCESS.getCode(),
                 "CV detail retrieved successfully",
-                response
-        );
+                response);
     }
 
-    public ApiResponse<PageResponse<CandidateCVResponse>> getAllCVsByPositionId(Integer positionId, List<CVStatus> statuses, int page, int size) {
+    public ApiResponse<PageResponse<CandidateCVResponse>> getAllCVsByPositionId(Integer positionId,
+            List<CVStatus> statuses, int page, int size) {
         Positions position = positionRepository.findById(positionId)
                 .orElseThrow(() -> new CustomException(ErrorCode.POSITION_NOT_FOUND));
 
@@ -93,24 +93,24 @@ public class CandidateCVService {
         Pageable pageable = PageRequest.of(page, size, Sort.by("updatedAt").descending());
         Page<CandidateCV> cvPage = candidateCVRepository.findByPositionIdAndCvStatusIn(positionId, statuses, pageable);
 
-        Page<CandidateCVResponse> mappedPage = cvPage.map(cv ->
-                CandidateCVResponse.builder()
-                        .cvId(cv.getId())
-                        .positionId(cv.getPosition().getId())
-                        .positionName(cv.getPosition().getName() + " " + cv.getPosition().getLanguage() + " " + cv.getPosition().getLevel())
-                        .batchId(cv.getBatchId())
-                        .status(cv.getCvStatus())
-                        .name(cv.getName())
-                        .email(cv.getEmail())
-                        .updatedAt(cv.getUpdatedAt())
-                        .filePath(cv.getCvPath())
-                        .driveFileUrl(cv.getDriveFileUrl())
-                        .build()
-        );
+        Page<CandidateCVResponse> mappedPage = cvPage.map(cv -> CandidateCVResponse.builder()
+                .cvId(cv.getId())
+                .positionId(cv.getPosition().getId())
+                .positionName(cv.getPosition().getName() + " " + cv.getPosition().getLanguage() + " "
+                        + cv.getPosition().getLevel())
+                .batchId(cv.getBatchId())
+                .status(cv.getCvStatus())
+                .name(cv.getName())
+                .email(cv.getEmail())
+                .updatedAt(cv.getUpdatedAt())
+                .filePath(cv.getCvPath())
+                .driveFileUrl(cv.getDriveFileUrl())
+                .build());
 
         return ApiResponse.<PageResponse<CandidateCVResponse>>builder()
                 .statusCode(ErrorCode.SUCCESS.getCode())
-                .message("Fetched all CVs for position: " + position.getName() + " " + position.getLanguage() + " " + position.getLevel())
+                .message("Fetched all CVs for position: " + position.getName() + " " + position.getLanguage() + " "
+                        + position.getLevel())
                 .data(PageUtil.toPageResponse(mappedPage))
                 .timestamp(LocalDateTime.now())
                 .build();
@@ -147,7 +147,7 @@ public class CandidateCVService {
 
             String oldFileId = cv.getDriveFileId();
             if (oldFileId != null && !oldFileId.isEmpty()) {
-                storageService.deleteFile(oldFileId);  // deleteFile nhận fileId
+                storageService.deleteFile(oldFileId); // deleteFile nhận fileId
             }
 
             Positions position = cv.getPosition();
@@ -174,10 +174,9 @@ public class CandidateCVService {
 
             CVUploadEvent event = new CVUploadEvent(
                     cv.getId(),
-                    driveFileInfo.getFileId(),  // Gửi fileId
+                    driveFileInfo.getFileId(), // Gửi fileId
                     position != null ? position.getId() : null,
-                    cv.getBatchId()
-            );
+                    cv.getBatchId());
             rabbitTemplate.convertAndSend(RabbitMQConfig.CV_UPLOAD_QUEUE, event);
 
         } catch (CustomException e) {

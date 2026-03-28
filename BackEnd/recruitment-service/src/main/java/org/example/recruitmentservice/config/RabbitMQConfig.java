@@ -225,6 +225,10 @@ public class RabbitMQConfig {
         return new Jackson2JsonMessageConverter();
     }
 
+    /**
+     * Default factory – dùng cho các Queue xử lý nhanh (scoring result, JD parsed…).
+     * concurrency nhỏ, có RetryTemplate, có transaction.
+     */
     @Bean
     public SimpleRabbitListenerContainerFactory rabbitListenerContainerFactory(
             ConnectionFactory connectionFactory,
@@ -242,6 +246,31 @@ public class RabbitMQConfig {
         factory.setDefaultRequeueRejected(false);
         factory.setChannelTransacted(true);
         factory.setTransactionManager(transactionManager);
+        return factory;
+    }
+
+    /**
+     * Factory chuyên dụng cho CV Parsing Queue (cv.upload.queue).
+     * Mỗi CV parse mất 10-60s (polling LlamaParse API) nên cần nhiều thread song song.
+     * - concurrency=5 / max=10: xử lý 5-10 CVs đồng thời.
+     * - prefetchCount=1: mỗi thread chỉ nhận 1 message, tránh tồn đọng.
+     * - KHÔNG dùng RetryTemplate: logic retry/error được xử lý thủ công bên trong
+     *   LlamaParseClient (throw exception -> RabbitMQ sẽ route sang DLQ theo x-dead-letter).
+     * - KHÔNG transaction: vì operation chính là HTTP call ra ngoài (LlamaParse API),
+     *   không có DB hoặc Rabbit operation cần rollback trong cùng 1 transaction boundary.
+     */
+    @Bean
+    public SimpleRabbitListenerContainerFactory cvParsingContainerFactory(
+            ConnectionFactory connectionFactory,
+            MessageConverter messageConverter) {
+
+        SimpleRabbitListenerContainerFactory factory = new SimpleRabbitListenerContainerFactory();
+        factory.setConnectionFactory(connectionFactory);
+        factory.setMessageConverter(messageConverter);
+        factory.setConcurrentConsumers(5);
+        factory.setMaxConcurrentConsumers(10);
+        factory.setPrefetchCount(1);
+        factory.setDefaultRequeueRejected(false);
         return factory;
     }
 

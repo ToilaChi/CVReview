@@ -46,7 +46,6 @@ public class GoogleDriveService {
 
     private Drive driveService;
 
-    private static final JsonFactory JSON_FACTORY = GsonFactory.getDefaultInstance();
     private static final String APPLICATION_NAME = "Recruitment Service";
 
     @PostConstruct
@@ -59,7 +58,7 @@ public class GoogleDriveService {
                 .setTransport(transport)
                 .setJsonFactory(jsonFactory)
                 .setClientAuthentication(new ClientParametersAuthentication(clientId, clientSecret))
-                .setTokenServerUrl(new GenericUrl("https://oauth2.googleapis.com/token")) // <-- important
+                .setTokenServerUrl(new GenericUrl("https://oauth2.googleapis.com/token"))
                 .build();
 
         credential.setRefreshToken(refreshToken);
@@ -79,7 +78,7 @@ public class GoogleDriveService {
     }
 
     /**
-     Upload file lên Google Drive
+     * Upload file lên Google Drive
      */
     public DriveFileInfo uploadFile(MultipartFile multipartFile, String folderPath) {
         try {
@@ -97,8 +96,7 @@ public class GoogleDriveService {
             // Upload lên Drive
             FileContent mediaContent = new FileContent(
                     multipartFile.getContentType(),
-                    tempFile
-            );
+                    tempFile);
 
             File uploadedFile = driveService.files().create(fileMetadata, mediaContent)
                     .setFields("id, name, webViewLink, webContentLink")
@@ -113,8 +111,7 @@ public class GoogleDriveService {
                     uploadedFile.getId(),
                     uploadedFile.getName(),
                     uploadedFile.getWebViewLink(),
-                    uploadedFile.getWebContentLink()
-            );
+                    uploadedFile.getWebContentLink());
 
         } catch (Exception e) {
             log.error("Failed to upload file to Drive: {}", e.getMessage());
@@ -124,6 +121,7 @@ public class GoogleDriveService {
 
     /**
      * Download file từ Drive về local temp
+     * 
      * @param fileId Google Drive file ID
      * @return Absolute path của file temp
      */
@@ -198,8 +196,7 @@ public class GoogleDriveService {
                     updatedFile.getId(),
                     updatedFile.getName(),
                     updatedFile.getWebViewLink(),
-                    updatedFile.getWebContentLink()
-            );
+                    updatedFile.getWebContentLink());
 
         } catch (Exception e) {
             log.error("Failed to move file on Drive: {}", e.getMessage());
@@ -219,7 +216,8 @@ public class GoogleDriveService {
         String currentParentId = rootFolderId;
 
         for (String folderName : folders) {
-            if (folderName.trim().isEmpty()) continue;
+            if (folderName.trim().isEmpty())
+                continue;
 
             // Kiểm tra folder đã tồn tại chưa
             String existingFolderId = findFolder(folderName, currentParentId);
@@ -252,8 +250,7 @@ public class GoogleDriveService {
         String query = String.format(
                 "name='%s' and mimeType='application/vnd.google-apps.folder' and '%s' in parents and trashed=false",
                 folderName.replace("'", "\\'"),
-                parentId
-        );
+                parentId);
 
         FileList result = driveService.files().list()
                 .setQ(query)

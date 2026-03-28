@@ -34,10 +34,12 @@ public class ProcessingBatch {
     @Column
     private Integer successCv;
 
-    @Column Integer failedCv;
+    @Column
+    Integer failedCv;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
+    @Builder.Default
     private BatchStatus status = BatchStatus.PROCESSING;
 
     @Enumerated(EnumType.STRING)

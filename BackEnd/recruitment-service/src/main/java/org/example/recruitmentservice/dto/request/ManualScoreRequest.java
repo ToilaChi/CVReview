@@ -7,7 +7,6 @@ import lombok.NoArgsConstructor;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
-import java.util.List;
 
 @Data
 @NoArgsConstructor
@@ -25,4 +24,3 @@ public class ManualScoreRequest {
 
     private String skillMiss;
 }
-

@@ -23,6 +23,7 @@ public class Positions {
     private String hrId;
 
     @OneToMany(mappedBy = "position", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    @Builder.Default
     private List<CandidateCV> candidateCVs = new ArrayList<>();
 
     private String name;

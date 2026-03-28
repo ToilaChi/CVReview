@@ -2,7 +2,6 @@ package org.example.recruitmentservice.services.metadata.extractors;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.example.recruitmentservice.services.chunking.config.ChunkingConfig;
 import org.springframework.stereotype.Component;
 
 import java.util.regex.Matcher;
@@ -18,8 +17,7 @@ public class ExperienceExtractor {
      */
     private static final Pattern EXPERIENCE_PATTERN = Pattern.compile(
             "\\b(\\d+)\\+?\\s*(?:years?|yrs?)(?:\\s+of)?(?:\\s+experience|\\s+exp)?\\b",
-            Pattern.CASE_INSENSITIVE
-    );
+            Pattern.CASE_INSENSITIVE);
 
     /**
      * Extracts years of experience from CV text.
@@ -49,9 +47,12 @@ public class ExperienceExtractor {
      * Determines seniority level based on years of experience.
      */
     public String determineSeniority(Integer years) {
-        if (years == null || years == 0) return "ENTRY";
-        if (years <= 2) return "JUNIOR";
-        if (years <= 5) return "MID";
+        if (years == null || years == 0)
+            return "ENTRY";
+        if (years <= 2)
+            return "JUNIOR";
+        if (years <= 5)
+            return "MID";
         return "SENIOR";
     }
 }

@@ -1,6 +1,7 @@
 package org.example.recruitmentservice.client;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.example.commonlibrary.dto.response.ErrorCode;
 import org.example.commonlibrary.exception.CustomException;
 import org.example.recruitmentservice.config.RabbitMQConfig;
@@ -16,6 +17,7 @@ import org.example.recruitmentservice.services.chunking.ChunkingService;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.http.*;
 import org.springframework.stereotype.Component;
@@ -33,6 +35,7 @@ import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+@Slf4j
 @Component
 @RequiredArgsConstructor
 public class LlamaParseClient {
@@ -52,30 +55,32 @@ public class LlamaParseClient {
      */
     public String parseJD(String filePath) {
         try {
-            System.out.println("API Key: " + (apiKey != null ? "exists" : "null"));
-            System.out.println("File path: " + filePath);
+            log.debug("API Key: {}", (apiKey != null ? "exists" : "null"));
+            log.debug("File path: {}", filePath);
 
             String jobId = uploadFileForJD(filePath);
-            System.out.println("Job ID: " + jobId);
+            log.debug("Job ID: {}", jobId);
 
             // Poll result
             String parsedText = pollResult(jobId);
-            System.out.println("Parse completed!");
+            log.debug("Parse completed!");
 
             return parsedText;
 
         } catch (Exception e) {
-            System.err.println("Parse failed: " + e.getMessage());
-            e.printStackTrace();
+            log.error("Parse failed: {}", e.getMessage(), e);
             throw new CustomException(ErrorCode.FILE_PARSE_FAILED);
         }
     }
 
     /**
-     * RabbitMQ Listener - Parse CV từ Drive
+     * RabbitMQ Listener - Parse CV từ Drive.
+     *
+     * Lưu ý: method này KHÔNG có @Transactional để tránh giữ DB Connection mở
+     * trong suốt 75 giây chờ LlamaParse API.
+     * Các thao tác ghi DB được đóng gói vào các helper method @Transactional nhỏ.
      */
-    @RabbitListener(queues = RabbitMQConfig.CV_UPLOAD_QUEUE, containerFactory = "rabbitListenerContainerFactory")
-    @Transactional
+    @RabbitListener(queues = RabbitMQConfig.CV_UPLOAD_QUEUE, containerFactory = "cvParsingContainerFactory")
     public void parseCV(CVUploadEvent event) {
         int cvId = event.getCvId();
 
@@ -84,10 +89,10 @@ public class LlamaParseClient {
 
         String tempFilePath = null;
         try {
-            cv.setCvStatus(CVStatus.PARSING);
-            candidateCVRepository.save(cv);
+            // [Transaction 1] Đánh dấu trạng thái PARSING và commit ngay
+            markCvAsParsing(cv);
 
-            // Download file từ Drive về temp
+            // Download file từ Drive về temp (ngoài transaction)
             String fileId = event.getFileId();
             tempFilePath = storageService.downloadFileToTemp(fileId);
 
@@ -96,6 +101,7 @@ public class LlamaParseClient {
                 throw new CustomException(ErrorCode.FILE_NOT_FOUND);
             }
 
+            // Gọi LlamaParse API và polling (mất 10-75s) - KHÔNG giữ transaction
             String jobId = uploadFileForCV(tempFilePath);
             String parsedText = pollResult(jobId);
 
@@ -103,60 +109,81 @@ public class LlamaParseClient {
             String extractedName = extractName(parsedText);
             String extractedEmail = extractEmail(parsedText);
 
-            // Chunking
-            System.out.println("Starting chunking for CV: " + cvId);
+            // Chunking (CPU-bound, không cần transaction)
+            log.info("Starting chunking for CV: {}", cvId);
             List<ChunkPayload> chunks = chunkingService.chunk(cv, parsedText);
 
             if (chunks == null || chunks.isEmpty()) {
-                System.err.println("Warning: No chunks generated for CV " + cvId);
+                log.warn("No chunks generated for CV {}", cvId);
                 throw new CustomException(ErrorCode.CV_CHUNKING_FAILED);
             }
 
-            System.out.println("Generated " + chunks.size() + " chunks for CV: " + cvId);
+            log.info("Generated {} chunks for CV: {}", chunks.size(), cvId);
 
-            // Update CV entity
-            cv.setCvContent(parsedText);
-            if (extractedName != null) cv.setName(extractedName);
-            if (extractedEmail != null) cv.setEmail(extractedEmail);
-            cv.setCvStatus(CVStatus.PARSED);
-            cv.setParsedAt(LocalDateTime.now());
-            cv.setUpdatedAt(LocalDateTime.now());
-            candidateCVRepository.save(cv);
+            // [Transaction 2] Lưu kết quả parse và commit
+            saveParsedCvResult(cv, parsedText, extractedName, extractedEmail);
 
             // Update batch
             processingBatchService.incrementProcessed(event.getBatchId(), true);
 
-            System.out.println("CV parsed successfully - ID: " + cvId +
-                    " | Name: " + extractedName +
-                    " | Email: " + extractedEmail +
-                    " | Source: " + cv.getSourceType() +
-                    " | Position: " + (cv.getPosition() != null ? cv.getPosition().getId() : "N/A"));
+            log.info("CV parsed successfully - ID: {} | Name: {} | Email: {} | Source: {} | Position: {}",
+                    cvId, extractedName, extractedEmail, cv.getSourceType(),
+                    (cv.getPosition() != null ? cv.getPosition().getId() : "N/A"));
 
+            // publish event (sau khi Transaction 2 đã commit)
             publishCVChunkedEvent(cv, chunks);
 
         } catch (Exception e) {
-            System.err.println("CV parse failed for cvId " + cvId + ": " + e.getMessage());
-            cv.setCvStatus(CVStatus.FAILED);
-            cv.setErrorMessage(e.getMessage());
-            cv.setUpdatedAt(LocalDateTime.now());
-            candidateCVRepository.save(cv);
-
-            // Update batch with failure
+            log.error("CV parse failed for cvId {}: {}", cvId, e.getMessage(), e);
+            // [Transaction 3] Đánh dấu FAILED và commit
+            markCvAsFailed(cv, e.getMessage());
             processingBatchService.incrementProcessed(event.getBatchId(), false);
-
             throw new CustomException(ErrorCode.CV_PARSE_FAILED);
         } finally {
-            // Cleanup temp file
             if (tempFilePath != null) {
                 storageService.deleteTempFile(tempFilePath);
             }
         }
     }
 
+    /** Transaction nhỏ: chỉ đổi status sang PARSING và save. */
+    @Transactional
+    public void markCvAsParsing(CandidateCV cv) {
+        cv.setCvStatus(CVStatus.PARSING);
+        candidateCVRepository.save(cv);
+    }
+
+    /**
+     * Transaction nhỏ: lưu toàn bộ kết quả parse (content, name, email, status
+     * PARSED).
+     */
+    @Transactional
+    public void saveParsedCvResult(CandidateCV cv, String parsedText, String name, String email) {
+        cv.setCvContent(parsedText);
+        if (name != null)
+            cv.setName(name);
+        if (email != null)
+            cv.setEmail(email);
+        cv.setCvStatus(CVStatus.PARSED);
+        cv.setParsedAt(LocalDateTime.now());
+        cv.setUpdatedAt(LocalDateTime.now());
+        candidateCVRepository.save(cv);
+    }
+
+    /** Transaction nhỏ: đánh dấu FAILED + lưu message lỗi. */
+    @Transactional
+    public void markCvAsFailed(CandidateCV cv, String errorMessage) {
+        cv.setCvStatus(CVStatus.FAILED);
+        cv.setErrorMessage(errorMessage);
+        cv.setUpdatedAt(LocalDateTime.now());
+        candidateCVRepository.save(cv);
+    }
+
     // HELPER METHODS
 
     /**
-     * Upload file cho JD - Config đơn giản, chỉ cần parse đầy đủ text và giữ structure
+     * Upload file cho JD - Config đơn giản, chỉ cần parse đầy đủ text và giữ
+     * structure
      */
     private String uploadFileForJD(String absolutePath) {
         File file = new File(absolutePath);
@@ -179,11 +206,11 @@ public class LlamaParseClient {
 
         HttpEntity<MultiValueMap<String, Object>> request = new HttpEntity<>(body, headers);
 
-        ResponseEntity<Map> response = restTemplate.postForEntity(
+        ResponseEntity<Map<String, Object>> response = restTemplate.exchange(
                 "https://api.cloud.llamaindex.ai/api/parsing/upload",
+                HttpMethod.POST,
                 request,
-                Map.class
-        );
+                new ParameterizedTypeReference<Map<String, Object>>() {});
 
         return (String) response.getBody().get("id");
     }
@@ -204,14 +231,18 @@ public class LlamaParseClient {
         MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
         body.add("file", new FileSystemResource(file));
         body.add("parsing_instruction",
-                "Extract text from this CV/Resume and structure it in markdown format following these STRICT rules:\n\n" +
+                "Extract text from this CV/Resume and structure it in markdown format following these STRICT rules:\n\n"
+                        +
 
                         "HEADER HIERARCHY (MUST FOLLOW):\n" +
-                        "- Use ## (level 2) ONLY for main sections: Contact, Summary, Skills, Education, Experience, Projects, Certificates, Languages, Awards, Objective\n" +
-                        "- Use ### (level 3) ONLY for entity names: project names, company names, job titles, school names, degree names, award names\n" +
+                        "- Use ## (level 2) ONLY for main sections: Contact, Summary, Skills, Education, Experience, Projects, Certificates, Languages, Awards, Objective\n"
+                        +
+                        "- Use ### (level 3) ONLY for entity names: project names, company names, job titles, school names, degree names, award names\n"
+                        +
                         "- DO NOT use #### (level 4) headers at all\n" +
                         "- DO NOT use # (level 1) headers at all\n" +
-                        "- For entity details (Duration, Description, Role, etc.), use **Bold:** format, NOT headers\n\n" +
+                        "- For entity details (Duration, Description, Role, etc.), use **Bold:** format, NOT headers\n\n"
+                        +
 
                         "EXAMPLES:\n\n" +
 
@@ -264,14 +295,14 @@ public class LlamaParseClient {
                         "IMPORTANT FORMATTING RULES:\n" +
                         "- Main sections (##) should have NO content immediately after, add blank line\n" +
                         "- Entity names (###) should be followed by entity details in **Bold:** format\n" +
-                        "- Use **Duration:**, **Description:**, **Role:**, **Technologies:**, **Responsibilities:**, **Company:**, **School:**, **Date:**, etc.\n" +
+                        "- Use **Duration:**, **Description:**, **Role:**, **Technologies:**, **Responsibilities:**, **Company:**, **School:**, **Date:**, etc.\n"
+                        +
                         "- Use '-' for bullet points (not *, •, or numbers)\n" +
                         "- Keep consistent spacing: blank line after each entity\n" +
                         "- Extract ALL text content from the CV\n" +
                         "- Do NOT wrap output in code blocks or backticks\n" +
                         "- Do NOT add any preamble or explanation\n" +
-                        "- Do NOT use person's name or job title as headers"
-        );
+                        "- Do NOT use person's name or job title as headers");
         body.add("result_type", "markdown");
         body.add("target_pages", "");
         body.add("invalidate_cache", "true");
@@ -286,15 +317,24 @@ public class LlamaParseClient {
 
         HttpEntity<MultiValueMap<String, Object>> request = new HttpEntity<>(body, headers);
 
-        ResponseEntity<Map> response = restTemplate.postForEntity(
+        ResponseEntity<Map<String, Object>> response = restTemplate.exchange(
                 "https://api.cloud.llamaindex.ai/api/parsing/upload",
+                HttpMethod.POST,
                 request,
-                Map.class
-        );
+                new ParameterizedTypeReference<Map<String, Object>>() {});
 
         return (String) response.getBody().get("id");
     }
 
+    /**
+     * Poll kết quả parse từ LlamaParse API.
+     *
+     * Chiến lược poll:
+     * - Mỗi 3 giây check status 1 lần, tối đa 25 lần = tổng cộng tối đa ~75 giây.
+     * - Nếu LlamaParse trả về ERROR → ném exception ngay (lỗi thực sự, vào DLQ).
+     * - Nếu hết 75 giây vẫn PENDING/PROCESSING → ném RuntimeException (timeout).
+     * RabbitMQ sẽ re-queue/retry thông minh theo cấu hình DLX.
+     */
     private String pollResult(String jobId) throws InterruptedException {
         HttpHeaders headers = new HttpHeaders();
         headers.set("Authorization", "Bearer " + apiKey);
@@ -303,53 +343,60 @@ public class LlamaParseClient {
         String statusUrl = "https://api.cloud.llamaindex.ai/api/parsing/job/" + jobId;
         String resultUrl = "https://api.cloud.llamaindex.ai/api/parsing/job/" + jobId + "/result/markdown";
 
-        // Poll mỗi 2s, tối đa 60s
-        for (int i = 0; i < 30; i++) {
+        final int MAX_POLLS = 25; // 25 lần x 3s = 75s tối đa
+        final int POLL_INTERVAL_MS = 3000;
+
+        for (int i = 0; i < MAX_POLLS; i++) {
             try {
-                // Check status
-                ResponseEntity<Map> statusResponse = restTemplate.exchange(
-                        statusUrl,
-                        HttpMethod.GET,
-                        request,
-                        Map.class
-                );
+                ResponseEntity<Map<String, Object>> statusResponse = restTemplate.exchange(
+                        statusUrl, HttpMethod.GET, request,
+                        new ParameterizedTypeReference<Map<String, Object>>() {});
 
                 Map<String, Object> statusBody = statusResponse.getBody();
-                assert statusBody != null;
+                if (statusBody == null) {
+                    log.warn("Poll #{} - Empty status body, retrying...", i + 1);
+                    Thread.sleep(POLL_INTERVAL_MS);
+                    continue;
+                }
+
                 String status = (String) statusBody.get("status");
-                System.out.println("Poll #" + (i + 1) + " - Status: " + status);
+                log.debug("Poll #{}/{} - Status: {} | JobId: {}", i + 1, MAX_POLLS, status, jobId);
 
                 if ("SUCCESS".equals(status)) {
-                    // Get result
-                    ResponseEntity<Map> resultResponse = restTemplate.exchange(
-                            resultUrl,
-                            HttpMethod.GET,
-                            request,
-                            Map.class
-                    );
+                    ResponseEntity<Map<String, Object>> resultResponse = restTemplate.exchange(
+                            resultUrl, HttpMethod.GET, request,
+                            new ParameterizedTypeReference<Map<String, Object>>() {});
 
                     Map<String, Object> resultBody = resultResponse.getBody();
-                    if (resultBody.containsKey("markdown")) {
+                    if (resultBody != null && resultBody.containsKey("markdown")) {
                         String markdown = (String) resultBody.get("markdown");
-                        System.out.println("Parse completed! Text length: " + markdown.length());
+                        log.info("Parse completed! Text length: {}", markdown.length());
                         return markdown;
                     }
-                } else if ("ERROR".equals(status)) {
+                    // Trả về SUCCESS nhưng không có markdown -> coi như lỗi hard
                     throw new CustomException(ErrorCode.FILE_PARSE_FAILED);
-                }
-                // Nếu PENDING hoặc PROCESSING → tiếp tục poll
 
-            } catch (Exception e) {
-                System.err.println("Poll error: " + e.getMessage());
-                if (e instanceof IllegalArgumentException || e instanceof NullPointerException) {
+                } else if ("ERROR".equals(status)) {
+                    // LlamaParse xác nhận lỗi rõ ràng -> vào DLQ ngay, không retry
+                    log.error("LlamaParse reported ERROR for job: {}", jobId);
                     throw new CustomException(ErrorCode.FILE_PARSE_FAILED);
                 }
+                // PENDING / PROCESSING -> continue polling
+
+            } catch (CustomException e) {
+                throw e; // Re-throw lỗi hard, không bọc ngoài
+            } catch (Exception e) {
+                // Lỗi mạng/timeout khi gọi LlamaParse API -> log và thử lại poll
+                log.warn("Poll #{} network error: {}", i + 1, e.getMessage());
             }
 
-            Thread.sleep(2000);
+            Thread.sleep(POLL_INTERVAL_MS);
         }
 
-        throw new CustomException(ErrorCode.FILE_PARSE_FAILED);
+        // Hết số lần poll mà chưa xong -> timeout
+        // Ném RuntimeException để RabbitMQ xử lý re-queue theo cấu hình DLX
+        log.error("LlamaParse polling timed out (75s) for jobId: {}", jobId);
+        throw new RuntimeException("LlamaParse parse timeout after " + MAX_POLLS + " polls for job: " + jobId);
     }
 
     private void publishCVChunkedEvent(CandidateCV cv, List<ChunkPayload> chunks) {
@@ -366,8 +413,7 @@ public class LlamaParseClient {
                 cv.getPosition() != null ? cv.getPosition().getName() : null,
                 chunks,
                 chunks.size(),
-                totalTokens
-        );
+                totalTokens);
 
         if (TransactionSynchronizationManager.isSynchronizationActive()) {
             TransactionSynchronizationManager.registerSynchronization(
@@ -378,39 +424,35 @@ public class LlamaParseClient {
                                 rabbitTemplate.convertAndSend(
                                         RabbitMQConfig.CV_CHUNKED_EXCHANGE,
                                         RabbitMQConfig.CV_CHUNKED_ROUTING_KEY,
-                                        event
-                                );
-                                System.out.println("Published CV chunked event for CV: " + cv.getId() +
-                                        " with " + chunks.size() + " chunks");
+                                        event);
+                                log.info("Published CV chunked event for CV: {} with {} chunks",
+                                        cv.getId(), chunks.size());
                             } catch (Exception e) {
-                                System.err.println("Failed to publish CV chunked event: " + e.getMessage());
-                                e.printStackTrace();
+                                log.error("Failed to publish CV chunked event: {}", e.getMessage(), e);
                             }
                         }
-                    }
-            );
+                    });
         } else {
             // Fallback if no transaction (shouldn't happen with @Transactional)
             try {
                 rabbitTemplate.convertAndSend(
                         RabbitMQConfig.CV_CHUNKED_EXCHANGE,
                         RabbitMQConfig.CV_CHUNKED_ROUTING_KEY,
-                        event
-                );
-                System.out.println("Published CV chunked event (no tx) for CV: " + cv.getId());
+                        event);
+                log.info("Published CV chunked event (no tx) for CV: {}", cv.getId());
             } catch (Exception e) {
-                System.err.println("Failed to publish CV chunked event (no tx): " + e.getMessage());
+                log.error("Failed to publish CV chunked event (no tx): {}", e.getMessage(), e);
             }
         }
     }
 
     // Regex extract email
     private String extractEmail(String text) {
-        if (text == null || text.isEmpty()) return null;
+        if (text == null || text.isEmpty())
+            return null;
 
         Pattern emailPattern = Pattern.compile(
-                "(?i)(?:email|mail)[:\\s]*([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,})"
-        );
+                "(?i)(?:email|mail)[:\\s]*([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,})");
         Matcher matcher = emailPattern.matcher(text);
         if (matcher.find()) {
             return matcher.group(1).trim();
@@ -427,15 +469,15 @@ public class LlamaParseClient {
 
     // Regex extract name
     private String extractName(String text) {
-        if (text == null || text.isEmpty()) return null;
+        if (text == null || text.isEmpty())
+            return null;
 
         // Loại bỏ ký tự đặc biệt cơ bản trong text
         String cleanedText = text.replaceAll("[#%@\\-!$^&*()_+=\\[\\]{}|\\\\;:\"'<>,/?~`]", " ");
 
         // Regex chính – tìm các dạng "Name:", "Full Name:", "Họ tên:", "Fullname:"
         Pattern namePattern = Pattern.compile(
-                "(?i)(?:^|\\b)(?:name|full name|họ tên)[:\\s]+([A-ZĐ][a-zA-ZĐđ\\s]+?)(?=\\b(?:date|dob|birth|email|phone|address|\\r?\\n|$))"
-        );
+                "(?i)(?:^|\\b)(?:name|full name|họ tên)[:\\s]+([A-ZĐ][a-zA-ZĐđ\\s]+?)(?=\\b(?:date|dob|birth|email|phone|address|\\r?\\n|$))");
         Matcher matcher = namePattern.matcher(cleanedText);
         if (matcher.find()) {
             String name = matcher.group(1).trim();
@@ -447,7 +489,8 @@ public class LlamaParseClient {
             name = name.replaceAll("[^a-zA-ZĐđ\\s]", "").trim();
 
             // Giới hạn độ dài hợp lý
-            if (name.length() > 50) name = name.substring(0, 50).trim();
+            if (name.length() > 50)
+                name = name.substring(0, 50).trim();
             return name;
         }
 
@@ -462,7 +505,8 @@ public class LlamaParseClient {
         }
 
         // Fallback #2: Dòng nào đó có dạng chữ
-        Matcher fallbackMatcher = Pattern.compile("\\b([A-ZĐ][a-zA-ZĐđ]+\\s+[A-ZĐ][a-zA-ZĐđ]+(?:\\s+[A-ZĐ][a-zA-ZĐđ]+)?)\\b")
+        Matcher fallbackMatcher = Pattern
+                .compile("\\b([A-ZĐ][a-zA-ZĐđ]+\\s+[A-ZĐ][a-zA-ZĐđ]+(?:\\s+[A-ZĐ][a-zA-ZĐđ]+)?)\\b")
                 .matcher(cleanedText);
         if (fallbackMatcher.find()) {
             return fallbackMatcher.group(1).replaceAll("[^a-zA-ZĐđ\\s]", "").trim();
