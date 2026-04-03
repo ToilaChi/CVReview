@@ -1,6 +1,12 @@
 spring:
   application:
     name: recruitment-service
+  threads:
+    virtual:
+      # Kích hoạt Java 21 Virtual Threads cho toàn bộ Tomcat + Spring async
+      # → Thread.sleep() trong polling LlamaParse không còn chặn platform thread
+      # → Cho phép hàng trăm CV xử lý đồng thời mà không tốn thêm RAM
+      enabled: true
   # Read .env
   config:
     import: optional:classpath:.env[.properties]
@@ -16,6 +22,12 @@ spring:
       connection-timeout: 30000
       idle-timeout: 600000
       max-lifetime: 1800000
+      # Định kỳ 30s gửi ping SELECT 1 tới MySQL để giữ socket không bị server đóng
+      # (Phòng lỗi "Stale Connection / Socket closed" khi polling LlamaParse 60-75s)
+      keepalive-time: 30000
+      # Test connection trước khi dùng - bắt connection chết trước khi văng lỗi runtime
+      connection-test-query: SELECT 1
+      validation-timeout: 5000
   jpa:
     database-platform: org.hibernate.dialect.MySQLDialect
     hibernate:
@@ -54,6 +66,10 @@ storage:
 # LLamaParse
 llama-parse:
   api-key: ${LLAMAPARSE_API_KEY}
+
+# Gemini AI API
+gemini:
+  api-key: ${GEMINI_API_KEY}
 
 # Batch
 analysis:

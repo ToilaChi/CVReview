@@ -49,11 +49,12 @@ public class ProcessingBatchService {
         ProcessingBatch batch = batchRepository.findByBatchId(batchId)
                 .orElseThrow(() -> new CustomException(ErrorCode.BATCH_NOT_FOUND));
 
-        if (isSuccess) {
-            batch.setSuccessCv(batch.getSuccessCv() + 1);
-        } else {
-            batch.setFailedCv(batch.getFailedCv() + 1);
-        }
+        // Fetch actual counts directly from database instead of cumulative increment
+        long actualSuccess = candidateCVRepository.countByBatchIdAndCvStatus(batchId, CVStatus.PARSED);
+        long actualFailed = candidateCVRepository.countByBatchIdAndCvStatus(batchId, CVStatus.FAILED);
+
+        batch.setSuccessCv((int) actualSuccess);
+        batch.setFailedCv((int) actualFailed);
 
         if (batch.getProcessedCv() >= batch.getTotalCv()) {
             batch.setStatus(BatchStatus.COMPLETED);

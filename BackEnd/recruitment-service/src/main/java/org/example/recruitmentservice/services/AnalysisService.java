@@ -196,7 +196,6 @@ public class AnalysisService {
             batch.setCompletedAt(null);
         }
 
-        batch.setCreatedAt(LocalDateTime.now());
         processingBatchRepository.save(batch);
 
         log.info("[RETRY-BATCH] Batch {} retry completed: {} success, {} failed",

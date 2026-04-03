@@ -32,7 +32,7 @@ public class CandidateCV {
     @Enumerated(EnumType.STRING)
     private SourceType sourceType;
 
-    @OneToOne(mappedBy = "candidateCV", cascade = CascadeType.ALL)
+    @OneToOne(mappedBy = "candidateCV", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private CVAnalysis analysis;
 
     @Column

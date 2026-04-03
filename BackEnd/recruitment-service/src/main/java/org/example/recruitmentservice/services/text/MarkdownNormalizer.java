@@ -14,7 +14,6 @@ public class MarkdownNormalizer {
 
     /**
      * Normalize markdown structure to ensure consistency
-     * Option 3: ## for main sections, ### for entities, **Bold:** for details
      */
     public String normalize(String markdown) {
         if (markdown == null || markdown.isBlank()) {
@@ -207,7 +206,8 @@ public class MarkdownNormalizer {
      */
     private boolean isMainSection(String text) {
         String lower = text.toLowerCase();
-        return lower.matches(".*(skill|education|experience|work experience|project|certificate|certification|language|objective|summary|contact|about|profile|overview|background|qualification|award|reference|hobby|hobbies|interest|interests).*");
+        return lower.matches(
+                ".*(skill|education|experience|work experience|project|certificate|certification|language|objective|summary|contact|about|profile|overview|background|qualification|award|reference|hobby|hobbies|interest|interests).*");
     }
 
     /**
@@ -215,7 +215,8 @@ public class MarkdownNormalizer {
      */
     private boolean isEntityDetail(String text) {
         String lower = text.toLowerCase();
-        return lower.matches(".*(description|role|responsibility|responsibilities|technology|tech stack|technologies|team size|duration|tools|tool|achievement|achievements|result|results|key responsibilities|key achievements|date|company|position|major|level|gpa|grade).*");
+        return lower.matches(
+                ".*(description|role|responsibility|responsibilities|technology|tech stack|technologies|team size|duration|tools|tool|achievement|achievements|result|results|key responsibilities|key achievements|date|company|position|major|level|gpa|grade).*");
     }
 
     /**
@@ -266,8 +267,7 @@ public class MarkdownNormalizer {
 
         Pattern sectionPattern = Pattern.compile(
                 "(?m)^##\\s+([^#\\n]+)(?:\\n)([\\s\\S]*?)(?=^##\\s|\\Z)",
-                Pattern.MULTILINE
-        );
+                Pattern.MULTILINE);
 
         Matcher matcher = sectionPattern.matcher(text);
 
@@ -304,8 +304,7 @@ public class MarkdownNormalizer {
     private String removeEmptySections(String text) {
         Pattern emptySectionPattern = Pattern.compile(
                 "(?m)^##\\s+([^#\\n]+)\\n\\s*(?:\\(No .+ listed\\)|\\(Details not provided\\))?\\s*(?=^##\\s|\\Z)",
-                Pattern.MULTILINE
-        );
+                Pattern.MULTILINE);
 
         String cleaned = text;
         Matcher matcher = emptySectionPattern.matcher(cleaned);

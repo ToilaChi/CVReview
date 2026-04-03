@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.util.List;
+import java.util.Optional;
 
 public interface CandidateCVRepository extends JpaRepository<CandidateCV, Integer> {
     Page<CandidateCV> findByPositionId(int positionId, Pageable pageable);
@@ -19,6 +20,14 @@ public interface CandidateCVRepository extends JpaRepository<CandidateCV, Intege
     List<CandidateCV> findByPositionIdAndCvStatus(int positionId, CVStatus cvStatus);
     List<CandidateCV> findByPositionIdAndCvStatusAndBatchId(int positionId, CVStatus cvStatus, String batchId);
     List<CandidateCV> findByBatchIdAndCvStatus(String batchId, CVStatus cvStatus);
+    long countByBatchIdAndCvStatus(String batchId, CVStatus cvStatus);
     int countByPositionId(int positionId);
     CandidateCV findByCandidateId(String candidateId);
+
+    /**
+     * Load CandidateCV cùng Position trong 1 query → tránh LazyInitializationException
+     * khi truy cập cv.getPosition() bên ngoài Hibernate session.
+     */
+    @Query("SELECT c FROM CandidateCV c LEFT JOIN FETCH c.position WHERE c.id = :id")
+    Optional<CandidateCV> findByIdWithPosition(@Param("id") int id);
 }

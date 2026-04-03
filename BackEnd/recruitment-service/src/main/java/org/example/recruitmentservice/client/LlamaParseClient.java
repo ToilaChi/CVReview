@@ -83,14 +83,12 @@ public class LlamaParseClient {
     @RabbitListener(queues = RabbitMQConfig.CV_UPLOAD_QUEUE, containerFactory = "cvParsingContainerFactory")
     public void parseCV(CVUploadEvent event) {
         int cvId = event.getCvId();
-
-        CandidateCV cv = candidateCVRepository.findById(cvId)
-                .orElseThrow(() -> new CustomException(ErrorCode.CV_NOT_FOUND));
-
         String tempFilePath = null;
+
         try {
-            // [Transaction 1] Đánh dấu trạng thái PARSING và commit ngay
-            markCvAsParsing(cv);
+            // [Transaction 1] Đánh dấu PARSING - re-fetch trong session rìi của nó, không
+            // pass entity ra ngoài
+            markCvAsParsing(cvId);
 
             // Download file từ Drive về temp (ngoài transaction)
             String fileId = event.getFileId();
@@ -109,9 +107,14 @@ public class LlamaParseClient {
             String extractedName = extractName(parsedText);
             String extractedEmail = extractEmail(parsedText);
 
-            // Chunking (CPU-bound, không cần transaction)
+            // Load CV kèm Position bằng JOIN FETCH - Position luôn được init, không có Lazy
+            // proxy
+            CandidateCV cvForChunking = candidateCVRepository.findByIdWithPosition(cvId)
+                    .orElseThrow(() -> new CustomException(ErrorCode.CV_NOT_FOUND));
+
+            // Chunking (CPU-bound, ngoài transaction)
             log.info("Starting chunking for CV: {}", cvId);
-            List<ChunkPayload> chunks = chunkingService.chunk(cv, parsedText);
+            List<ChunkPayload> chunks = chunkingService.chunk(cvForChunking, parsedText);
 
             if (chunks == null || chunks.isEmpty()) {
                 log.warn("No chunks generated for CV {}", cvId);
@@ -120,23 +123,24 @@ public class LlamaParseClient {
 
             log.info("Generated {} chunks for CV: {}", chunks.size(), cvId);
 
-            // [Transaction 2] Lưu kết quả parse và commit
-            saveParsedCvResult(cv, parsedText, extractedName, extractedEmail);
+            // [Transaction 2] Lưu kết quả parse - re-fetch trong session rìi của nó
+            saveParsedCvResult(cvId, parsedText, extractedName, extractedEmail);
 
             // Update batch
             processingBatchService.incrementProcessed(event.getBatchId(), true);
 
             log.info("CV parsed successfully - ID: {} | Name: {} | Email: {} | Source: {} | Position: {}",
-                    cvId, extractedName, extractedEmail, cv.getSourceType(),
-                    (cv.getPosition() != null ? cv.getPosition().getId() : "N/A"));
+                    cvId, extractedName, extractedEmail, cvForChunking.getSourceType(),
+                    (cvForChunking.getPosition() != null ? cvForChunking.getPosition().getId() : "N/A"));
 
             // publish event (sau khi Transaction 2 đã commit)
-            publishCVChunkedEvent(cv, chunks);
+            publishCVChunkedEvent(cvForChunking, chunks);
 
         } catch (Exception e) {
             log.error("CV parse failed for cvId {}: {}", cvId, e.getMessage(), e);
-            // [Transaction 3] Đánh dấu FAILED và commit
-            markCvAsFailed(cv, e.getMessage());
+            // [Transaction 3] Đánh dấu FAILED - re-fetch trong session rìi của nó, không
+            // cần cv object
+            markCvAsFailed(cvId, e.getMessage());
             processingBatchService.incrementProcessed(event.getBatchId(), false);
             throw new CustomException(ErrorCode.CV_PARSE_FAILED);
         } finally {
@@ -146,19 +150,21 @@ public class LlamaParseClient {
         }
     }
 
-    /** Transaction nhỏ: chỉ đổi status sang PARSING và save. */
+    /** [T1] Re-fetch CV và đổi status sang PARSING trong 1 transaction. */
+
     @Transactional
-    public void markCvAsParsing(CandidateCV cv) {
+    public void markCvAsParsing(int cvId) {
+        CandidateCV cv = candidateCVRepository.findById(cvId)
+                .orElseThrow(() -> new CustomException(ErrorCode.CV_NOT_FOUND));
         cv.setCvStatus(CVStatus.PARSING);
         candidateCVRepository.save(cv);
     }
 
-    /**
-     * Transaction nhỏ: lưu toàn bộ kết quả parse (content, name, email, status
-     * PARSED).
-     */
+    /** [T2] Re-fetch CV và lưu toàn bộ kết quả parse trong 1 transaction. */
     @Transactional
-    public void saveParsedCvResult(CandidateCV cv, String parsedText, String name, String email) {
+    public void saveParsedCvResult(int cvId, String parsedText, String name, String email) {
+        CandidateCV cv = candidateCVRepository.findById(cvId)
+                .orElseThrow(() -> new CustomException(ErrorCode.CV_NOT_FOUND));
         cv.setCvContent(parsedText);
         if (name != null)
             cv.setName(name);
@@ -167,16 +173,22 @@ public class LlamaParseClient {
         cv.setCvStatus(CVStatus.PARSED);
         cv.setParsedAt(LocalDateTime.now());
         cv.setUpdatedAt(LocalDateTime.now());
+        cv.setErrorMessage(null);
+        cv.setFailedAt(null);
         candidateCVRepository.save(cv);
     }
 
-    /** Transaction nhỏ: đánh dấu FAILED + lưu message lỗi. */
+    /** [T3] Re-fetch CV và đánh dấu FAILED trong 1 transaction. */
     @Transactional
-    public void markCvAsFailed(CandidateCV cv, String errorMessage) {
-        cv.setCvStatus(CVStatus.FAILED);
-        cv.setErrorMessage(errorMessage);
-        cv.setUpdatedAt(LocalDateTime.now());
-        candidateCVRepository.save(cv);
+    public void markCvAsFailed(int cvId, String errorMessage) {
+        candidateCVRepository.findById(cvId).ifPresent(cv -> {
+            cv.setCvStatus(CVStatus.FAILED);
+            cv.setErrorMessage(errorMessage != null ? errorMessage.substring(0, Math.min(errorMessage.length(), 500))
+                    : "Unknown error");
+            cv.setFailedAt(LocalDateTime.now());
+            cv.setUpdatedAt(LocalDateTime.now());
+            candidateCVRepository.save(cv);
+        });
     }
 
     // HELPER METHODS
@@ -210,7 +222,8 @@ public class LlamaParseClient {
                 "https://api.cloud.llamaindex.ai/api/parsing/upload",
                 HttpMethod.POST,
                 request,
-                new ParameterizedTypeReference<Map<String, Object>>() {});
+                new ParameterizedTypeReference<Map<String, Object>>() {
+                });
 
         return (String) response.getBody().get("id");
     }
@@ -231,78 +244,7 @@ public class LlamaParseClient {
         MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
         body.add("file", new FileSystemResource(file));
         body.add("parsing_instruction",
-                "Extract text from this CV/Resume and structure it in markdown format following these STRICT rules:\n\n"
-                        +
-
-                        "HEADER HIERARCHY (MUST FOLLOW):\n" +
-                        "- Use ## (level 2) ONLY for main sections: Contact, Summary, Skills, Education, Experience, Projects, Certificates, Languages, Awards, Objective\n"
-                        +
-                        "- Use ### (level 3) ONLY for entity names: project names, company names, job titles, school names, degree names, award names\n"
-                        +
-                        "- DO NOT use #### (level 4) headers at all\n" +
-                        "- DO NOT use # (level 1) headers at all\n" +
-                        "- For entity details (Duration, Description, Role, etc.), use **Bold:** format, NOT headers\n\n"
-                        +
-
-                        "EXAMPLES:\n\n" +
-
-                        "## Contact\n" +
-                        "- Name: John Doe\n" +
-                        "- Email: john@example.com\n" +
-                        "- Phone: +84 123456789\n\n" +
-
-                        "## Skills\n" +
-                        "- Java, Python, React, Node.js\n" +
-                        "- MySQL, PostgreSQL, MongoDB\n" +
-                        "- Docker, Kubernetes, AWS\n\n" +
-
-                        "## Education\n\n" +
-                        "### Bachelor of Computer Science\n" +
-                        "**School:** ABC University\n" +
-                        "**Duration:** 2015/09 - 2019/06\n" +
-                        "**GPA:** 3.5/4.0\n\n" +
-
-                        "## Experience\n\n" +
-                        "### Software Engineer\n" +
-                        "**Company:** Tech Corp JSC\n" +
-                        "**Duration:** 2020/01 - Present\n" +
-                        "**Responsibilities:**\n" +
-                        "- Developed backend APIs using Spring Boot\n" +
-                        "- Led team of 3 developers\n" +
-                        "- Improved system performance by 40%\n\n" +
-
-                        "## Projects\n\n" +
-
-                        "### E-commerce Platform\n" +
-                        "**Duration:** 2021/06 - 2022/12\n" +
-                        "**Description:** Built a full-stack e-commerce platform with payment integration\n" +
-                        "**Role:** Full-stack Developer\n" +
-                        "**Technologies:**\n" +
-                        "- Frontend: React, Redux, Tailwind CSS\n" +
-                        "- Backend: Spring Boot, PostgreSQL, Redis\n" +
-                        "- Infrastructure: Docker, AWS EC2, S3\n" +
-                        "**Responsibilities:**\n" +
-                        "- Designed RESTful APIs\n" +
-                        "- Implemented payment gateway\n" +
-                        "- Deployed using Docker\n\n" +
-
-                        "## Awards\n\n" +
-                        "### Best Innovation Award 2022\n" +
-                        "**Date:** 2022/08\n" +
-                        "**Result:** 1st place\n" +
-                        "**Description:** Won first place in company hackathon\n\n" +
-
-                        "IMPORTANT FORMATTING RULES:\n" +
-                        "- Main sections (##) should have NO content immediately after, add blank line\n" +
-                        "- Entity names (###) should be followed by entity details in **Bold:** format\n" +
-                        "- Use **Duration:**, **Description:**, **Role:**, **Technologies:**, **Responsibilities:**, **Company:**, **School:**, **Date:**, etc.\n"
-                        +
-                        "- Use '-' for bullet points (not *, •, or numbers)\n" +
-                        "- Keep consistent spacing: blank line after each entity\n" +
-                        "- Extract ALL text content from the CV\n" +
-                        "- Do NOT wrap output in code blocks or backticks\n" +
-                        "- Do NOT add any preamble or explanation\n" +
-                        "- Do NOT use person's name or job title as headers");
+                "Extract all text from this CV/Resume into Markdown. Focus on keeping paragraphs and sections clear.");
         body.add("result_type", "markdown");
         body.add("target_pages", "");
         body.add("invalidate_cache", "true");
@@ -321,7 +263,8 @@ public class LlamaParseClient {
                 "https://api.cloud.llamaindex.ai/api/parsing/upload",
                 HttpMethod.POST,
                 request,
-                new ParameterizedTypeReference<Map<String, Object>>() {});
+                new ParameterizedTypeReference<Map<String, Object>>() {
+                });
 
         return (String) response.getBody().get("id");
     }
@@ -350,7 +293,8 @@ public class LlamaParseClient {
             try {
                 ResponseEntity<Map<String, Object>> statusResponse = restTemplate.exchange(
                         statusUrl, HttpMethod.GET, request,
-                        new ParameterizedTypeReference<Map<String, Object>>() {});
+                        new ParameterizedTypeReference<Map<String, Object>>() {
+                        });
 
                 Map<String, Object> statusBody = statusResponse.getBody();
                 if (statusBody == null) {
@@ -365,7 +309,8 @@ public class LlamaParseClient {
                 if ("SUCCESS".equals(status)) {
                     ResponseEntity<Map<String, Object>> resultResponse = restTemplate.exchange(
                             resultUrl, HttpMethod.GET, request,
-                            new ParameterizedTypeReference<Map<String, Object>>() {});
+                            new ParameterizedTypeReference<Map<String, Object>>() {
+                            });
 
                     Map<String, Object> resultBody = resultResponse.getBody();
                     if (resultBody != null && resultBody.containsKey("markdown")) {

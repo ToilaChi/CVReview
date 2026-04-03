@@ -24,6 +24,8 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.CompletableFuture;
 
 @Service
 @RequiredArgsConstructor
@@ -62,22 +64,23 @@ public class UploadCVService {
                 batchId,
                 positionId,
                 files.size(),
-                BatchType.UPLOAD
-        );
+                BatchType.UPLOAD);
 
-        int successCount = 0;
-        for (int i = 0; i < files.size(); i++) {
-            MultipartFile file = files.get(i);
-            System.out.println("\n--- Processing file " + (i + 1) + "/" + files.size() + " ---");
+        AtomicInteger successCounter = new AtomicInteger();
+        List<CompletableFuture<Void>> futures = files.stream()
+                .map(file -> CompletableFuture.runAsync(() -> {
+                    try {
+                        uploadSingleCV(file, position, batchId, SourceType.HR, userId);
+                        successCounter.incrementAndGet();
+                    } catch (Exception e) {
+                        System.err.println("File failed: " + e.getMessage());
+                    }
+                }))
+                .toList();
 
-            try {
-                uploadSingleCV(file, position, batchId, SourceType.HR, userId);
-                successCount++;
-                System.out.println("File " + (i + 1) + " uploaded successfully");
-            } catch (Exception e) {
-                System.err.println("File " + (i + 1) + " failed: " + e.getMessage());
-            }
-        }
+        java.util.concurrent.CompletableFuture.allOf(futures.toArray(new java.util.concurrent.CompletableFuture[0]))
+                .join();
+        int successCount = successCounter.get();
 
         Map<String, Object> response = new HashMap<>();
         response.put("batchId", batchId);
@@ -103,7 +106,7 @@ public class UploadCVService {
 
         String candidateId = extractUserId(request);
         CandidateCV candidateCV = candidateCVRepository.findByCandidateId(candidateId);
-        if(candidateCV != null) {
+        if (candidateCV != null) {
             throw new CustomException(ErrorCode.DUPLICATE_CV);
         }
 
@@ -119,8 +122,7 @@ public class UploadCVService {
                 batchId,
                 null, // Không có positionId
                 1,
-                BatchType.UPLOAD
-        );
+                BatchType.UPLOAD);
 
         try {
             CandidateCV cv = uploadSingleCV(file, null, batchId, SourceType.CANDIDATE, userId);
@@ -140,6 +142,7 @@ public class UploadCVService {
 
     /**
      * Core method để upload một CV
+     * 
      * @param position - có thể null nếu là CANDIDATE upload
      */
     private CandidateCV uploadSingleCV(
@@ -184,11 +187,11 @@ public class UploadCVService {
                     cv.getId(),
                     driveFileInfo.getFileId(), // Gửi fileId thay vì path
                     position != null ? position.getId() : null,
-                    batchId
-            );
+                    batchId);
 
             rabbitTemplate.convertAndSend(RabbitMQConfig.CV_UPLOAD_QUEUE, event);
-            System.out.println("Event published to RabbitMQ - CV ID: " + cv.getId() + " | FileId: " + driveFileInfo.getFileId());
+            System.out.println(
+                    "Event published to RabbitMQ - CV ID: " + cv.getId() + " | FileId: " + driveFileInfo.getFileId());
 
             return cv;
 

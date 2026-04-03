@@ -3,7 +3,7 @@ package org.example.recruitmentservice.services.chunking;
 import org.example.recruitmentservice.dto.request.ChunkPayload;
 import org.example.recruitmentservice.models.entity.CandidateCV;
 import org.example.recruitmentservice.services.chunking.strategy.ChunkingStrategy;
-import org.example.recruitmentservice.services.metadata.MetadataExtractor;
+import org.example.recruitmentservice.services.metadata.GeminiExtractionService;
 import org.example.recruitmentservice.services.metadata.model.CVMetadata;
 import org.springframework.stereotype.Service;
 import lombok.RequiredArgsConstructor;
@@ -17,7 +17,7 @@ import java.util.List;
 @RequiredArgsConstructor
 public class ChunkingService {
     private final ChunkingStrategy chunkingStrategy;
-    private final MetadataExtractor metadataExtractor;
+    private final GeminiExtractionService geminiExtractionService;
 
     /**
      * Main entry point - simplified orchestration
@@ -37,7 +37,7 @@ public class ChunkingService {
             log.info("Starting chunking process for candidate: {}", candidateCV.getCandidateId());
 
             // Extract metadata (no normalization needed - done in SectionExtractor)
-            CVMetadata metadata = metadataExtractor.extractAll(parsedText);
+            CVMetadata metadata = geminiExtractionService.extractMetadata(parsedText);
             log.debug("Extracted metadata: {} skills, {} years experience",
                     metadata.getSkills().size(),
                     metadata.getExperienceYears());
