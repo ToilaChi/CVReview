@@ -29,7 +29,7 @@ public class GeminiExtractionService {
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper;
 
-    private static final String GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=";
+    private static final String GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=";
 
     public CVMetadata extractMetadata(String cvMarkdownText) {
         if (apiKey == null || apiKey.isBlank()) {
@@ -72,7 +72,7 @@ public class GeminiExtractionService {
 
             // Force JSON response
             Map<String, Object> generationConfig = new HashMap<>();
-            generationConfig.put("responseMimeType", "application/json");
+            generationConfig.put("response_mime_type", "application/json");
             requestBody.put("generationConfig", generationConfig);
 
             HttpHeaders headers = new HttpHeaders();

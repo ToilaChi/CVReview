@@ -1,7 +1,5 @@
-Text parse
-
-```markdown
- # Pham Minh Chi
+# Pham Minh Chi
+ 
  **Web Developer Intern**
  
  - **Name:** Pham Minh Chi
@@ -9,6 +7,8 @@ Text parse
  - **Phone:** +84 943869063
  - **Email:** chi12345pham@gmail.com
  - **Address:** Ho Chi Minh, Viet Nam
+ 
+ ---
  
  ## Overview
  
@@ -20,6 +20,8 @@ Text parse
  - Understanding of database design, CRUD operations, and basic query optimization.
  - Able to use English at an intermediate level for reading technical documentation, basic listening, and simple communication.
  - Quick learner, eager to apply new technologies.
+ 
+ ---
  
  ## Education
  
@@ -37,6 +39,8 @@ Text parse
    - Computer Network: 3.00
    - Java Programming: 4.00
  
+ ---
+ 
  ## Skills
  
  - **Back-end:** Basic experience with Spring Boot, RESTful APIs, JWT authentication, and API Gateway.
@@ -46,7 +50,9 @@ Text parse
  - **Version Control:** Familiar with Git.
  - **Soft Skills:** Good communication, teamwork, and quick adaptability to new technologies.
  - **Office & Design Tools:** Proficient in Microsoft Word, Microsoft Excel, and Canva.
- ```false# Career Objective
+ 
+ © fullstack.edu.vn  
+ Trang 1/3false# Career Objective
  
  ## Short-term
  - Gain practical experience in back-end web development through an internship, applying knowledge from academic projects to real-world applications.
@@ -76,17 +82,23 @@ Text parse
  | Project Name | Academic Project |
  |--------------|------------------|
  | Descriptions | A laundry shop management application built as a monolithic Spring Boot project. The system supports order tracking, service management, and payment confirmation via Casso API integration. This was the first project to practice Spring Boot fundamentals. |
- | Number of members | 4 |
- | Position | Back-end Developer |
- | Responsibilities | - Developed core features using Spring Boot in a monolithic architecture. - Practiced using Spring annotations for dependency injection and request handling. - Implemented ORM with JPA/Hibernate for database interaction. - Integrated Casso API as a third-party payment confirmation service. - Designed basic database schema and implemented CRUD operations. |
- | Technology | Spring Boot, MySQL, JPA/Hibernate, Casso API. |
- ```
-
-Text chunking
  
-    "cvId": 83,
+ | Number of members | 4 |
+ |-------------------|---|
+ 
+ | Position | Back-end Developer |
+ |-----------|-------------------|
+ | Responsibilities | - Developed core features using Spring Boot in a monolithic architecture. - Practiced using Spring annotations for dependency injection and request handling. - Implemented ORM with JPA/Hibernate for database interaction. - Integrated Casso API as a third-party payment confirmation service. - Designed basic database schema and implemented CRUD operations. |
+ 
+ | Technology | Spring Boot, MySQL, JPA/Hibernate, Casso API. |
+ |------------|----------------------------------------------|
+
+
+
+ {
+    "cvId": 89,
     "candidateName": "Pham Minh Chi",
-    "totalWords": 708,
+    "totalWords": 716,
     "chunks": [
         {
             "candidateId": null,
@@ -98,10 +110,10 @@ Text chunking
             "words": 10,
             "tokensEstimate": 13,
             "email": "chi12345pham@gmail.com",
-            "cvId": 83,
+            "cvId": 89,
             "cvStatus": "PARSED",
             "sourceType": "HR",
-            "createdAt": "2026-04-04T11:04:38.2732199",
+            "createdAt": "2026-04-04T11:18:32.0104953",
             "skills": [],
             "experienceYears": 0,
             "seniorityLevel": "Unknown",
@@ -115,14 +127,14 @@ Text chunking
             "position": "Developer",
             "section": "SUMMARY",
             "chunkIndex": 1,
-            "chunkText": "CANDIDATE: Pham Minh Chi\nPOSITION: Developer\n\n===== SUMMARY =====\n- Pretty solid foundation in back-end web application development with basic understanding of front-end technologies.\n- Proficient in HTML and CSS; familiar with React.js and its core principles.\n- Academic project experience in: Spring Boot, RESTful APIs, PHP, JavaScript (ReactJS), MySQL, PostgreSQL, and Redis.\n- Familiar with API integration using Fetch API and Axios.\n- Knowledge of version control using Git.\n- Understanding of database design, CRUD operations, and basic query optimization.\n- Able to use English at an intermediate level for reading technical documentation, basic listening, and simple communication.\n- Quick learner, eager to apply new technologies.",
-            "words": 107,
-            "tokensEstimate": 140,
+            "chunkText": "CANDIDATE: Pham Minh Chi\nPOSITION: Developer\n\n===== SUMMARY =====\n- Pretty solid foundation in back-end web application development with basic understanding of front-end technologies.\n- Proficient in HTML and CSS; familiar with React.js and its core principles.\n- Academic project experience in: Spring Boot, RESTful APIs, PHP, JavaScript (ReactJS), MySQL, PostgreSQL, and Redis.\n- Familiar with API integration using Fetch API and Axios.\n- Knowledge of version control using Git.\n- Understanding of database design, CRUD operations, and basic query optimization.\n- Able to use English at an intermediate level for reading technical documentation, basic listening, and simple communication.\n- Quick learner, eager to apply new technologies.\n\n---",
+            "words": 108,
+            "tokensEstimate": 141,
             "email": "chi12345pham@gmail.com",
-            "cvId": 83,
+            "cvId": 89,
             "cvStatus": "PARSED",
             "sourceType": "HR",
-            "createdAt": "2026-04-04T11:04:38.275219",
+            "createdAt": "2026-04-04T11:18:32.0114963",
             "skills": [],
             "experienceYears": 0,
             "seniorityLevel": "Unknown",
@@ -136,14 +148,14 @@ Text chunking
             "position": "Developer",
             "section": "EDUCATION",
             "chunkIndex": 2,
-            "chunkText": "CANDIDATE: Pham Minh Chi\nPOSITION: Developer\n\n===== EDUCATION =====\n**2023/09 - Present**\n**UTH**\n\n- Starting my third year at Ho Chi Minh City University of Transport.\n- Results of specialized subjects, calculated on a 4-point scale:\n- Object Oriented Programming: 3.00\n- Data Structure and Algorithm: 4.00\n- Database: 3.50\n- Database Design: 3.50\n- Database Management System: 3.50\n- Web Programming: 4.00\n- Computer Network: 3.00\n- Java Programming: 4.00",
-            "words": 71,
-            "tokensEstimate": 93,
+            "chunkText": "CANDIDATE: Pham Minh Chi\nPOSITION: Developer\n\n===== EDUCATION =====\n**2023/09 - Present**\n**UTH**\n\n- Starting my third year at Ho Chi Minh City University of Transport.\n- Results of specialized subjects, calculated on a 4-point scale:\n- Object Oriented Programming: 3.00\n- Data Structure and Algorithm: 4.00\n- Database: 3.50\n- Database Design: 3.50\n- Database Management System: 3.50\n- Web Programming: 4.00\n- Computer Network: 3.00\n- Java Programming: 4.00\n\n---",
+            "words": 72,
+            "tokensEstimate": 94,
             "email": "chi12345pham@gmail.com",
-            "cvId": 83,
+            "cvId": 89,
             "cvStatus": "PARSED",
             "sourceType": "HR",
-            "createdAt": "2026-04-04T11:04:38.275219",
+            "createdAt": "2026-04-04T11:18:32.0114963",
             "skills": [],
             "experienceYears": 0,
             "seniorityLevel": "Unknown",
@@ -157,14 +169,14 @@ Text chunking
             "position": "Developer",
             "section": "SKILLS",
             "chunkIndex": 3,
-            "chunkText": "CANDIDATE: Pham Minh Chi\nPOSITION: Developer\n\n===== SKILLS =====\n- **Back-end:** Basic experience with Spring Boot, RESTful APIs, JWT authentication, and API Gateway.\n- **Architecture & Messaging:** Microservices and monolithic architecture, event-driven communication with NATS.\n- **Database & Caching:** Worked with PostgreSQL, MySQL, and Redis.\n- **Front-end:** Basic understanding of React.js, mainly for integrating and testing APIs.\n- **Version Control:** Familiar with Git.\n- **Soft Skills:** Good communication, teamwork, and quick adaptability to new technologies.\n- **Office & Design Tools:** Proficient in Microsoft Word, Microsoft Excel, and Canva.\n```false# Career Objective\n\n## Short-term\n\n- Gain practical experience in back-end web development through an internship, applying knowledge from academic projects to real-world applications.\n- Improve programming skills in Spring Boot, RESTful APIs, and database management.\n- Quickly adapt to the company’s working environment to contribute effectively and help generate value for the business.\n\n## Long-term\n\n- Become a skilled back-end developer capable of building scalable and secure systems.\n- Continuously improve expertise to bring sustainable growth and long-term benefits to the company.\n\n## Smart Attendance\n\n(2025/06 - 2025/07)",
-            "words": 177,
-            "tokensEstimate": 231,
+            "chunkText": "CANDIDATE: Pham Minh Chi\nPOSITION: Developer\n\n===== SKILLS =====\n- **Back-end:** Basic experience with Spring Boot, RESTful APIs, JWT authentication, and API Gateway.\n- **Architecture & Messaging:** Microservices and monolithic architecture, event-driven communication with NATS.\n- **Database & Caching:** Worked with PostgreSQL, MySQL, and Redis.\n- **Front-end:** Basic understanding of React.js, mainly for integrating and testing APIs.\n- **Version Control:** Familiar with Git.\n- **Soft Skills:** Good communication, teamwork, and quick adaptability to new technologies.\n- **Office & Design Tools:** Proficient in Microsoft Word, Microsoft Excel, and Canva.\n\n© fullstack.edu.vn\nTrang 1/3false# Career Objective\n\n## Short-term\n\n- Gain practical experience in back-end web development through an internship, applying knowledge from academic projects to real-world applications.\n- Improve programming skills in Spring Boot, RESTful APIs, and database management.\n- Quickly adapt to the company’s working environment to contribute effectively and help generate value for the business.\n\n## Long-term\n\n- Become a skilled back-end developer capable of building scalable and secure systems.\n- Continuously improve expertise to bring sustainable growth and long-term benefits to the company.\n\n## Smart Attendance\n\n(2025/06 - 2025/07)",
+            "words": 180,
+            "tokensEstimate": 234,
             "email": "chi12345pham@gmail.com",
-            "cvId": 83,
+            "cvId": 89,
             "cvStatus": "PARSED",
             "sourceType": "HR",
-            "createdAt": "2026-04-04T11:04:38.2765081",
+            "createdAt": "2026-04-04T11:18:32.0124987",
             "skills": [],
             "experienceYears": 0,
             "seniorityLevel": "Unknown",
@@ -182,10 +194,10 @@ Text chunking
             "words": 210,
             "tokensEstimate": 273,
             "email": "chi12345pham@gmail.com",
-            "cvId": 83,
+            "cvId": 89,
             "cvStatus": "PARSED",
             "sourceType": "HR",
-            "createdAt": "2026-04-04T11:04:38.2765081",
+            "createdAt": "2026-04-04T11:18:32.0124987",
             "skills": [],
             "experienceYears": 0,
             "seniorityLevel": "Unknown",
@@ -199,14 +211,14 @@ Text chunking
             "position": "Developer",
             "section": "SKILLS",
             "chunkIndex": 5,
-            "chunkText": "CANDIDATE: Pham Minh Chi\nPOSITION: Developer\n\n===== SKILLS =====\n| Project Name | Academic Project |\n|--------------|------------------|\n| Descriptions | A laundry shop management application built as a monolithic Spring Boot project. The system supports order tracking, service management, and payment confirmation via Casso API integration. This was the first project to practice Spring Boot fundamentals. |\n| Number of members | 4 |\n| Position | Back-end Developer |\n| Responsibilities | - Developed core features using Spring Boot in a monolithic architecture. - Practiced using Spring annotations for dependency injection and request handling. - Implemented ORM with JPA/Hibernate for database interaction. - Integrated Casso API as a third-party payment confirmation service. - Designed basic database schema and implemented CRUD operations. |\n| Technology | Spring Boot, MySQL, JPA/Hibernate, Casso API. |",
-            "words": 133,
-            "tokensEstimate": 173,
+            "chunkText": "CANDIDATE: Pham Minh Chi\nPOSITION: Developer\n\n===== SKILLS =====\n| Project Name | Academic Project |\n|--------------|------------------|\n| Descriptions | A laundry shop management application built as a monolithic Spring Boot project. The system supports order tracking, service management, and payment confirmation via Casso API integration. This was the first project to practice Spring Boot fundamentals. |\n\n| Number of members | 4 |\n|-------------------|---|\n\n| Position | Back-end Developer |\n|-----------|-------------------|\n| Responsibilities | - Developed core features using Spring Boot in a monolithic architecture. - Practiced using Spring annotations for dependency injection and request handling. - Implemented ORM with JPA/Hibernate for database interaction. - Integrated Casso API as a third-party payment confirmation service. - Designed basic database schema and implemented CRUD operations. |\n\n| Technology | Spring Boot, MySQL, JPA/Hibernate, Casso API. |\n|------------|----------------------------------------------|",
+            "words": 136,
+            "tokensEstimate": 177,
             "email": "chi12345pham@gmail.com",
-            "cvId": 83,
+            "cvId": 89,
             "cvStatus": "PARSED",
             "sourceType": "HR",
-            "createdAt": "2026-04-04T11:04:38.2765081",
+            "createdAt": "2026-04-04T11:18:32.0124987",
             "skills": [],
             "experienceYears": 0,
             "seniorityLevel": "Unknown",
@@ -218,5 +230,5 @@ Text chunking
     "totalChunks": 6,
     "position": "Developer",
     "candidateId": null,
-    "totalTokens": 923
+    "totalTokens": 932
 }

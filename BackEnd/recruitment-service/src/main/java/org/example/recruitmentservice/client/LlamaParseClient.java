@@ -244,11 +244,11 @@ public class LlamaParseClient {
         MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
         body.add("file", new FileSystemResource(file));
         body.add("parsing_instruction",
-                "Extract all text from this CV/Resume into Markdown. Focus on keeping paragraphs and sections clear.");
+                "Extract all text from this CV/Resume into Markdown exactly. Preserve tables as markdown tables. Extract text and context from informative images or diagrams. Consistently use Markdown headers (#, ##, ###) for standard CV sections.");
         body.add("result_type", "markdown");
         body.add("target_pages", "");
         body.add("invalidate_cache", "true");
-        body.add("gpt4o_mode", "false");
+        body.add("gpt4o_mode", "true");
         body.add("skip_diagonal_text", "true");
         body.add("extract_all_pages", "true");
         body.add("do_not_unroll_columns", "false");
@@ -315,6 +315,12 @@ public class LlamaParseClient {
                     Map<String, Object> resultBody = resultResponse.getBody();
                     if (resultBody != null && resultBody.containsKey("markdown")) {
                         String markdown = (String) resultBody.get("markdown");
+                        if (markdown != null) {
+                            markdown = markdown.trim();
+                            markdown = markdown.replaceAll("^```markdown\\s*", "");
+                            markdown = markdown.replaceAll("\\s*```$", "");
+                            markdown = markdown.trim();
+                        }
                         log.info("Parse completed! Text length: {}", markdown.length());
                         return markdown;
                     }
