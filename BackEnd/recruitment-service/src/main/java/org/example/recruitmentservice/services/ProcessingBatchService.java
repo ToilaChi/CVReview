@@ -15,6 +15,7 @@ import org.example.recruitmentservice.models.enums.BatchType;
 import org.example.recruitmentservice.models.enums.CVStatus;
 import org.example.recruitmentservice.repository.CandidateCVRepository;
 import org.example.recruitmentservice.repository.ProcessingBatchRepository;
+import org.example.recruitmentservice.sse.SseEmitterRegistry;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -29,6 +30,7 @@ import java.util.stream.Collectors;
 public class ProcessingBatchService {
     private final ProcessingBatchRepository batchRepository;
     private final CandidateCVRepository candidateCVRepository;
+    private final SseEmitterRegistry sseEmitterRegistry;
 
     public ProcessingBatch createBatch(String batchId, Integer positionId, int totalCv, BatchType type) {
         ProcessingBatch batch = new ProcessingBatch();
@@ -56,7 +58,8 @@ public class ProcessingBatchService {
         batch.setSuccessCv((int) actualSuccess);
         batch.setFailedCv((int) actualFailed);
 
-        if (batch.getProcessedCv() >= batch.getTotalCv()) {
+        boolean isCompleted = batch.getProcessedCv() >= batch.getTotalCv();
+        if (isCompleted) {
             batch.setStatus(BatchStatus.COMPLETED);
             batch.setCompletedAt(LocalDateTime.now());
             log.info("Batch {} completed: {}/{} processed, {} success, {} failed",
@@ -65,20 +68,40 @@ public class ProcessingBatchService {
         }
 
         batchRepository.save(batch);
+
+        // Push live update to FE via SSE after DB is persisted
+        BatchStatusResponse snapshot = buildStatusSnapshot(batch, batchId);
+        sseEmitterRegistry.send(batchId, snapshot);
+        if (isCompleted) {
+            sseEmitterRegistry.complete(batchId);
+        }
     }
 
     public ApiResponse<BatchStatusResponse> getBatchStatus(String batchId) {
         ProcessingBatch batch = batchRepository.findByBatchId(batchId)
                 .orElseThrow(() -> new CustomException(ErrorCode.BATCH_NOT_FOUND));
 
-        // Get list of failed CV IDs for this batch
+        BatchStatusResponse response = buildStatusSnapshot(batch, batchId);
+
+        return new ApiResponse<>(
+                ErrorCode.SUCCESS.getCode(),
+                "Batch status retrieved successfully",
+                response
+        );
+    }
+
+    /**
+     * Builds a BatchStatusResponse from the given batch entity.
+     * Fetches failed CV IDs from the DB. Used by both the REST endpoint and SSE push.
+     */
+    private BatchStatusResponse buildStatusSnapshot(ProcessingBatch batch, String batchId) {
         List<Integer> failedCvIds = candidateCVRepository
                 .findByBatchIdAndCvStatus(batchId, CVStatus.FAILED)
                 .stream()
                 .map(CandidateCV::getId)
                 .collect(Collectors.toList());
 
-        BatchStatusResponse response = BatchStatusResponse.builder()
+        return BatchStatusResponse.builder()
                 .batchId(batch.getBatchId())
                 .processedCv(batch.getProcessedCv())
                 .totalCv(batch.getTotalCv())
@@ -93,11 +116,5 @@ public class ProcessingBatchService {
                 .createdAt(batch.getCreatedAt())
                 .completedAt(batch.getCompletedAt())
                 .build();
-
-        return new ApiResponse<>(
-                ErrorCode.SUCCESS.getCode(),
-                "Batch status retrieved successfully",
-                response
-        );
     }
 }
