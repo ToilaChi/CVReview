@@ -3,9 +3,11 @@ package org.example.authservice.services;
 import org.example.authservice.dto.request.LoginRequest;
 import org.example.authservice.dto.response.LoginData;
 import org.example.authservice.dto.request.LogoutRequest;
+import org.example.authservice.dto.request.RegisterHrRequest;
 import org.example.authservice.dto.response.LogoutData;
 import org.example.authservice.dto.response.Userdata;
 import org.example.authservice.models.RefreshToken;
+import org.example.authservice.models.Role;
 import org.example.authservice.models.Users;
 import org.example.authservice.repository.UserRepository;
 import org.example.authservice.security.JwtUtil;
@@ -17,6 +19,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.Optional;
 
 @Service
@@ -188,5 +191,57 @@ public class AuthService {
     public void upgradePasswordAsync(Users user, String rawPassword) {
         user.setPassword(passwordEncoder.encode(rawPassword));
         userRepository.save(user);
+    }
+
+    @Transactional
+    public ApiResponse<Userdata> registerHr(RegisterHrRequest request) {
+        try {
+            if (request.getPhone() == null || request.getPhone().trim().isEmpty()) {
+                return new ApiResponse<>(ErrorCode.MISSING_REQUIRED_FIELD.getCode(), "Phone is required", null);
+            }
+            if (request.getPassword() == null || request.getPassword().trim().isEmpty()) {
+                return new ApiResponse<>(ErrorCode.MISSING_REQUIRED_FIELD.getCode(), "Password is required", null);
+            }
+            if (request.getName() == null || request.getName().trim().isEmpty()) {
+                return new ApiResponse<>(ErrorCode.MISSING_REQUIRED_FIELD.getCode(), "Name is required", null);
+            }
+
+            // Check duplicate phone
+            if (userRepository.findByPhone(request.getPhone()) != null) {
+                return new ApiResponse<>(ErrorCode.DUPLICATE_PHONE.getCode(), ErrorCode.DUPLICATE_PHONE.getMessage(),
+                        null);
+            }
+
+            Users hrUser = Users.builder()
+                    .name(request.getName())
+                    .email(request.getEmail() != null ? request.getEmail() : "")
+                    .phone(request.getPhone())
+                    .password(passwordEncoder.encode(request.getPassword()))
+                    .role(Role.HR)
+                    .createdAt(LocalDateTime.now())
+                    .updatedAt(LocalDateTime.now())
+                    .build();
+
+            Users savedUser = userRepository.save(hrUser);
+
+            Userdata.UserInfo userInfo = new Userdata.UserInfo(
+                    savedUser.getId(),
+                    savedUser.getName(),
+                    savedUser.getEmail(),
+                    savedUser.getPhone(),
+                    savedUser.getRole(),
+                    savedUser.getCreatedAt());
+
+            Userdata userdata = new Userdata();
+            userdata.setAccount(userInfo);
+
+            return new ApiResponse<>(ErrorCode.SUCCESS.getCode(), "HR account created successfully", userdata);
+
+        } catch (Exception e) {
+            System.err.println("Register HR failed: " + e.getMessage());
+            e.printStackTrace();
+            return new ApiResponse<>(ErrorCode.INTERNAL_SERVER_ERROR.getCode(), "Register HR failed: " + e.getMessage(),
+                    null);
+        }
     }
 }

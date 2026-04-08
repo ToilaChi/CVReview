@@ -86,6 +86,15 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
             String id = jwtUtil.extractId(token);
 
             System.out.println("JWT valid - Id: " + id + ", Phone: " + phone + ", Role: " + role);
+
+            // Kiểm tra phân quyền: Nếu route là của Admin, bắt buộc role phải là ADMIN
+            if (path.startsWith("/admin") || path.startsWith("/api/admin") || path.startsWith("/auth/admin")) {
+                if (!"ADMIN".equalsIgnoreCase(role)) {
+                    System.out.println("Access denied: Not an admin for path " + path);
+                    return onError(exchange, ErrorCode.FORBIDDEN); // Sử dụng lỗi liên quan như FORBIDDEN
+                }
+            }
+
             System.out.println("Forwarding to downstream: " + uri);
 
             ServerHttpRequest modifiedRequest = exchange.getRequest().mutate()

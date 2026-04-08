@@ -26,11 +26,14 @@ public enum ErrorCode {
     TOKEN_INVALID(1014, "Invalid token format", HttpStatus.UNAUTHORIZED),
     TOKEN_EXPIRED(1015, "Token has expired. Please refresh your token or login again", HttpStatus.UNAUTHORIZED),
     TOKEN_MISSING(1016, "Authorization token is required", HttpStatus.UNAUTHORIZED),
+    DUPLICATE_PHONE(1017, "Phone number already exists", HttpStatus.CONFLICT),
 
     // CV errors
     CV_NOT_FOUND(2001, "CV not found", HttpStatus.NOT_FOUND),
     CV_PARSE_FAILED(2002, "Failed to parse CV", HttpStatus.BAD_REQUEST),
-    DUPLICATE_CV(2003, "You have already uploaded your CV. If you want to make any changes, please delete the previous CV.", HttpStatus.CONFLICT),
+    DUPLICATE_CV(2003,
+            "You have already uploaded your CV. If you want to make any changes, please delete the previous CV.",
+            HttpStatus.CONFLICT),
     CV_ALREADY_PROCESSING(2004, "CV already processing", HttpStatus.CONFLICT),
     CV_NOT_FAILED(2005, "CV not failed", HttpStatus.CONFLICT),
     NO_FAILED_CVS_IN_BATCH(2006, "No failed CVs in batch", HttpStatus.NOT_FOUND),
