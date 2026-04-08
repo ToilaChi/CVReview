@@ -86,8 +86,19 @@ public class LlamaParseClient {
         String tempFilePath = null;
 
         try {
-            // [Transaction 1] Đánh dấu PARSING - re-fetch trong session rìi của nó, không
-            // pass entity ra ngoài
+            // Guard: skip if CV already terminated — happens when a stale requeued message
+            // is picked up after the DLQ listener already marked this CV as FAILED.
+            CandidateCV currentState = candidateCVRepository.findById(cvId).orElse(null);
+            if (currentState == null) {
+                log.warn("[PARSE] CV {} not found in DB, discarding message", cvId);
+                return;
+            }
+            if (currentState.getCvStatus() == CVStatus.FAILED) {
+                log.warn("[PARSE] CV {} already FAILED, discarding stale requeued message", cvId);
+                return;
+            }
+
+            // [Transaction 1] Mark PARSING
             markCvAsParsing(cvId);
 
             // Download file từ Drive về temp (ngoài transaction)
@@ -138,11 +149,9 @@ public class LlamaParseClient {
 
         } catch (Exception e) {
             log.error("CV parse failed for cvId {}: {}", cvId, e.getMessage(), e);
-            // [Transaction 3] Đánh dấu FAILED - re-fetch trong session rìi của nó, không
-            // cần cv object
-            markCvAsFailed(cvId, e.getMessage());
-            processingBatchService.incrementProcessed(event.getBatchId(), false);
-            throw new CustomException(ErrorCode.CV_PARSE_FAILED);
+            // Re-throw so RabbitMQ routes this message to cv.upload.dlq.
+            // CVUploadDlqListener is the single owner of FAILED state + SSE notification.
+            throw new RuntimeException("CV parse failed: " + e.getMessage(), e);
         } finally {
             if (tempFilePath != null) {
                 storageService.deleteTempFile(tempFilePath);
@@ -176,19 +185,6 @@ public class LlamaParseClient {
         cv.setErrorMessage(null);
         cv.setFailedAt(null);
         candidateCVRepository.save(cv);
-    }
-
-    /** [T3] Re-fetch CV và đánh dấu FAILED trong 1 transaction. */
-    @Transactional
-    public void markCvAsFailed(int cvId, String errorMessage) {
-        candidateCVRepository.findById(cvId).ifPresent(cv -> {
-            cv.setCvStatus(CVStatus.FAILED);
-            cv.setErrorMessage(errorMessage != null ? errorMessage.substring(0, Math.min(errorMessage.length(), 500))
-                    : "Unknown error");
-            cv.setFailedAt(LocalDateTime.now());
-            cv.setUpdatedAt(LocalDateTime.now());
-            candidateCVRepository.save(cv);
-        });
     }
 
     // HELPER METHODS

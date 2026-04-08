@@ -30,4 +30,11 @@ public interface CandidateCVRepository extends JpaRepository<CandidateCV, Intege
      */
     @Query("SELECT c FROM CandidateCV c LEFT JOIN FETCH c.position WHERE c.id = :id")
     Optional<CandidateCV> findByIdWithPosition(@Param("id") int id);
+
+    /**
+     * GC Job: Fetch only FAILED CVs that still have a Drive file pending deletion.
+     * driveFileId != null ensures we don't attempt deleting already-cleaned records.
+     */
+    @Query("SELECT c FROM CandidateCV c WHERE c.cvStatus = 'FAILED' AND c.driveFileId IS NOT NULL AND c.deletedAt IS NULL")
+    List<CandidateCV> findFailedCVsPendingCleanup();
 }

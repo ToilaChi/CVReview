@@ -58,7 +58,7 @@ public class RabbitMQConfig {
     public Binding cvUploadDlqBinding(Queue cvUploadDlqQueue, DirectExchange cvUploadExchange) {
         return BindingBuilder.bind(cvUploadDlqQueue)
                 .to(cvUploadExchange)
-                .with(CV_UPLOAD_DLQ_ROUTING_KEY + ".dlq");
+                .with(CV_UPLOAD_DLQ_ROUTING_KEY);
     }
 
 

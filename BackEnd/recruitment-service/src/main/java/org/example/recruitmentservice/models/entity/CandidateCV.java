@@ -79,4 +79,8 @@ public class CandidateCV {
     @Lob
     @Column(columnDefinition = "TEXT")
     private String errorMessage;
+
+    /** Timestamp when the Drive file was physically deleted by the GC job. Null means file still exists on Drive. */
+    @Column
+    private LocalDateTime deletedAt;
 }
