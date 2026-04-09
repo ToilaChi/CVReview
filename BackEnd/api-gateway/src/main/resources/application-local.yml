@@ -19,7 +19,7 @@ spring:
             - id: auth-service
               uri: http://localhost:8081
               predicates:
-                - Path=/auth/**,/admin/**
+                - Path=/auth/**,/admin/hr-accounts,/admin/stats/**
                 - Method=GET,POST,PUT,DELETE
               filters:
                 - name: CircuitBreaker
@@ -30,7 +30,7 @@ spring:
             - id: recruitment-service
               uri: http://localhost:8082
               predicates:
-                - Path=/positions/**,/cv/**,/upload/**,/analysis/**,/tracking/**,/chunking/**
+                - Path=/positions/**,/cv/**,/upload/**,/analysis/**,/tracking/**,/chunking/**,/admin/analytics/**,/admin/cvs/**
                 - Method=GET,POST,PUT,DELETE
               filters:
                 - name: CircuitBreaker
@@ -95,3 +95,12 @@ resilience4j:
 
 jwt:
   secret: LJ8WPZjFNSfnoD5g+JZXSFiQaMY6gfNvBfR8w9HwT9OI0yEg2RfH2t9mpR7C2Ij7
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always

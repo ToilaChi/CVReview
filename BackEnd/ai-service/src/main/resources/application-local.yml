@@ -12,3 +12,12 @@ gemini:
   api-key: ${GEMINI_API_KEY}
 groq:
   api-key: ${GROQ_API_KEY}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always

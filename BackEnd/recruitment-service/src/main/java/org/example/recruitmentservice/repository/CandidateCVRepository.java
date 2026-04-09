@@ -22,6 +22,13 @@ public interface CandidateCVRepository extends JpaRepository<CandidateCV, Intege
     List<CandidateCV> findByBatchIdAndCvStatus(String batchId, CVStatus cvStatus);
     long countByBatchIdAndCvStatus(String batchId, CVStatus cvStatus);
     int countByPositionId(int positionId);
+    
+    @Query("SELECT COUNT(c) FROM CandidateCV c WHERE c.updatedAt >= :date")
+    long countTotalCVsAfterDate(@Param("date") java.time.LocalDateTime date);
+
+    @Query("SELECT COUNT(c) FROM CandidateCV c WHERE c.cvStatus = :status AND c.updatedAt >= :date")
+    long countByCvStatusAndDateAfter(@Param("status") CVStatus status, @Param("date") java.time.LocalDateTime date);
+    
     CandidateCV findByCandidateId(String candidateId);
 
     /**
@@ -37,4 +44,12 @@ public interface CandidateCVRepository extends JpaRepository<CandidateCV, Intege
      */
     @Query("SELECT c FROM CandidateCV c WHERE c.cvStatus = 'FAILED' AND c.driveFileId IS NOT NULL AND c.deletedAt IS NULL")
     List<CandidateCV> findFailedCVsPendingCleanup();
+
+    @Query(value = "SELECT c FROM CandidateCV c WHERE " +
+           "(:sourceType IS NULL OR c.sourceType = :sourceType) AND " +
+           "(:status IS NULL OR c.cvStatus = :status)")
+    Page<org.example.recruitmentservice.dto.response.AdminCvSummaryDto> findAdminCvList(
+            @Param("sourceType") org.example.recruitmentservice.models.enums.SourceType sourceType,
+            @Param("status") CVStatus status,
+            Pageable pageable);
 }

@@ -9,4 +9,7 @@ public interface UserRepository extends JpaRepository<Users, String> {
     @Query("SELECT u FROM Users u WHERE u.phone = :phone")
     @org.springframework.transaction.annotation.Transactional(readOnly = true)
     Users findByPhone(@Param("phone") String phone);
+
+    @Query("SELECT COUNT(u) FROM Users u WHERE u.role = :role")
+    long countByRole(@Param("role") org.example.authservice.models.Role role);
 }
