@@ -45,6 +45,19 @@ public class Positions {
     @Column
     private String driveFileUrl;
 
+    /** TRUE khi position đang trong đợt tuyển dụng — dùng để filter scope Candidate chatbot. */
+    @Column(nullable = false)
+    @Builder.Default
+    private boolean isActive = true;
+
+    /** Thời điểm mở đợt tuyển dụng. Cùng với name/language/level tạo thành Recruitment Period label. */
+    @Column
+    private LocalDateTime openedAt;
+
+    /** Thời điểm đóng đợt tuyển dụng. NULL nghĩa là đang mở. */
+    @Column
+    private LocalDateTime closedAt;
+
     @Column(nullable = false)
     private LocalDateTime createdAt;
 

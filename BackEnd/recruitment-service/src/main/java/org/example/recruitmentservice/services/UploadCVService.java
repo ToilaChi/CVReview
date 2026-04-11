@@ -93,7 +93,10 @@ public class UploadCVService {
     }
 
     /**
-     * Upload CV cho CANDIDATE (single CV, không cần positionId)
+     * Upload CV cho CANDIDATE (single CV, không cần positionId).
+     * Nếu Master CV đã tồn tại (re-upload): soft-delete Master cũ + toàn bộ
+     * Application CVs,
+     * sau đó tạo Master CV mới và kích hoạt pipeline re-embed.
      */
     public ApiResponse<Map<String, Object>> uploadCVByCandidate(
             MultipartFile file,
@@ -105,27 +108,26 @@ public class UploadCVService {
         }
 
         String candidateId = extractUserId(request);
-        CandidateCV candidateCV = candidateCVRepository.findByCandidateId(candidateId);
-        if (candidateCV != null) {
-            throw new CustomException(ErrorCode.DUPLICATE_CV);
-        }
-
-        String userId = extractUserId(request);
 
         if (file == null || file.isEmpty()) {
             throw new CustomException(ErrorCode.FILE_NOT_FOUND);
         }
 
-        String batchId = generateCandidateBatchId();
+        // Kiểm tra Master CV cũ (positionId IS NULL) — không check trên Application CVs
+        Optional<CandidateCV> existingMaster = candidateCVRepository.findMasterCvByCandidateId(candidateId);
+        if (existingMaster.isPresent()) {
+            softDeleteMasterAndApplications(existingMaster.get());
+        }
 
+        String batchId = generateCandidateBatchId();
         ProcessingBatch batch = processingBatchService.createBatch(
                 batchId,
-                null, // Không có positionId
+                null,
                 1,
                 BatchType.UPLOAD);
 
         try {
-            CandidateCV cv = uploadSingleCV(file, null, batchId, SourceType.CANDIDATE, userId);
+            CandidateCV cv = uploadSingleCV(file, null, batchId, SourceType.CANDIDATE, candidateId);
 
             Map<String, Object> response = new HashMap<>();
             response.put("cvId", cv.getId());
@@ -138,6 +140,26 @@ public class UploadCVService {
             System.err.println("Candidate CV upload failed: " + e.getMessage());
             throw new CustomException(ErrorCode.FAILED_SAVE_FILE);
         }
+    }
+
+    /**
+     * Soft-delete Master CV và tất cả Application CVs liên kết khi Candidate
+     * re-upload.
+     * Application CVs cũ được xác định qua parentCvId — Candidate phải nộp lại ứng
+     * tuyển nếu muốn tiếp tục.
+     */
+    private void softDeleteMasterAndApplications(CandidateCV master) {
+        LocalDateTime now = LocalDateTime.now();
+
+        List<CandidateCV> applicationCVs = candidateCVRepository.findApplicationsByParentCvId(master.getId());
+        applicationCVs.forEach(app -> app.setDeletedAt(now));
+        candidateCVRepository.saveAll(applicationCVs);
+
+        master.setDeletedAt(now);
+        candidateCVRepository.save(master);
+
+        System.out.println("Re-upload: soft-deleted master CV id=" + master.getId()
+                + " and " + applicationCVs.size() + " application CVs");
     }
 
     /**

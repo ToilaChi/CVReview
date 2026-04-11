@@ -2,6 +2,7 @@ package org.example.recruitmentservice.repository;
 
 import org.example.recruitmentservice.models.enums.CVStatus;
 import org.example.recruitmentservice.models.entity.CandidateCV;
+import org.example.recruitmentservice.models.enums.SourceType;
 import org.springframework.data.domain.*;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -22,14 +23,12 @@ public interface CandidateCVRepository extends JpaRepository<CandidateCV, Intege
     List<CandidateCV> findByBatchIdAndCvStatus(String batchId, CVStatus cvStatus);
     long countByBatchIdAndCvStatus(String batchId, CVStatus cvStatus);
     int countByPositionId(int positionId);
-    
+
     @Query("SELECT COUNT(c) FROM CandidateCV c WHERE c.updatedAt >= :date")
     long countTotalCVsAfterDate(@Param("date") java.time.LocalDateTime date);
 
     @Query("SELECT COUNT(c) FROM CandidateCV c WHERE c.cvStatus = :status AND c.updatedAt >= :date")
     long countByCvStatusAndDateAfter(@Param("status") CVStatus status, @Param("date") java.time.LocalDateTime date);
-    
-    CandidateCV findByCandidateId(String candidateId);
 
     /**
      * Load CandidateCV cùng Position trong 1 query → tránh LazyInitializationException
@@ -49,7 +48,39 @@ public interface CandidateCVRepository extends JpaRepository<CandidateCV, Intege
            "(:sourceType IS NULL OR c.sourceType = :sourceType) AND " +
            "(:status IS NULL OR c.cvStatus = :status)")
     Page<org.example.recruitmentservice.dto.response.AdminCvSummaryDto> findAdminCvList(
-            @Param("sourceType") org.example.recruitmentservice.models.enums.SourceType sourceType,
+            @Param("sourceType") SourceType sourceType,
             @Param("status") CVStatus status,
             Pageable pageable);
+
+    // -------------------------------------------------------
+    // Queries phục vụ Chatbot feature
+    // -------------------------------------------------------
+
+    /**
+     * Tìm Master CV của candidate (positionId IS NULL và chưa bị soft-delete).
+     * Dùng để kiểm tra duplicate khi upload và lấy nguồn dữ liệu cho finalize_application.
+     */
+    @Query("SELECT c FROM CandidateCV c WHERE c.candidateId = :candidateId AND c.position IS NULL AND c.deletedAt IS NULL")
+    Optional<CandidateCV> findMasterCvByCandidateId(@Param("candidateId") String candidateId);
+
+    /**
+     * Tìm tất cả Application CVs của candidate thông qua parentCvId.
+     * Dùng khi candidate re-upload: soft-delete toàn bộ application CVs cũ.
+     */
+    @Query("SELECT c FROM CandidateCV c WHERE c.parentCvId = :parentCvId AND c.deletedAt IS NULL")
+    List<CandidateCV> findApplicationsByParentCvId(@Param("parentCvId") int parentCvId);
+
+    /**
+     * Lấy các Application CVs ứng tuyển vào 1 position cụ thể (sourceType=CANDIDATE).
+     * Dùng trong HR chatbot mode CANDIDATE để lấy candidateIds rồi filter Qdrant.
+     */
+    @Query("SELECT c FROM CandidateCV c WHERE c.position.id = :positionId AND c.sourceType = 'CANDIDATE' AND c.deletedAt IS NULL")
+    List<CandidateCV> findApplicationsByPositionId(@Param("positionId") int positionId);
+
+    /**
+     * Đếm số ứng viên Candidate đã nộp vào 1 position.
+     * Dùng cho HR dashboard hiển thị số applicants.
+     */
+    @Query("SELECT COUNT(c) FROM CandidateCV c WHERE c.position.id = :positionId AND c.sourceType = 'CANDIDATE' AND c.deletedAt IS NULL")
+    long countApplicationsByPositionId(@Param("positionId") int positionId);
 }

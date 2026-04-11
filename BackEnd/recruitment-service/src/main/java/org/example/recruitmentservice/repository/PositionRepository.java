@@ -27,4 +27,11 @@ public interface PositionRepository extends JpaRepository<Positions, Integer> {
     List<Positions> searchByKeyword(@Param("keyword") String keyword);
     @Query("SELECT p FROM Positions p JOIN p.candidateCVs c WHERE c.id = :cvId")
     Positions findByCandidateCVId(@Param("cvId") int cvId);
+
+    /**
+     * Lấy tất cả positions đang active — dùng bởi chatbot-service để filter scope JD khi search.
+     * Strategy: always-fresh (gọi SQL mỗi request) thay vì sync vào Qdrant metadata.
+     */
+    @Query("SELECT p FROM Positions p WHERE p.isActive = true ORDER BY p.openedAt DESC")
+    List<Positions> findAllActive();
 }

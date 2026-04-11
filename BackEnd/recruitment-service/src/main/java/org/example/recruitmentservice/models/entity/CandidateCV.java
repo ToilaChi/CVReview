@@ -28,6 +28,14 @@ public class CandidateCV {
     @JoinColumn(name = "position_id")
     private Positions position;
 
+    /**
+     * FK trỏ về Master CV (row có positionId=NULL).
+     * NULL đối với Master CV và HR-sourced CVs.
+     * Được điền khi Candidate nộp đơn ứng tuyển qua chatbot (finalize_application).
+     */
+    @Column(name = "parent_cv_id")
+    private Integer parentCvId;
+
     @Column
     @Enumerated(EnumType.STRING)
     private SourceType sourceType;
