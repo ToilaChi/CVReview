@@ -2,7 +2,6 @@ package org.example.authservice.dto.response;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;
-import lombok.Getter;
 import lombok.NoArgsConstructor;
 import org.example.authservice.models.Role;
 

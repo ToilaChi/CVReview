@@ -28,12 +28,12 @@
 - [x] application-local.yml — thêm mail SMTP config + chatbot internal secret
 
 ## Phase 3: Candidate Chatbot (chatbot-service / Python)
-- [ ] recruitment_api.py — HTTP client gọi internal APIs
-- [ ] candidate_graph.py — refactor graph.py + session + scoring
-- [ ] candidate_tools.py — evaluate_cv_fit, finalize_application
-- [ ] candidate_chat.py — routes mới
-- [ ] retriever.py — cập nhật JD filter + HR mode Candidate method
-- [ ] config.py — thêm RECRUITMENT_SERVICE_URL, SCORE_THRESHOLD
+- [x] recruitment_api.py — HTTP client gọi internal APIs
+- [x] candidate_graph.py — refactor graph.py + session + scoring
+- [x] candidate_tools.py — evaluate_cv_fit, finalize_application
+- [x] candidate_chat.py — routes mới
+- [x] retriever.py — cập nhật JD filter + HR mode Candidate method
+- [x] config.py — thêm RECRUITMENT_SERVICE_URL, SCORE_THRESHOLD
 
 ## Phase 4: HR Chatbot (chatbot-service / Python)
 - [ ] hr_graph.py — LangGraph mới cho HR

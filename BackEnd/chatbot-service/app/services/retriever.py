@@ -95,7 +95,8 @@ class CareerCounselorRetriever:
         cv_id: Optional[int] = None,
         jd_id: Optional[int] = None,
         top_k: Optional[int] = None,  # Made optional, will use adaptive
-        score_threshold: Optional[float] = None  # Made optional, will use adaptive
+        score_threshold: Optional[float] = None,  # Made optional, will use adaptive
+        active_jd_ids: Optional[List[int]] = None
     ) -> Dict[str, Any]:
         """
         Improved retrieval with adaptive parameters
@@ -120,7 +121,8 @@ class CareerCounselorRetriever:
                 cv_id=cv_id,
                 cv_top_k=cv_top_k,
                 jd_top_k=jd_top_k,
-                score_threshold=score_threshold
+                score_threshold=score_threshold,
+                active_jd_ids=active_jd_ids
             )
         
         elif intent == "jd_analysis":
@@ -140,7 +142,8 @@ class CareerCounselorRetriever:
                     cv_id=cv_id,
                     cv_top_k=cv_top_k,
                     jd_top_k=min(jd_top_k, 3),  # Fewer JDs for analysis
-                    score_threshold=score_threshold
+                    score_threshold=score_threshold,
+                    active_jd_ids=active_jd_ids
                 )
         
         elif intent == "cv_analysis":
@@ -166,7 +169,8 @@ class CareerCounselorRetriever:
         cv_id: Optional[int] = None,
         cv_top_k: int = 5,
         jd_top_k: int = 5,
-        score_threshold: Optional[float] = None
+        score_threshold: Optional[float] = None,
+        active_jd_ids: Optional[List[int]] = None
     ) -> Dict[str, Any]:
         """
         Improved: Adaptive threshold and better monitoring
@@ -207,11 +211,16 @@ class CareerCounselorRetriever:
         )
         
         # 2. Search JDs
-        jd_filters = Filter(
-            must=[
-                FieldCondition(key="is_latest", match=MatchValue(value=True))
-            ]
-        )
+        jd_must_conditions = [
+            FieldCondition(key="is_latest", match=MatchValue(value=True))
+        ]
+        
+        if active_jd_ids is not None:
+            jd_must_conditions.append(
+                FieldCondition(key="jdId", match=MatchAny(any=active_jd_ids))
+            )
+            
+        jd_filters = Filter(must=jd_must_conditions)
         
         jd_results = self.qdrant_service.search_similar(
             collection_name=self.jd_collection,
@@ -492,6 +501,45 @@ class CareerCounselorRetriever:
                 "cv_chunks_retrieved": len(results),
                 "skills_queried": required_skills,
                 "score_range": self._get_score_range(results)
+            }
+        }
+
+
+    async def retrieve_for_hr_mode_candidate(
+        self,
+        query: str,
+        candidate_ids: List[str],
+        top_k: int = 5,
+        score_threshold: float = 0.4
+    ) -> Dict[str, Any]:
+        """
+        HR Chatbot: Candidate Mode
+        Retrieve candidate CVs filtered by a specific list of candidate_ids.
+        """
+        query_vector = self.embedding_service.embed_text(query, is_query=True)
+        
+        cv_filters = Filter(must=[
+            FieldCondition(key="candidateId", match=MatchAny(any=candidate_ids)),
+            FieldCondition(key="sourceType", match=MatchValue(value="CANDIDATE")),
+            FieldCondition(key="is_latest", match=MatchValue(value=True))
+        ])
+        
+        cv_results = self.qdrant_service.search_similar(
+            collection_name=self.cv_collection,
+            query_vector=query_vector,
+            limit=top_k,
+            score_threshold=score_threshold,
+            filters=cv_filters
+        )
+        
+        return {
+            "cv_context": cv_results,
+            "jd_context": [],
+            "retrieval_stats": {
+                "cv_chunks_retrieved": len(cv_results),
+                "cv_score_range": self._get_score_range(cv_results),
+                "threshold_used": score_threshold,
+                "candidate_ids_count": len(candidate_ids)
             }
         }
 

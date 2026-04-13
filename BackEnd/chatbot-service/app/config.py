@@ -45,6 +45,12 @@ class Settings(BaseSettings):
     GEMINI_TEMPERATURE: float = 0.7
     GEMINI_MAX_TOKENS: int = 2048
     
+    # Internal Service API (Recruitment)
+    RECRUITMENT_SERVICE_URL: str = "http://recruitment-service:8080"
+    INTERNAL_SERVICE_SECRET: str = "internal-secret"
+    MAX_HISTORY_TURNS: int = 20
+    SCORE_THRESHOLD: int = 70
+    
     class Config:
         env_file = ".env"
         case_sensitive = True
