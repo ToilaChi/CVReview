@@ -30,7 +30,7 @@ spring:
             - id: recruitment-service
               uri: http://localhost:8082
               predicates:
-                - Path=/positions/**,/cv/**,/upload/**,/analysis/**,/tracking/**,/chunking/**,/admin/analytics/**,/admin/cvs/**
+                - Path=/positions/**,/cv/**,/upload/**,/analysis/**,/tracking/**,/chunking/**,/admin/analytics/**,/admin/cvs/**,/internal/chatbot/**,/api/chatbot/**
                 - Method=GET,POST,PUT,DELETE
               filters:
                 - name: CircuitBreaker

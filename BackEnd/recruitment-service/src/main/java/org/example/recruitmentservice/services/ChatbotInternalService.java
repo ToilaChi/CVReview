@@ -1,0 +1,81 @@
+package org.example.recruitmentservice.services;
+
+import lombok.RequiredArgsConstructor;
+import org.example.recruitmentservice.dto.response.ActivePositionResponse;
+import org.example.recruitmentservice.dto.response.ApplicationSummaryResponse;
+import org.example.recruitmentservice.models.entity.CandidateCV;
+import org.example.recruitmentservice.models.entity.Positions;
+import org.example.recruitmentservice.repository.CVAnalysisRepository;
+import org.example.recruitmentservice.repository.CandidateCVRepository;
+import org.example.recruitmentservice.repository.PositionRepository;
+import org.springframework.stereotype.Service;
+
+import java.util.List;
+import java.util.stream.Collectors;
+
+/**
+ * Service xử lý các yêu cầu lấy dữ liệu nội bộ (internal) phục vụ cho Chatbot.
+ * Tách biệt logic truy xuất dữ liệu và mapping khỏi Controller để tuân thủ SRP.
+ */
+@Service
+@RequiredArgsConstructor
+public class ChatbotInternalService {
+
+    private final PositionRepository positionRepository;
+    private final CandidateCVRepository candidateCVRepository;
+    private final CVAnalysisRepository cvAnalysisRepository;
+
+    /**
+     * Lấy danh sách các vị trí đang mở (active).
+     * Dùng cho Chatbot để lọc phạm vi tìm kiếm JD trên Qdrant.
+     */
+    public List<ActivePositionResponse> getActivePositions() {
+        return positionRepository.findAllActive()
+                .stream()
+                .map(this::toActivePositionResponse)
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Lấy danh sách tóm tắt các ứng viên đã nộp đơn cho một vị trí cụ thể.
+     * HR Chatbot dùng candidateId list này để lọc các Master CV vectors trên Qdrant.
+     */
+    public List<ApplicationSummaryResponse> getApplicationsByPosition(int positionId) {
+        return candidateCVRepository
+                .findApplicationsByPositionId(positionId)
+                .stream()
+                .map(this::toApplicationSummaryResponse)
+                .collect(Collectors.toList());
+    }
+
+    private ActivePositionResponse toActivePositionResponse(Positions position) {
+        String openedAt = position.getOpenedAt() != null
+                ? position.getOpenedAt().toString()
+                : null;
+        return ActivePositionResponse.builder()
+                .id(position.getId())
+                .name(position.getName())
+                .language(position.getLanguage())
+                .level(position.getLevel())
+                .openedAt(openedAt)
+                .build();
+    }
+
+    private ApplicationSummaryResponse toApplicationSummaryResponse(CandidateCV cv) {
+        ApplicationSummaryResponse.ApplicationSummaryResponseBuilder builder = ApplicationSummaryResponse.builder()
+                .candidateId(cv.getCandidateId())
+                .candidateName(cv.getName())
+                .candidateEmail(cv.getEmail())
+                .appCvId(cv.getId());
+
+        // Lấy score/feedback từ CVAnalysis (sử dụng repository để tránh LazyInitializationException)
+        cvAnalysisRepository.findByCandidateCV_Id(cv.getId()).ifPresent(analysis -> 
+            builder.score(analysis.getScore())
+                   .feedback(analysis.getFeedback())
+                   .skillMatch(analysis.getSkillMatch())
+                   .skillMiss(analysis.getSkillMiss())
+        );
+
+        return builder.build();
+    }
+}

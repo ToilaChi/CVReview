@@ -48,6 +48,19 @@ spring:
     username: "${RABBITMQ_USERNAME}"
     password: "${RABBITMQ_PASSWORD}"
 
+  # Spring Mail — SMTP config cho email phỏng vấn
+  mail:
+    host: ${MAIL_HOST:smtp.gmail.com}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME}
+    password: ${MAIL_PASSWORD}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+
 
 # CloudFlare
 r2:
@@ -93,3 +106,8 @@ management:
   endpoint:
     health:
       show-details: always
+
+# Chatbot internal secret — header X-Internal-Service phải khớp giá trị này
+chatbot:
+  internal-secret: ${CHATBOT_INTERNAL_SECRET:chatbot-service}
+  from-email: ${MAIL_USERNAME}

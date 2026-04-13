@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <style>
+        body {
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background: #f4f6f9;
+            margin: 0;
+            padding: 0;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 600px;
+            margin: 32px auto;
+            background: #fff;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, .10);
+        }
+
+        .header {
+            background: linear-gradient(135deg, #1a73e8, #0d47a1);
+            padding: 32px 40px;
+            text-align: center;
+        }
+
+        .header h1 {
+            color: #fff;
+            margin: 0;
+            font-size: 24px;
+            font-weight: 700;
+            letter-spacing: .5px;
+            text-transform: uppercase;
+        }
+
+        .header p {
+            color: rgba(255, 255, 255, .85);
+            margin: 8px 0 0;
+            font-size: 14px;
+        }
+
+        .body {
+            padding: 36px 40px;
+        }
+
+        .greeting {
+            font-size: 16px;
+            color: #333;
+            margin-bottom: 20px;
+        }
+
+        .info-card {
+            background: #f0f7ff;
+            border-left: 4px solid #1a73e8;
+            border-radius: 6px;
+            padding: 16px 20px;
+            margin: 20px 0;
+        }
+
+        .info-card .label {
+            font-size: 11px;
+            color: #666;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 4px;
+            font-weight: 600;
+        }
+
+        .info-card .value {
+            font-size: 15px;
+            color: #1a1a2e;
+            font-weight: 600;
+        }
+
+        .custom-msg {
+            background: #fafafa;
+            border: 1px solid #e0e0e0;
+            border-radius: 6px;
+            padding: 16px;
+            margin: 20px 0;
+            font-size: 14px;
+            color: #444;
+            line-height: 1.5;
+        }
+
+        .footer {
+            background: #f8f9fa;
+            text-align: center;
+            padding: 24px;
+            font-size: 12px;
+            color: #999;
+            border-top: 1px solid #eee;
+        }
+
+        .footer a {
+            color: #1a73e8;
+            text-decoration: none;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Interview Invitation</h1>
+            <p>Talent Acquisition Department</p>
+        </div>
+        <div class="body">
+            <p class="greeting">Dear <strong th:text="${candidateName}">Candidate</strong>,</p>
+
+            <p>Thank you for your interest in our company. Following a thorough review of your application, we are
+                pleased to invite you for an interview for the
+                <strong th:text="${positionName}">Position</strong> role.
+            </p>
+
+            <p>The details of your scheduled interview are as follows:</p>
+
+            <div class="info-card">
+                <div class="label">Prospective Role</div>
+                <div class="value" th:text="${positionName}">N/A</div>
+            </div>
+
+            <div class="info-card">
+                <div class="label">Scheduled Time & Date</div>
+                <div class="value" th:text="${interviewDate}">To be confirmed</div>
+            </div>
+
+            <div th:if="${customMessage}" class="custom-msg">
+                <strong style="color: #333;">HR Additional Instructions:</strong><br />
+                <span th:text="${customMessage}"></span>
+            </div>
+
+            <p>Please confirm your availability by replying to this email. Should you have any questions or require
+                further clarification, do not hesitate to contact us.</p>
+
+            <p>We look forward to meeting with you and discussing your potential contributions to our team.</p>
+
+            <p>Best regards,<br /><strong>The Recruitment Team</strong></p>
+        </div>
+        <div class="footer">
+            <p>© 2026 CV Review Recruitment System. All rights reserved.</p>
+            <p><a href="#">Contact Support</a> | <a href="#">Career Page</a></p>
+        </div>
+    </div>
+</body>
+
+</html>

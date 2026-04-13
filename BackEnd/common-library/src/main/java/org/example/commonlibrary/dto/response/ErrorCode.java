@@ -61,7 +61,14 @@ public enum ErrorCode {
     BATCH_NOT_FOUND(6001, "Batch not found", HttpStatus.NOT_FOUND),
 
     // Retry
-    RETRY_FAILED(7001, "Retry failed", HttpStatus.INTERNAL_SERVER_ERROR);
+    RETRY_FAILED(7001, "Retry failed", HttpStatus.INTERNAL_SERVER_ERROR),
+
+    // Chatbot
+    SESSION_NOT_FOUND(8001, "Chat session not found", HttpStatus.NOT_FOUND),
+    MASTER_CV_NOT_FOUND(8002, "Candidate has no master CV. Please upload a CV first.", HttpStatus.NOT_FOUND),
+    APPLICATION_ALREADY_EXISTS(8003, "Candidate has already applied for this position", HttpStatus.CONFLICT),
+    SCORE_BELOW_THRESHOLD(8004, "Score is below the required threshold to apply", HttpStatus.BAD_REQUEST),
+    EMAIL_SEND_FAILED(8005, "Failed to send email notification", HttpStatus.INTERNAL_SERVER_ERROR);
 
     private final int code;
     private final String message;

@@ -15,13 +15,17 @@
 - [x] PositionRepository.java — thêm findAllActive()
 
 ## Phase 2: Internal & Public APIs (recruitment-service / Java)
-- [ ] ChatSessionService.java — business logic session/history
-- [ ] FinalizeApplicationService.java — copy CV + create CVAnalysis
-- [ ] NotificationService.java — gửi email SMTP
-- [ ] ChatbotInternalController.java — 7 internal endpoints
-- [ ] ChatbotPublicController.java — 2 public endpoints (FE chat history)
-- [ ] Request/Response DTOs cho chatbot APIs
-- [ ] PositionRepository — thêm query findAllActive()
+- [x] ChatSessionService.java — business logic session/history
+- [x] FinalizeApplicationService.java — copy CV + create CVAnalysis
+- [x] NotificationService.java — gửi email SMTP (Spring Mail + Thymeleaf)
+- [x] ChatbotInternalController.java — 7 internal endpoints
+- [x] ChatbotPublicController.java — 2 public endpoints (FE chat history)
+- [x] Request/Response DTOs cho chatbot APIs (6 DTOs)
+- [x] EmailType enum — INTERVIEW_INVITE, OFFER_LETTER, REJECTION
+- [x] Email HTML templates (Thymeleaf) — interview-invite, offer-letter, rejection
+- [x] ErrorCode — thêm chatbot error codes (8001–8005)
+- [x] pom.xml — thêm spring-boot-starter-mail + thymeleaf
+- [x] application-local.yml — thêm mail SMTP config + chatbot internal secret
 
 ## Phase 3: Candidate Chatbot (chatbot-service / Python)
 - [ ] recruitment_api.py — HTTP client gọi internal APIs

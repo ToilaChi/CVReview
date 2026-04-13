@@ -138,6 +138,16 @@
             <artifactId>opennlp-tools</artifactId>
             <version>2.5.3</version>
         </dependency>
+        <!-- Spring Mail — gửi email SMTP cho notification chatbot -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-mail</artifactId>
+        </dependency>
+        <!-- Thymeleaf — render HTML email templates -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-thymeleaf</artifactId>
+        </dependency>
     </dependencies>
 
     <build>
