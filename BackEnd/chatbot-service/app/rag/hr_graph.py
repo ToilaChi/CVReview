@@ -16,6 +16,13 @@ from app.services.recruitment_api import recruitment_api
 from app.rag.hr_tools import HR_TOOLS
 from app.config import get_settings
 
+
+def _extract_llm_text(content) -> str:
+    """Normalise LLM response content regardless of str vs list-of-blocks format."""
+    if isinstance(content, list):
+        return " ".join(b.get("text", "") for b in content if isinstance(b, dict) and "text" in b)
+    return str(content)
+
 settings = get_settings()
 
 # ---------------------------------------------------------------------------
@@ -165,26 +172,29 @@ def _format_history(history: List[Dict[str, Any]]) -> str:
 
 
 def _format_cv_context(cv_context: List[Dict[str, Any]]) -> str:
+    """Format retrieved CV chunks into a readable block for the HR prompt."""
     if not cv_context:
-        return "Không có thông tin CV nào được tìm thấy."
+        return "No CV data found for the current filter criteria."
     parts = []
     for i, chunk in enumerate(cv_context, 1):
         payload = chunk.get("payload", {})
         candidate_id = payload.get("candidateId", "unknown")
         score = chunk.get("score", 0)
-        chunk_text = payload.get("chunkText", "")
-        parts.append(f"--- CV #{i} (Candidate: {candidate_id}, Similarity: {score:.2f}) ---\n{chunk_text}")
+        chunk_text = payload.get("chunkText", "").strip()
+        parts.append(f"--- CV #{i} | Candidate ID: {candidate_id} | Similarity: {score:.2f} ---\n{chunk_text}")
     return "\n\n".join(parts)
 
 
 def _format_sql_metadata(sql_metadata: List[Dict[str, Any]]) -> str:
+    """Format application score rows from SQL into a compact summary."""
     if not sql_metadata:
         return ""
     rows = []
     for app in sql_metadata:
         rows.append(
-            f"• CandidateId={app.get('candidateId')} | Score={app.get('score', 'N/A')} | "
-            f"Feedback={app.get('feedback', 'N/A')}"
+            f"• CandidateId: {app.get('candidateId')} "
+            f"| Score: {app.get('score', 'N/A')} "
+            f"| Feedback: {app.get('feedback', 'N/A')}"
         )
     return "\n".join(rows)
 
@@ -196,27 +206,27 @@ def build_hr_prompts_node(state: HRChatState) -> HRChatState:
     cv_text = _format_cv_context(state.get("cv_context", []))
     sql_text = _format_sql_metadata(state.get("sql_metadata", []))
 
-    system_prompt = f"""Bạn là trợ lý AI hỗ trợ HR trong quá trình tuyển dụng.
-Hiện tại bạn đang ở chế độ: {mode_label} — Position ID: {state['position_id']}.
+    system_prompt = f"""You are a Senior HR Talent Acquisition Specialist assisting with recruitment decisions.
+Current mode: {mode_label} | Position ID: {state['position_id']}
 
-NGUYÊN TẮC:
-- Trả lời ngắn gọn, súc tích và chuyên nghiệp.
-- Chỉ tư vấn dựa trên dữ liệu CV và điểm số được cung cấp.
-- Khi HR yêu cầu gửi email, hãy gọi tool `send_interview_email`.
-- Khi HR hỏi thông tin chi tiết một ứng viên cụ thể, hãy gọi tool `get_candidate_details`.
-- KHÔNG bịa đặt thông tin ứng viên.
+Guidelines:
+- Respond concisely and professionally — as an experienced recruiter, not a chatbot.
+- Base all assessments strictly on the CV data and scores provided — never fabricate candidate details.
+- When HR requests to send an email, invoke the `send_interview_email` tool.
+- When HR requests detailed candidate information, invoke the `get_candidate_details` tool.
+- Responses must be in English.
 """
 
-    user_prompt = f"""## Lịch sử hội thoại:
-{history_text if history_text else "(Hội thoại mới)"}
+    user_prompt = f"""## Conversation History:
+{history_text if history_text else "(New session)"}
 
-## Dữ liệu CV từ hệ thống:
+## CV Data Retrieved from System:
 {cv_text}
 """
     if sql_text:
-        user_prompt += f"\n## Điểm số & Nhận xét từ database:\n{sql_text}\n"
+        user_prompt += f"\n## Application Scores & Feedback from Database:\n{sql_text}\n"
 
-    user_prompt += f"\n## Câu hỏi của HR:\n{state['query']}"
+    user_prompt += f"\n## HR Question:\n{state['query']}"
 
     state["system_prompt"] = system_prompt
     state["user_prompt"] = user_prompt
@@ -244,14 +254,13 @@ async def llm_hr_reasoning_node(state: HRChatState) -> HRChatState:
     state["function_calls"] = None
 
     if not response.tool_calls:
-        content = response.content
-        state["llm_response"] = " ".join([b.get("text", "") for b in content if isinstance(b, dict) and "text" in b]) if isinstance(content, list) else str(content)
+        state["llm_response"] = _extract_llm_text(response.content)
         return state
 
-    # --- Tool execution loop (max 1 round) ---
+    # --- Tool execution loop (single round) ---
     executed_calls = []
     tool_map = {t.name: t for t in HR_TOOLS}
-    messages.append(response)  # AIMessage with tool_use blocks
+    messages.append(response)
 
     for call in response.tool_calls:
         tool_name = call["name"]
@@ -259,27 +268,22 @@ async def llm_hr_reasoning_node(state: HRChatState) -> HRChatState:
         tool_instance = tool_map.get(tool_name)
 
         if tool_instance is None:
-            tool_result = f"Tool '{tool_name}' không tồn tại."
+            tool_result = f"Tool '{tool_name}' does not exist."
         else:
             try:
                 tool_result = await tool_instance.ainvoke(tool_args)
             except Exception as e:
-                tool_result = f"Lỗi khi thực thi tool {tool_name}: {str(e)}"
+                tool_result = f"Error executing tool {tool_name}: {str(e)}"
 
-        executed_calls.append({
-            "name": tool_name,
-            "arguments": tool_args,
-            "result": tool_result
-        })
+        executed_calls.append({"name": tool_name, "arguments": tool_args, "result": tool_result})
         messages.append(ToolMessage(content=str(tool_result), tool_call_id=call["id"]))
 
     state["function_calls"] = executed_calls
 
-    # Second LLM call to synthesize tool results into a natural response
+    # Second LLM call to synthesize tool results
     llm_no_tools = _build_llm(temperature=0.3)
     final_response = await llm_no_tools.ainvoke(messages)
-    content = final_response.content
-    state["llm_response"] = " ".join([b.get("text", "") for b in content if isinstance(b, dict) and "text" in b]) if isinstance(content, list) else str(content)
+    state["llm_response"] = _extract_llm_text(final_response.content)
 
     return state
 
@@ -294,14 +298,17 @@ async def save_hr_turn_node(state: HRChatState) -> HRChatState:
         await recruitment_api.save_message(
             session_id=state["session_id"],
             role="USER",
-            content=state["query"]
+            content=state["query"],
         )
-        function_call_payload = state.get("function_calls") or None
+        # functionCall contract in Java is String — must serialize before sending
+        raw_calls = state.get("function_calls")
+        function_call_payload: Optional[str] = json.dumps(raw_calls, ensure_ascii=False) if raw_calls else None
+
         await recruitment_api.save_message(
             session_id=state["session_id"],
             role="ASSISTANT",
             content=state["llm_response"],
-            function_call=function_call_payload
+            function_call=function_call_payload,
         )
     except Exception as e:
         print(f"[HR Graph] Could not save turn: {e}")

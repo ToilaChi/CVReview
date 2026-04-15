@@ -1,5 +1,6 @@
+import json
 import httpx
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Union
 from app.config import get_settings
 
 settings = get_settings()
@@ -31,11 +32,15 @@ class RecruitmentAPI:
             res = response.json()
             return res.get("data") or []
             
-    async def save_message(self, session_id: str, role: str, content: str, function_call: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    async def save_message(self, session_id: str, role: str, content: str, function_call: Optional[Union[Dict[str, Any], List[Any], str]] = None) -> Dict[str, Any]:
         async with httpx.AsyncClient() as client:
-            payload = {"sessionId": session_id, "role": role, "content": content}
-            if function_call:
-                payload["functionCall"] = function_call
+            payload: Dict[str, Any] = {"sessionId": session_id, "role": role, "content": content}
+            if function_call is not None:
+                # Java expects functionCall as a plain JSON *string*, not an object.
+                payload["functionCall"] = (
+                    function_call if isinstance(function_call, str)
+                    else json.dumps(function_call, ensure_ascii=False)
+                )
             response = await client.post(f"{self.base_url}/internal/chatbot/message", json=payload, headers=self.headers)
             response.raise_for_status()
             res = response.json()

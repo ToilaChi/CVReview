@@ -173,70 +173,55 @@ class CareerCounselorRetriever:
         active_jd_ids: Optional[List[int]] = None
     ) -> Dict[str, Any]:
         """
-        Improved: Adaptive threshold and better monitoring
+        Retrieves CV and JD context sequentially.
+        (Note: the synchronous QdrantClient's underlying httpx connection pool is not thread-safe,
+        so we cannot use run_in_executor to run these concurrently without AsyncQdrantClient).
         """
-        # Adaptive threshold
         has_cv_filter = cv_id is not None or candidate_id is not None
         if score_threshold is None:
             cv_threshold = get_adaptive_threshold("jd_search", has_cv_filter)
-            jd_threshold = get_adaptive_threshold("jd_search", False)  # JD search is always broad
+            jd_threshold = get_adaptive_threshold("jd_search", False)
         else:
             cv_threshold = jd_threshold = score_threshold
-        
+
         print(f"[Retrieval] CV threshold: {cv_threshold:.2f}, JD threshold: {jd_threshold:.2f}")
-        
-        # 1. Get CV context
-        cv_filters = None
-        must_conditions = [
-            FieldCondition(key="is_latest", match=MatchValue(value=True))
-        ]
-        
+
+        # --- Base CV filters ---
+        cv_must = [FieldCondition(key="is_latest", match=MatchValue(value=True))]
         if cv_id:
-            must_conditions.append(
-                FieldCondition(key="cvId", match=MatchValue(value=cv_id))
-            )
+            cv_must.append(FieldCondition(key="cvId", match=MatchValue(value=cv_id)))
         elif candidate_id:
-            must_conditions.append(
-                FieldCondition(key="candidateId", match=MatchValue(value=candidate_id))
-            )
-        
-        cv_filters = Filter(must=must_conditions)
-        
+            cv_must.append(FieldCondition(key="candidateId", match=MatchValue(value=candidate_id)))
+        cv_filters = Filter(must=cv_must)
+
         cv_results = self.qdrant_service.search_similar(
             collection_name=self.cv_collection,
             query_vector=query_vector,
             limit=cv_top_k,
             score_threshold=cv_threshold,
-            filters=cv_filters
+            filters=cv_filters,
         )
-        
-        # 2. Search JDs
-        jd_must_conditions = [
-            FieldCondition(key="is_latest", match=MatchValue(value=True))
-        ]
-        
+
+        # --- Base JD filters ---
+        jd_must = [FieldCondition(key="is_latest", match=MatchValue(value=True))]
         if active_jd_ids is not None:
-            jd_must_conditions.append(
-                FieldCondition(key="jdId", match=MatchAny(any=active_jd_ids))
-            )
-            
-        jd_filters = Filter(must=jd_must_conditions)
-        
+            jd_must.append(FieldCondition(key="jdId", match=MatchAny(any=active_jd_ids)))
+        jd_filters = Filter(must=jd_must)
+
         jd_results = self.qdrant_service.search_similar(
             collection_name=self.jd_collection,
             query_vector=query_vector,
             limit=jd_top_k,
             score_threshold=jd_threshold,
-            filters=jd_filters
+            filters=jd_filters,
         )
-        
-        # Quality assessment
+
         cv_quality = self._assess_retrieval_quality(cv_results, "jd_search")
         jd_quality = self._assess_retrieval_quality(jd_results, "jd_search")
-        
+
         print(f"[Quality] CV: {cv_quality['quality']} (max={cv_quality['max_score']:.2f})")
         print(f"[Quality] JD: {jd_quality['quality']} (max={jd_quality['max_score']:.2f})")
-        
+
         return {
             "cv_context": cv_results,
             "jd_context": jd_results,
@@ -245,13 +230,13 @@ class CareerCounselorRetriever:
                 "jd_positions_retrieved": len(jd_results),
                 "cv_score_range": self._get_score_range(cv_results),
                 "jd_score_range": self._get_score_range(jd_results),
-                "cv_quality": cv_quality,  
-                "jd_quality": jd_quality,  
-                "thresholds_used": {  
+                "cv_quality": cv_quality,
+                "jd_quality": jd_quality,
+                "thresholds_used": {
                     "cv_threshold": cv_threshold,
-                    "jd_threshold": jd_threshold
-                }
-            }
+                    "jd_threshold": jd_threshold,
+                },
+            },
         }
 
     async def _retrieve_cv_jd_match(
