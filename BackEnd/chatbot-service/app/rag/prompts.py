@@ -441,7 +441,7 @@ def get_prompt_for_intent(
     history_text = ""
     if conversation_history:
         history_text = "\n\n PREVIOUS CONVERSATION:\n" + "\n".join([
-            f"User: {turn['query']}\nAssistant: {turn['answer'][:200]}..."
+            f"{turn.get('role', 'USER')}: {turn.get('content', '')[:200]}..."
             for turn in conversation_history[-3:]
         ]) + "\n"
     

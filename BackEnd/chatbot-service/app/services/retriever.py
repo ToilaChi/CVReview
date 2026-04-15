@@ -505,6 +505,46 @@ class CareerCounselorRetriever:
         }
 
 
+    async def retrieve_for_hr_mode_hr(
+        self,
+        query: str,
+        position_id: int,
+        top_k: int = 10,
+        score_threshold: float = 0.35
+    ) -> Dict[str, Any]:
+        """
+        HR Chatbot: HR Mode
+        Retrieve sourced CVs for a specific position, filtered by positionId + sourceType=HR.
+        """
+        query_vector = self.embedding_service.embed_text(query, is_query=True)
+
+        cv_filters = Filter(must=[
+            FieldCondition(key="positionId", match=MatchValue(value=position_id)),
+            FieldCondition(key="sourceType", match=MatchValue(value="HR")),
+            FieldCondition(key="is_latest", match=MatchValue(value=True))
+        ])
+
+        cv_results = self.qdrant_service.search_similar(
+            collection_name=self.cv_collection,
+            query_vector=query_vector,
+            limit=top_k,
+            score_threshold=score_threshold,
+            filters=cv_filters
+        )
+
+        return {
+            "cv_context": cv_results,
+            "jd_context": [],
+            "retrieval_stats": {
+                "cv_chunks_retrieved": len(cv_results),
+                "cv_score_range": self._get_score_range(cv_results),
+                "threshold_used": score_threshold,
+                "position_id": position_id,
+                "source_type": "HR"
+            }
+        }
+
+
     async def retrieve_for_hr_mode_candidate(
         self,
         query: str,

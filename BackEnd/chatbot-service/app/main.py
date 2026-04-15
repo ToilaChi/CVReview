@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
-from app.api.routes import chat, health
+from app.api.routes import chat, health, candidate_chat, hr_chat
 from app.services.embedding import embedding_service
 from app.services.qdrant import qdrant_service
 from app.config import get_settings
@@ -88,22 +88,27 @@ app.add_middleware(
 )
 
 # Include routers
-app.include_router(chat.router, prefix="/chatbot")
+app.include_router(candidate_chat.router, prefix="/chatbot")
+app.include_router(hr_chat.router, prefix="/chatbot")
 app.include_router(health.router, prefix="/chatbot")
+# Legacy router kept for backward compatibility — will be deprecated
+app.include_router(chat.router, prefix="/chatbot/legacy")
 
 
 # Root endpoint
 @app.get("/", tags=["root"])
 async def root():
     return {
-        "service": "Career Counselor Chatbot",
-        "version": "1.0.0",
+        "service": "CV Review Chatbot Service",
+        "version": "2.0.0",
         "status": "running",
         "docs": "/docs",
         "endpoints": {
-            "chat": "/chatbot/chat",
-            "chat_stream": "/chatbot/chat/stream",
-            "health": "/chatbot/health"
+            "candidate_session": "POST /chatbot/candidate/session",
+            "candidate_chat": "POST /chatbot/candidate/chat",
+            "hr_session": "POST /chatbot/hr/session",
+            "hr_chat": "POST /chatbot/hr/chat",
+            "health": "GET /chatbot/health"
         }
     }
 

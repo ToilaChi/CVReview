@@ -36,7 +36,11 @@
 - [x] config.py — thêm RECRUITMENT_SERVICE_URL, SCORE_THRESHOLD
 
 ## Phase 4: HR Chatbot (chatbot-service / Python)
-- [ ] hr_graph.py — LangGraph mới cho HR
-- [ ] hr_tools.py — get_candidate_details, send_interview_email
-- [ ] hr_chat.py — routes mới
-- [ ] main.py — đăng ký routers mới
+- [x] hr_tools.py — get_candidate_details, send_interview_email
+- [x] hr_graph.py — LangGraph mới cho HR (7 nodes, dual-mode)
+- [x] hr_chat.py — routes mới (POST /hr/session, POST /hr/chat)
+- [x] main.py — đăng ký routers mới (candidate_chat + hr_chat)
+- [x] retriever.py — thêm retrieve_for_hr_mode (HR_MODE Qdrant filter)
+- [x] recruitment_api.py — thêm get_candidate_details + send_interview_email
+- [x] api/routes/__init__.py — export candidate_chat + hr_chat
+

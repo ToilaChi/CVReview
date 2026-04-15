@@ -7,7 +7,7 @@ import json
 from typing import TypedDict, Literal, Optional, List, Dict, Any
 from langgraph.graph import StateGraph, END
 from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_core.messages import SystemMessage, HumanMessage
+from langchain_core.messages import SystemMessage, HumanMessage, ToolMessage
 
 from app.rag.intent import intent_classifier
 from app.rag.prompts import get_prompt_for_intent
@@ -118,7 +118,7 @@ async def retrieve_context_node(state: ChatState) -> ChatState:
     jd_context = result.get("jd_context", [])
     if intent == "jd_search" and state.get("active_position_ids"):
         active_ids = state["active_position_ids"]
-        jd_context = [jd for jd in jd_context if jd.get("metadata", {}).get("jdId") in active_ids]
+        jd_context = [jd for jd in jd_context if jd.get("payload", {}).get("jdId") in active_ids]
         
     state["cv_context"] = result.get("cv_context", [])
     state["jd_context"] = jd_context
@@ -135,12 +135,13 @@ async def scoring_node(state: ChatState) -> ChatState:
         return state
         
     print("[Scoring] Batch scoring JDs...")
-    cv_text = state["cv_context"][0]["content"] if state["cv_context"] else ""
+    cv_text = state["cv_context"][0].get("payload", {}).get("chunkText", "") if state["cv_context"] else ""
     
     jds_text = ""
     for idx, jd in enumerate(state["jd_context"]):
-        jd_id = jd.get("metadata", {}).get("jdId", "unknown")
-        jds_text += f"\n--- JD ID: {jd_id} ---\n{jd['content']}\n"
+        jd_id = jd.get("payload", {}).get("jdId", "unknown")
+        jd_content = jd.get("payload", {}).get("jdText", "")
+        jds_text += f"\n--- JD ID: {jd_id} ---\n{jd_content}\n"
         
     scoring_prompt = f"""
     Dưới đây là một CV và danh sách các JD (mô tả công việc).
@@ -237,50 +238,58 @@ async def llm_reasoning_node(state: ChatState) -> ChatState:
 
     response = await llm.ainvoke(messages)
     
-    state["llm_response"] = response.content
+    content = response.content
+    state["llm_response"] = " ".join([b.get("text", "") for b in content if isinstance(b, dict) and "text" in b]) if isinstance(content, list) else str(content)
     state["function_calls"] = None
     
     if response.tool_calls:
         print("[LLM] Tool calls detected:", response.tool_calls)
         state["function_calls"] = []
+        tool_map = {t.name: t for t in CANDIDATE_TOOLS}
+        messages.append(response)  # AIMessage with tool_use blocks
         for call in response.tool_calls:
-            # We execute it immediately
             tool_name = call['name']
             tool_args = call['args']
             
-            # Since we only have evaluate_cv_fit and finalize_application as tools,
             if tool_name == 'finalize_application':
-                # Tool execution
                 try:
-                    tool_res = await CANDIDATE_TOOLS[1].invoke({
+                    tool_res = await tool_map["finalize_application"].ainvoke({
                         **tool_args,
                         "candidate_id": state["candidate_id"],
                         "session_id": state["session_id"]
                     })
-                    state["llm_response"] = f"Hệ thống đã xử lý yêu cầu nộp đơn: {tool_res}. Dựa trên thông tin này, hãy phản hồi lại cho người dùng."
                     state["function_calls"].append({
                         "name": tool_name,
                         "arguments": tool_args,
                         "result": tool_res
                     })
+                    messages.append(ToolMessage(content=str(tool_res), tool_call_id=call["id"]))
                 except Exception as e:
-                    state["llm_response"] = f"Lỗi nộp đơn: {str(e)}"
+                    messages.append(ToolMessage(content=f"Lỗi nộp đơn: {str(e)}", tool_call_id=call["id"]))
             elif tool_name == 'evaluate_cv_fit':
-                # Actually evaluate_cv_fit was mostly a dummy to return scoring
-                state["llm_response"] = f"Hệ thống báo: Đã có điểm phù hợp ({state.get('scored_jobs')}). Bạn hãy tóm tắt kết quả theo định dạng."
+                # evaluate_cv_fit is a signal for the scoring node — scores already computed
+                scored_summary = json.dumps(state.get("scored_jobs") or [], ensure_ascii=False)
                 state["function_calls"].append({
                     "name": tool_name,
                     "arguments": tool_args
                 })
+                messages.append(ToolMessage(content=scored_summary, tool_call_id=call["id"]))
         
-        # We need another pass of LLM to process tool results
+
+        # Second LLM pass to synthesize tool results into a natural response
         if state["function_calls"]:
-            messages.append(response)
-            messages.append(HumanMessage(content=state["llm_response"]))
-            second_response = await llm.ainvoke(messages)
-            state["llm_response"] = second_response.content
+            llm_no_tools = ChatGoogleGenerativeAI(
+                model=settings.GEMINI_MODEL,
+                temperature=temperature,
+                max_output_tokens=settings.GEMINI_MAX_TOKENS,
+                google_api_key=settings.GEMINI_API_KEY
+            )
+            second_response = await llm_no_tools.ainvoke(messages)
+            content = second_response.content
+            state["llm_response"] = " ".join([b.get("text", "") for b in content if isinstance(b, dict) and "text" in b]) if isinstance(content, list) else str(content)
 
     return state
+
 
 
 async def save_turn_node(state: ChatState) -> ChatState:

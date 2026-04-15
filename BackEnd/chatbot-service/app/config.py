@@ -46,8 +46,8 @@ class Settings(BaseSettings):
     GEMINI_MAX_TOKENS: int = 2048
     
     # Internal Service API (Recruitment)
-    RECRUITMENT_SERVICE_URL: str = "http://recruitment-service:8080"
-    INTERNAL_SERVICE_SECRET: str = "internal-secret"
+    RECRUITMENT_SERVICE_URL: str = "http://localhost:8082"
+    INTERNAL_SERVICE_SECRET: str = "chatbot-service"
     MAX_HISTORY_TURNS: int = 20
     SCORE_THRESHOLD: int = 70
     
