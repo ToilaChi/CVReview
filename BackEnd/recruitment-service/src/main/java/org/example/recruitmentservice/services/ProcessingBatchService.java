@@ -1,7 +1,6 @@
 package org.example.recruitmentservice.services;
 
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.annotation.Propagation;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.example.commonlibrary.dto.response.ApiResponse;
@@ -46,13 +45,19 @@ public class ProcessingBatchService {
         return batchRepository.save(batch);
     }
 
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    @Transactional
     public void incrementProcessed(String batchId, boolean isSuccess) {
         ProcessingBatch batch = batchRepository.findByBatchId(batchId)
                 .orElseThrow(() -> new CustomException(ErrorCode.BATCH_NOT_FOUND));
 
         // Fetch actual counts directly from database instead of cumulative increment
-        long actualSuccess = candidateCVRepository.countByBatchIdAndCvStatus(batchId, CVStatus.PARSED);
+        long actualSuccess;
+        if (batch.getType() == BatchType.SCORING) {
+            actualSuccess = candidateCVRepository.countByBatchIdAndCvStatus(batchId, CVStatus.SCORED);
+        } else {
+            actualSuccess = candidateCVRepository.countByBatchIdAndCvStatus(batchId, CVStatus.PARSED);
+        }
+
         long actualFailed = candidateCVRepository.countByBatchIdAndCvStatus(batchId, CVStatus.FAILED);
 
         batch.setSuccessCv((int) actualSuccess);
@@ -86,13 +91,13 @@ public class ProcessingBatchService {
         return new ApiResponse<>(
                 ErrorCode.SUCCESS.getCode(),
                 "Batch status retrieved successfully",
-                response
-        );
+                response);
     }
 
     /**
      * Builds a BatchStatusResponse from the given batch entity.
-     * Fetches failed CV IDs from the DB. Used by both the REST endpoint and SSE push.
+     * Fetches failed CV IDs from the DB. Used by both the REST endpoint and SSE
+     * push.
      */
     private BatchStatusResponse buildStatusSnapshot(ProcessingBatch batch, String batchId) {
         List<Integer> failedCvIds = candidateCVRepository
@@ -109,8 +114,8 @@ public class ProcessingBatchService {
                 .failedCv(batch.getFailedCv())
                 .failedCvIds(failedCvIds)
                 .progress(BigDecimal.valueOf(batch.getProgress())
-                                    .setScale(2, RoundingMode.HALF_UP)
-                                    .doubleValue())
+                        .setScale(2, RoundingMode.HALF_UP)
+                        .doubleValue())
                 .pending(batch.getPendingCv())
                 .status(batch.getStatus().name())
                 .createdAt(batch.getCreatedAt())
