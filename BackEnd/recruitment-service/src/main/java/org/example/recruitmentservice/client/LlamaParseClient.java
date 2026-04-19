@@ -190,8 +190,10 @@ public class LlamaParseClient {
     // HELPER METHODS
 
     /**
-     * Upload file cho JD - Config đơn giản, chỉ cần parse đầy đủ text và giữ
-     * structure
+     * Upload JD file — forces LlamaParse to produce structured Markdown with
+     * consistent headers.
+     * Mirrors the CV parsing config so that JDChunkingService can reliably split on
+     * ## sections.
      */
     private String uploadFileForJD(String absolutePath) {
         File file = new File(absolutePath);
@@ -206,11 +208,54 @@ public class LlamaParseClient {
         MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
         body.add("file", new FileSystemResource(file));
         body.add("parsing_instruction",
-                "Extract all text from this Job Description document. " +
-                        "Preserve the original structure and formatting. " +
-                        "Include all sections, requirements, and details.");
-        body.add("result_type", "markdown");
+                "You are a professional Document Architect. Extract the full content of this Job Description document and output it as clean, structured Markdown.\n"
+                        +
+                        "\n" +
+                        "CRITICAL RULES — follow all of them strictly:\n" +
+                        "\n" +
+                        "[RULE 1 — NO MARKDOWN TABLES]\n" +
+                        "NEVER use Markdown table syntax (pipes | or dashes ---). " +
+                        "If the document contains tables (e.g. Salary, Benefits, Roadmap), convert each row to a plain bullet point in the format '- Key: Value'.\n"
+                        +
+                        "Example: a table row 'Gross 10-14M | Mentorship 1-on-1' becomes:\n" +
+                        "- Salary: Gross 10-14M VND/month\n" +
+                        "- Mentorship: 1-on-1 with Senior/Tech Lead weekly\n" +
+                        "\n" +
+                        "[RULE 2 — PAGE CONTINUITY]\n" +
+                        "If content (a bullet list, paragraph, or converted table row) is visually split across two pages, you MUST JOIN them into one unbroken block. "
+                        +
+                        "Never restart a section in the middle just because the page changed.\n" +
+                        "\n" +
+                        "[RULE 3 — STRIP NOISE]\n" +
+                        "Completely ignore and DELETE: page numbers, page headers, page footers, watermarks, confidentiality notices, "
+                        +
+                        "division names (e.g. 'TECHNOLOGY DIVISION', 'TALENT ACQUISITION', 'Page 1 of 2', 'Confidential'). "
+                        +
+                        "These must NOT appear anywhere in the output.\n" +
+                        "\n" +
+                        "[RULE 4 — HIERARCHY]\n" +
+                        "Use '# Job Title' for the document title. Use '## Section Name' for each major section (Overview, Responsibilities, Requirements, Benefits, etc.). "
+                        +
+                        "Use '-' for bullet points under each section.\n" +
+                        "\n" +
+                        "[RULE 5 — CLEAN OUTPUT]\n" +
+                        "Return ONLY the Markdown content. No code fences, no meta-comments, no apologies, no explanations.");
+        body.add("target_pages", "");
         body.add("invalidate_cache", "true");
+        // gpt4o_mode disabled: GPT-4o Vision renders each page as a bitmap image
+        // independently,
+        // which causes tables spanning multiple pages to get refusal errors ("I'm
+        // sorry...").
+        // LlamaParse's native OCR+LLM pipeline is more reliable for structured text
+        // documents.
+        body.add("gpt4o_mode", "false");
+        body.add("skip_diagonal_text", "true");
+        body.add("extract_all_pages", "true");
+        body.add("do_not_unroll_columns", "false");
+        body.add("page_separator", "false");
+        body.add("prefix_or_suffix", "false");
+        body.add("continuous_mode", "true");
+        body.add("fast_mode", "false");
 
         HttpEntity<MultiValueMap<String, Object>> request = new HttpEntity<>(body, headers);
 
@@ -240,7 +285,9 @@ public class LlamaParseClient {
         MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
         body.add("file", new FileSystemResource(file));
         body.add("parsing_instruction",
-                "Extract all text from this CV/Resume into Markdown exactly. Preserve tables as markdown tables. Extract text and context from informative images or diagrams. Consistently use Markdown headers (#, ##, ###) for standard CV sections.");
+                "Extract all text from this CV/Resume into Markdown exactly. Preserve tables as markdown tables. Extract text and context from informative images or diagrams. Consistently use Markdown headers (#, ##, ###) for standard CV sections. "
+                        +
+                        "IMPORTANT: Completely ignore and omit all page footers, page headers, page numbers, and confidential watermarks (e.g., 'Page 1', 'Confidential', etc.) from the final output.");
         body.add("result_type", "markdown");
         body.add("target_pages", "");
         body.add("invalidate_cache", "true");
@@ -315,7 +362,7 @@ public class LlamaParseClient {
                             markdown = markdown.trim();
                             markdown = markdown.replaceAll("^```markdown\\s*", "");
                             markdown = markdown.replaceAll("\\s*```$", "");
-                            markdown = markdown.trim();
+                            markdown = sanitizeMarkdown(markdown.trim());
                         }
                         log.info("Parse completed! Text length: {}", markdown.length());
                         return markdown;
@@ -393,7 +440,79 @@ public class LlamaParseClient {
         }
     }
 
+    /**
+     * Post-processing sanitizer applied to all LlamaParse output — the "last line
+     * of defense".
+     *
+     * Handles two categories of garbage that slip through even with correct instr
+     * ctions:
+     * 1. AI refusal messages (e.g. "I'm sorry, I can't assist...") emitted when
+     * GPT-4o Vision
+     * receives an ambiguous or partially-rendered page image.
+     * 
+     * 2. Orphaned Markdown table separators (|---|---) that appear when a table
+     * is partially
+     * converted but the instruction is not fully obeyed.
+     */
+
+    private String sanitizeMarkdown(String markdown) {
+        if (markdown == null || markdown.isBlank()) {
+            return markdown;
+        }
+
+        // Decode HTML entities injected by LlamaParse's native OCR pipeline.
+        // This regression occurs when gpt4o_mode=false: the underlying XML serializer
+        // encodes special characters before converting to Markdown output.
+        markdown = markdown
+                .replace("&#x26;", "&")
+                .replace("&amp;", "&")
+                .replace("&#x27;", "'")
+                .replace("&apos;", "'")
+                .replace("&lt;", "<")
+                .replace("&#x3C;", "<")
+                .replace("&gt;", ">")
+                .replace("&#x3E;", ">")
+                .replace("&quot;", "\"")
+                .replace("&#x22;", "\"")
+                .replace("&#x60;", "`")
+                .replace("&nbsp;", " ");
+
+        String[] lines = markdown.split("\\r?\\n", -1);
+        StringBuilder cleaned = new StringBuilder();
+        boolean prevWasBlank = false;
+
+        for (String line : lines) {
+            // Strip AI refusal lines (any line that starts with a refusal phrase)
+            if (line.matches("(?i)^\\s*i('m|\\s+am)\\s+sorry[,.]?.*") ||
+                    line.matches("(?i)^\\s*i\\s+can'?t\\s+(assist|help|process|identify).*") ||
+                    line.matches("(?i)^\\s*i\\s+am\\s+unable\\s+to.*") ||
+                    line.matches("(?i)^\\s*unfortunately[,.]?\\s+i\\s+(can'?t|am\\s+unable).*")) {
+                log.warn("[Sanitize] Stripped AI refusal line: \"{}\"", line.trim());
+                continue;
+            }
+
+            // Strip orphaned Markdown table separator rows (e.g. |---|---| or just a line
+            // of ----)
+            if (line.matches("^\\s*[|\\-]+[|\\-\\s]+$")) {
+                log.warn("[Sanitize] Stripped orphaned table separator: \"{}\"", line.trim());
+                continue;
+            }
+
+            // Collapse excessive consecutive blank lines to max 1
+            boolean isBlank = line.isBlank();
+            if (isBlank && prevWasBlank) {
+                continue;
+            }
+            prevWasBlank = isBlank;
+
+            cleaned.append(line).append("\n");
+        }
+
+        return cleaned.toString().trim();
+    }
+
     // Regex extract email
+
     private String extractEmail(String text) {
         if (text == null || text.isEmpty())
             return null;

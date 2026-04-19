@@ -106,6 +106,20 @@ public class ChatbotInternalController {
     }
 
     /**
+     * POST /internal/chatbot/positions/details
+     * Small-to-Big retrieval: chatbot-service sends positionIds extracted from Qdrant chunk hits
+     * and receives back the full JD text for each, which is then fed to the scoring LLM.
+     */
+    @PostMapping("/positions/details")
+    public ApiResponse<List<PositionDetailsResponse>> getPositionDetails(
+            @RequestBody List<Integer> positionIds,
+            HttpServletRequest httpRequest) {
+        validateInternalRequest(httpRequest);
+        List<PositionDetailsResponse> details = chatbotInternalService.getPositionDetails(positionIds);
+        return new ApiResponse<>(ErrorCode.SUCCESS.getCode(), "Position details fetched", details);
+    }
+
+    /**
      * GET /internal/chatbot/applications?positionId=X
      * Lấy danh sách ứng viên đã nộp đơn vào position — HR chatbot dùng để filter Qdrant.
      */

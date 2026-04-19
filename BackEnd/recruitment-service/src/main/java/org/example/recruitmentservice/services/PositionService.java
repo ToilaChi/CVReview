@@ -1,30 +1,33 @@
 package org.example.recruitmentservice.services;
 
 import jakarta.servlet.http.HttpServletRequest;
-import org.example.recruitmentservice.config.RabbitMQConfig;
-import org.example.recruitmentservice.dto.request.JDParsedEvent;
-import org.example.recruitmentservice.dto.response.DriveFileInfo;
-import org.springframework.amqp.rabbit.core.RabbitTemplate;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.transaction.annotation.Transactional;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.example.commonlibrary.dto.response.ApiResponse;
 import org.example.commonlibrary.dto.response.ErrorCode;
 import org.example.commonlibrary.dto.response.PageResponse;
 import org.example.commonlibrary.exception.CustomException;
 import org.example.commonlibrary.utils.PageUtil;
 import org.example.recruitmentservice.client.LlamaParseClient;
+import org.example.recruitmentservice.config.RabbitMQConfig;
+import org.example.recruitmentservice.dto.request.JDChunkPayload;
+import org.example.recruitmentservice.dto.request.JDChunkedEvent;
 import org.example.recruitmentservice.dto.request.PositionsRequest;
+import org.example.recruitmentservice.dto.response.DriveFileInfo;
 import org.example.recruitmentservice.dto.response.PositionsResponse;
 import org.example.recruitmentservice.models.entity.Positions;
 import org.example.recruitmentservice.repository.CandidateCVRepository;
 import org.example.recruitmentservice.repository.PositionRepository;
+import org.example.recruitmentservice.services.chunking.JDChunkingService;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.*;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.multipart.MultipartFile;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
-import org.springframework.transaction.support.TransactionSynchronization;
 
 import java.time.LocalDateTime;
 import java.util.Arrays;
@@ -33,6 +36,7 @@ import java.util.Optional;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class PositionService {
@@ -42,6 +46,7 @@ public class PositionService {
     private final CandidateCVRepository candidateCVRepository;
     private final RabbitTemplate rabbitTemplate;
     private final RestTemplate restTemplate;
+    private final JDChunkingService jdChunkingService;
 
     @Value("${EMBEDDING_SERVICE_URL}")
     private String embeddingServiceUrl;
@@ -113,16 +118,25 @@ public class PositionService {
 
         Positions positionSaved = positionRepository.save(position);
 
-        // Publish event to embed
-        if (TransactionSynchronizationManager.isSynchronizationActive()) {
-            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-                @Override
-                public void afterCommit() {
-                    publishJDParsedEvent(positionSaved, jdText);
-                }
-            });
+        // Chunk & publish after transaction commits to guarantee positionId is persisted
+        List<JDChunkPayload> chunks = jdChunkingService.chunk(
+                positionSaved.getId(), positionSaved.getName(),
+                positionSaved.getLanguage(), positionSaved.getLevel(), jdText
+        );
+        if (chunks.isEmpty()) {
+            log.warn("[Position] JD chunking produced no chunks for position {}, skipping embed event",
+                    positionSaved.getId());
         } else {
-            publishJDParsedEvent(positionSaved, jdText);
+            if (TransactionSynchronizationManager.isSynchronizationActive()) {
+                TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                    @Override
+                    public void afterCommit() {
+                        publishJDChunkedEvent(positionSaved, chunks);
+                    }
+                });
+            } else {
+                publishJDChunkedEvent(positionSaved, chunks);
+            }
         }
 
         PositionsResponse response = PositionsResponse.builder()
@@ -327,18 +341,25 @@ public class PositionService {
         positionRepository.save(position);
 
         if (jdText != null) {
-            String finalJdText = jdText;
-            Positions finalPosition = position;
-
-            if (TransactionSynchronizationManager.isSynchronizationActive()) {
-                TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-                    @Override
-                    public void afterCommit() {
-                        publishJDParsedEvent(finalPosition, finalJdText);
-                    }
-                });
+            List<JDChunkPayload> chunks = jdChunkingService.chunk(
+                    position.getId(), position.getName(),
+                    position.getLanguage(), position.getLevel(), jdText
+            );
+            if (chunks.isEmpty()) {
+                log.warn("[Position] JD chunking produced no chunks for position {}, skipping embed event",
+                        position.getId());
             } else {
-                publishJDParsedEvent(finalPosition, finalJdText);
+                Positions finalPosition = position;
+                if (TransactionSynchronizationManager.isSynchronizationActive()) {
+                    TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                        @Override
+                        public void afterCommit() {
+                            publishJDChunkedEvent(finalPosition, chunks);
+                        }
+                    });
+                } else {
+                    publishJDChunkedEvent(finalPosition, chunks);
+                }
             }
         }
     }
@@ -412,24 +433,29 @@ public class PositionService {
                 .build();
     }
 
-    private void publishJDParsedEvent(Positions position, String jdText) {
+    /** Publishes a {@link JDChunkedEvent} to the JD chunked exchange after transaction commit. */
+    private void publishJDChunkedEvent(Positions position, List<JDChunkPayload> chunks) {
         try {
-            JDParsedEvent event = new JDParsedEvent(
+            int totalTokens = chunks.stream().mapToInt(JDChunkPayload::getTokensEstimate).sum();
+            JDChunkedEvent event = new JDChunkedEvent(
                     position.getId(),
-                    position.getHrId(),
                     position.getName(),
-                    jdText
+                    position.getLanguage(),
+                    position.getLevel(),
+                    chunks,
+                    chunks.size(),
+                    totalTokens
             );
-
             rabbitTemplate.convertAndSend(
-                    RabbitMQConfig.JD_PARSED_EXCHANGE,
-                    RabbitMQConfig.JD_PARSED_ROUTING_KEY,
+                    RabbitMQConfig.JD_CHUNKED_EXCHANGE,
+                    RabbitMQConfig.JD_CHUNKED_ROUTING_KEY,
                     event
             );
-
-            System.out.println("Published JD parsed event for position: " + position.getId());
+            log.info("[Position] Published JDChunkedEvent for position {} with {} chunks ({} tokens)",
+                    position.getId(), chunks.size(), totalTokens);
         } catch (Exception e) {
-            System.err.println("Failed to publish JD event: " + e.getMessage());
+            log.error("[Position] Failed to publish JDChunkedEvent for position {}: {}",
+                    position.getId(), e.getMessage(), e);
         }
     }
 

@@ -52,6 +52,23 @@ class RecruitmentAPI:
             response.raise_for_status()
             res = response.json()
             return res.get("data") or []
+
+    async def get_position_details(self, position_ids: List[int]) -> List[Dict[str, Any]]:
+        """
+        Fetch full JD text for a list of position IDs (Small-to-Big retrieval).
+        Qdrant returns chunk hits → extract unique positionIds → call this → feed full JD to scoring LLM.
+        """
+        if not position_ids:
+            return []
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            response = await client.post(
+                f"{self.base_url}/internal/chatbot/positions/details",
+                json=list(set(position_ids)),  # de-dup on client side as well
+                headers=self.headers,
+            )
+            response.raise_for_status()
+            res = response.json()
+            return res.get("data") or []
             
     async def get_applications(self, position_id: int) -> List[Dict[str, Any]]:
         async with httpx.AsyncClient() as client:

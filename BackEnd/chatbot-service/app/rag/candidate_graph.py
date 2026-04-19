@@ -38,6 +38,9 @@ class ChatState(TypedDict):
     # Session
     conversation_history: List[Dict[str, Any]]
     active_position_ids: List[int]
+    # Map of {positionId -> "Name Language Level"} built in Node 0.
+    # Used by Node 4 for clean finalize confirmation without markdown artifacts.
+    position_ref_map: Dict[int, str]
 
     # Processing
     intent: Literal["jd_search", "jd_analysis", "cv_analysis", "general"]
@@ -85,7 +88,9 @@ def _extract_llm_text(content: Any) -> str:
 # ---------------------------------------------------------------------------
 
 async def load_session_history_node(state: ChatState) -> ChatState:
-    """Fetch conversation history and active position IDs concurrently."""
+    """Fetch conversation history and active positions concurrently.
+    Builds `position_ref_map` for downstream O(1) ID-to-name lookups.
+    """
 
     async def _get_history():
         try:
@@ -98,7 +103,6 @@ async def load_session_history_node(state: ChatState) -> ChatState:
                     func_data_str = turn.get("functionCall")
                     if func_data_str:
                         try:
-                            # It could be the raw array or {"scored_jobs": [...]} wrapping
                             func_data = json.loads(func_data_str)
                             if isinstance(func_data, dict) and "scored_jobs" in func_data:
                                 state["scored_jobs"] = func_data["scored_jobs"]
@@ -115,14 +119,23 @@ async def load_session_history_node(state: ChatState) -> ChatState:
     async def _get_active_positions():
         try:
             positions = await recruitment_api.get_active_positions()
-            return [p["id"] for p in positions]
+            return positions  # Return full objects, not just ids
         except Exception as e:
             print(f"[API Error] Could not load active positions: {e}")
             return []
 
-    history, active_ids = await asyncio.gather(_get_history(), _get_active_positions())
+    history, positions = await asyncio.gather(_get_history(), _get_active_positions())
     state["conversation_history"] = history
-    state["active_position_ids"] = active_ids
+    state["active_position_ids"] = [p["id"] for p in positions]
+
+    # Build reference map: {id -> "Name Language Level"} for clean UX in finalize step
+    ref_map: Dict[int, str] = {}
+    for p in positions:
+        parts = [p.get("name", ""), p.get("language", ""), p.get("level", "")]
+        label = " ".join(part for part in parts if part)
+        ref_map[p["id"]] = label
+    state["position_ref_map"] = ref_map
+
     return state
 
 
@@ -145,7 +158,15 @@ def classify_intent_node(state: ChatState) -> ChatState:
 # ---------------------------------------------------------------------------
 
 async def retrieve_context_node(state: ChatState) -> ChatState:
-    """Retrieve CV and JD context from Qdrant."""
+    """
+    Node 2 — Retrieve context using Small-to-Big RAG for JD.
+
+    For jd_search / jd_analysis intents:
+      1. Qdrant returns lightweight JD chunk hits (small).
+      2. Extract unique positionIds from chunk payloads.
+      3. Fetch full JdText for each positionId via Java internal API (big).
+      4. Replace sparse chunk list with rich full-text context objects.
+    """
     intent = state["intent"]
 
     result = await retriever.retrieve_for_intent(
@@ -157,20 +178,59 @@ async def retrieve_context_node(state: ChatState) -> ChatState:
         active_jd_ids=state.get("active_position_ids") if intent == "jd_search" else None,
     )
 
-    jd_context = result.get("jd_context", [])
+    cv_context   = result.get("cv_context", [])
+    chunk_hits   = result.get("jd_context", [])
+    jd_context   = chunk_hits  # default: use raw chunks
 
-    # Secondary filter: keep only JDs whose positionId is in active_position_ids.
-    # The retriever filter already handles this via Qdrant MatchAny, but we add a
-    # Python-side guard in case payload.jdId differs from positionId in edge cases.
-    if intent == "jd_search" and state.get("active_position_ids"):
-        active_ids = set(state["active_position_ids"])
-        jd_context = [
-            jd for jd in jd_context
-            if jd.get("payload", {}).get("jdId") in active_ids
-        ]
+    # --- Small-to-Big expansion for JD intents ---
+    if intent in ("jd_search", "jd_analysis") and chunk_hits:
+        # 1. Collect unique positionIds from Qdrant chunk payloads
+        seen: set = set()
+        position_ids: List[int] = []
+        for hit in chunk_hits:
+            pid = hit.get("payload", {}).get("positionId")
+            if pid is not None and pid not in seen:
+                seen.add(pid)
+                position_ids.append(pid)
 
-    state["cv_context"] = result.get("cv_context", [])
-    state["jd_context"] = jd_context
+        print(f"[Retriever] Small-to-Big: {len(chunk_hits)} chunks → {len(position_ids)} unique positionIds")
+
+        if position_ids:
+            try:
+                # 2. Fetch full JD text from Java internal API
+                full_jd_list = await recruitment_api.get_position_details(position_ids)
+
+                # 3. Rebuild jd_context as full-text objects so scoring LLM gets complete JD
+                jd_context = [
+                    {
+                        "score": 1.0,  # Not a vector score — synthetic value; scoring LLM does real eval
+                        "payload": {
+                            "positionId": jd["id"],
+                            "positionName": jd.get("name", ""),
+                            "language":     jd.get("language", ""),
+                            "level":        jd.get("level", ""),
+                            "jdText":       jd.get("jdText", ""),
+                        },
+                    }
+                    for jd in full_jd_list
+                    if jd.get("jdText")  # Skip positions with empty JD text
+                ]
+                print(f"[Retriever] Expanded to {len(jd_context)} full-JD context objects")
+
+            except Exception as e:
+                print(f"[Retriever] Small-to-Big expansion failed, falling back to chunks: {e}")
+                # jd_context already set to chunk_hits — graceful fallback
+
+        # Python-side active-position guard (belt-and-suspenders)
+        if intent == "jd_search" and state.get("active_position_ids"):
+            active_ids = set(state["active_position_ids"])
+            jd_context = [
+                jd for jd in jd_context
+                if jd.get("payload", {}).get("positionId") in active_ids
+            ]
+
+    state["cv_context"]      = cv_context
+    state["jd_context"]      = jd_context
     state["retrieval_stats"] = result.get("retrieval_stats", {})
     return state
 
@@ -181,8 +241,9 @@ async def retrieve_context_node(state: ChatState) -> ChatState:
 
 async def scoring_node(state: ChatState) -> ChatState:
     """
-    Lightweight pre-screening pass for jd_search intent.
-    Uses strict math guidelines and temperature=0.0 for rigid consistency.
+    Node 2.5 — Deep CV-JD scoring using the dedicated Pro model (Tiered LLM Routing).
+    Runs only for jd_search intent. Uses SCORING_GEMINI_MODEL (e.g. gemini-2.5-pro)
+    for precise skill counting — no token truncation.
     """
     if state["intent"] != "jd_search" or not state["jd_context"] or not state["cv_context"]:
         state["scored_jobs"] = None
@@ -193,16 +254,21 @@ async def scoring_node(state: ChatState) -> ChatState:
         print("[Scoring] Using cached scores from history, bypassing LLM call.")
         return state
 
-    print("[Scoring] Running pre-screening pass (strict mode)...")
+    print(f"[Scoring] Running deep scoring pass with model: {settings.SCORING_GEMINI_MODEL}...")
 
     cv_profile = build_cv_context(state["cv_context"])
 
     jds_block = ""
     for jd in state["jd_context"]:
-        payload = jd.get("payload", {})
-        jd_id = payload.get("jdId", "unknown")
-        jd_title = payload.get("position", "Unknown Position")
-        jd_text = payload.get("jdText", "")[:800]
+        payload  = jd.get("payload", {})
+        jd_id    = payload.get("positionId", "unknown")
+        jd_title = " ".join(filter(None, [
+            payload.get("positionName"),
+            payload.get("language"),
+            payload.get("level"),
+        ])) or payload.get("positionName", "Unknown Position")
+        # Full JD text — no truncation. Small-to-Big already gave us the complete document.
+        jd_text  = payload.get("jdText", "")
         jds_block += f"\n[JD ID: {jd_id} | Title: {jd_title}]\n{jd_text}\n"
 
     scoring_prompt = f"""You are a strict HR scoring system. Analyze matching between Candidate CV and JDs.
@@ -222,7 +288,7 @@ JDs to score:
 Return EXACTLY this JSON array:
 [
   {{
-    "positionId": <integer jdId>,
+    "positionId": <integer positionId>,
     "matchedCount": <number of skills matched>,
     "missedCount": <number of skills strictly missing>,
     "score": <calculated final score 0-100>,
@@ -232,21 +298,21 @@ Return EXACTLY this JSON array:
   }}
 ]"""
 
+    # Tiered LLM: Pro model for scoring precision
     llm = ChatGoogleGenerativeAI(
-        model=settings.GEMINI_MODEL,
+        model=settings.SCORING_GEMINI_MODEL,
         temperature=0.0,            # Zero variance for maximum numerical consistency
-        max_output_tokens=512,
+        max_output_tokens=1024,
         google_api_key=settings.GEMINI_API_KEY,
     )
 
     try:
         response = await llm.ainvoke([HumanMessage(content=scoring_prompt)])
         raw = response.content.strip()
-        # Strip markdown code fences if the model wraps the output
         if raw.startswith("```"):
             raw = raw.split("\n", 1)[-1].rsplit("```", 1)[0].strip()
         state["scored_jobs"] = json.loads(raw)
-        print(f"[Scoring] Pre-screened {len(state['scored_jobs'])} positions.")
+        print(f"[Scoring] Scored {len(state['scored_jobs'])} positions with {settings.SCORING_GEMINI_MODEL}.")
     except Exception as e:
         print(f"[Scoring Error] JSON parse failed: {e} — proceeding without scores.")
         state["scored_jobs"] = None
@@ -308,7 +374,6 @@ async def llm_reasoning_node(state: ChatState) -> ChatState:
     messages.append(response)
     
     did_finalize_app = False
-    applied_position_name = "the expected"
 
     for call in response.tool_calls:
         tool_name = call["name"]
@@ -317,12 +382,12 @@ async def llm_reasoning_node(state: ChatState) -> ChatState:
         if tool_name == "finalize_application":
             did_finalize_app = True
             pos_id = tool_args.get("position_id")
-            # Parse position name from retrieved context to provide a neat response
-            for jd in state.get("jd_context", []):
-                if jd.get("payload", {}).get("jdId") == pos_id:
-                    applied_position_name = jd.get("payload", {}).get("position", applied_position_name)
-                    break
-                    
+
+            # Resolve clean position label from ref_map (built in Node 0)
+            # Falls back gracefully if map is missing (e.g. position became inactive)
+            ref_map = state.get("position_ref_map", {})
+            applied_position_name = ref_map.get(pos_id, f"position #{pos_id}")
+
             try:
                 tool_res = await tool_map["finalize_application"].ainvoke({
                     **tool_args,
@@ -484,6 +549,7 @@ class CandidateChatbot:
             "jd_id": None,
             "conversation_history": [],
             "active_position_ids": [],
+            "position_ref_map": {},
             "cv_context": [],
             "jd_context": [],
             "retrieval_stats": {},

@@ -30,6 +30,7 @@ public class LlmAnalysisService {
 
     private static final String GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=";
     private static final String MODEL = "gemini-2.5-flash";
+    private static final int MAX_OUTPUT_TOKENS = 8192;
 
     /**
      * Singleton Jackson mapper tolerant of unescaped control characters
@@ -40,10 +41,6 @@ public class LlmAnalysisService {
             .enable(JsonReadFeature.ALLOW_SINGLE_QUOTES)
             .enable(JsonReadFeature.ALLOW_BACKSLASH_ESCAPING_ANY_CHARACTER)
             .build();
-
-    // Increased from 2000 to avoid response truncation that causes EOF parse
-    // errors.
-    private static final int MAX_OUTPUT_TOKENS = 8192;
 
     public CVAnalysisResult analyze(CVAnalysisRequest req) {
         try {

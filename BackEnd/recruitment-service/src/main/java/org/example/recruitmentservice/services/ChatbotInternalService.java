@@ -3,6 +3,7 @@ package org.example.recruitmentservice.services;
 import lombok.RequiredArgsConstructor;
 import org.example.recruitmentservice.dto.response.ActivePositionResponse;
 import org.example.recruitmentservice.dto.response.ApplicationSummaryResponse;
+import org.example.recruitmentservice.dto.response.PositionDetailsResponse;
 import org.example.recruitmentservice.models.entity.CandidateCV;
 import org.example.recruitmentservice.models.entity.Positions;
 import org.example.recruitmentservice.repository.CVAnalysisRepository;
@@ -11,6 +12,7 @@ import org.example.recruitmentservice.repository.PositionRepository;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -24,6 +26,24 @@ public class ChatbotInternalService {
     private final PositionRepository positionRepository;
     private final CandidateCVRepository candidateCVRepository;
     private final CVAnalysisRepository cvAnalysisRepository;
+
+    /**
+     * Returns full JD text for a set of position IDs.
+     * Used by chatbot-service for Small-to-Big retrieval:
+     * Qdrant returns chunk hits → extract unique positionIds → call this method → pass full JD to Gemini Pro.
+     *
+     * @param positionIds list of position IDs to retrieve (duplicates are de-duplicated)
+     */
+    public List<PositionDetailsResponse> getPositionDetails(List<Integer> positionIds) {
+        if (positionIds == null || positionIds.isEmpty()) {
+            return List.of();
+        }
+        Set<Integer> uniqueIds = Set.copyOf(positionIds);
+        return positionRepository.findAllById(uniqueIds)
+                .stream()
+                .map(this::toPositionDetailsResponse)
+                .collect(Collectors.toList());
+    }
 
     /**
      * Lấy danh sách các vị trí đang mở (active).
@@ -46,6 +66,16 @@ public class ChatbotInternalService {
                 .stream()
                 .map(this::toApplicationSummaryResponse)
                 .collect(Collectors.toList());
+    }
+
+    private PositionDetailsResponse toPositionDetailsResponse(Positions position) {
+        return PositionDetailsResponse.builder()
+                .id(position.getId())
+                .name(position.getName())
+                .language(position.getLanguage())
+                .level(position.getLevel())
+                .jdText(position.getJobDescription())
+                .build();
     }
 
     private ActivePositionResponse toActivePositionResponse(Positions position) {

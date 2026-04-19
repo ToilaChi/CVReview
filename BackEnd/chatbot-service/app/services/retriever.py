@@ -203,10 +203,12 @@ class CareerCounselorRetriever:
         )
 
         # --- Base JD filters ---
-        jd_must = [FieldCondition(key="is_latest", match=MatchValue(value=True))]
+        # New schema (JDChunkPayload): positionId field, no is_latest versioning
+        # (JD chunks are always replaced atomically by positionId on update)
+        jd_must = []
         if active_jd_ids is not None:
-            jd_must.append(FieldCondition(key="jdId", match=MatchAny(any=active_jd_ids)))
-        jd_filters = Filter(must=jd_must)
+            jd_must.append(FieldCondition(key="positionId", match=MatchAny(any=active_jd_ids)))
+        jd_filters = Filter(must=jd_must) if jd_must else None
 
         jd_results = self.qdrant_service.search_similar(
             collection_name=self.jd_collection,
@@ -283,19 +285,19 @@ class CareerCounselorRetriever:
             filters=cv_filters
         )
         
-        # Get specific JD
+        # Get specific JD chunks by positionId
+        # New schema: positionId field (not jdId), no is_latest field
         jd_filters = Filter(
             must=[
-                FieldCondition(key="jdId", match=MatchValue(value=jd_id)),
-                FieldCondition(key="is_latest", match=MatchValue(value=True))
+                FieldCondition(key="positionId", match=MatchValue(value=jd_id)),
             ]
         )
-        
+
         jd_results = self.qdrant_service.search_similar(
             collection_name=self.jd_collection,
             query_vector=query_vector,
-            limit=1,  # Just get the specific JD
-            score_threshold=0.0,  # Always get the JD
+            limit=jd_top_k,   # Get top chunks; Small-to-Big expansion happens in retrieve_context_node
+            score_threshold=0.0,  # Always retrieve — filter is already specific
             filters=jd_filters
         )
         

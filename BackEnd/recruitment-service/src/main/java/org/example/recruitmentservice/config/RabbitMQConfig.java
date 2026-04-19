@@ -63,44 +63,44 @@ public class RabbitMQConfig {
 
 
     /* ============================================================
-     * 2. JD PARSED FLOW (Recruitment-service OWN, consumes)
+     * 2. JD CHUNKED FLOW (published by PositionService, consumed by embedding-service)
      * ============================================================ */
-    public static final String JD_PARSED_QUEUE = "jd.parsed.queue";
-    public static final String JD_PARSED_DLQ = "jd.parsed.queue.dlq";
-    public static final String JD_PARSED_EXCHANGE = "jd.parsed.exchange";
-    public static final String JD_PARSED_ROUTING_KEY = "jd.parsed";
-    public static final String JD_PARSED_DLQ_ROUTING_KEY = "jd.parsed.dlq";
+    public static final String JD_CHUNKED_QUEUE = "jd.chunked.queue";
+    public static final String JD_CHUNKED_DLQ = "jd.chunked.queue.dlq";
+    public static final String JD_CHUNKED_EXCHANGE = "jd.chunked.exchange";
+    public static final String JD_CHUNKED_ROUTING_KEY = "jd.chunked";
+    public static final String JD_CHUNKED_DLQ_ROUTING_KEY = "jd.chunked.dlq";
 
     @Bean
-    public Queue jdParsedQueue() {
-        return QueueBuilder.durable(JD_PARSED_QUEUE)
-                .withArgument("x-dead-letter-exchange", JD_PARSED_EXCHANGE)
-                .withArgument("x-dead-letter-routing-key", JD_PARSED_DLQ_ROUTING_KEY)
+    public Queue jdChunkedQueue() {
+        return QueueBuilder.durable(JD_CHUNKED_QUEUE)
+                .withArgument("x-dead-letter-exchange", JD_CHUNKED_EXCHANGE)
+                .withArgument("x-dead-letter-routing-key", JD_CHUNKED_DLQ_ROUTING_KEY)
                 .build();
     }
 
     @Bean
-    public Queue jdParsedDlq() {
-        return QueueBuilder.durable(JD_PARSED_DLQ).build();
+    public Queue jdChunkedDlq() {
+        return QueueBuilder.durable(JD_CHUNKED_DLQ).build();
     }
 
     @Bean
-    public DirectExchange jdParsedExchange() {
-        return new DirectExchange(JD_PARSED_EXCHANGE);
+    public DirectExchange jdChunkedExchange() {
+        return new DirectExchange(JD_CHUNKED_EXCHANGE);
     }
 
     @Bean
-    public Binding jdParsedBinding(Queue jdParsedQueue, DirectExchange jdParsedExchange) {
-        return BindingBuilder.bind(jdParsedQueue)
-                .to(jdParsedExchange)
-                .with(JD_PARSED_ROUTING_KEY);
+    public Binding jdChunkedBinding(Queue jdChunkedQueue, DirectExchange jdChunkedExchange) {
+        return BindingBuilder.bind(jdChunkedQueue)
+                .to(jdChunkedExchange)
+                .with(JD_CHUNKED_ROUTING_KEY);
     }
 
     @Bean
-    public Binding jdParsedDlqBinding(Queue jdParsedDlq, DirectExchange jdParsedExchange) {
-        return BindingBuilder.bind(jdParsedDlq)
-                .to(jdParsedExchange)
-                .with(JD_PARSED_DLQ_ROUTING_KEY);
+    public Binding jdChunkedDlqBinding(Queue jdChunkedDlq, DirectExchange jdChunkedExchange) {
+        return BindingBuilder.bind(jdChunkedDlq)
+                .to(jdChunkedExchange)
+                .with(JD_CHUNKED_DLQ_ROUTING_KEY);
     }
 
     /* ============================================================
