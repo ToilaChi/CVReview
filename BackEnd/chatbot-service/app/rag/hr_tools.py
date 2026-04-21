@@ -1,7 +1,10 @@
 """
 Function-calling tools for the HR chatbot.
-These are registered with Gemini via bind_tools() and executed inside handle_tool_calls_node.
-position_id is injected at runtime from HRChatState and not exposed in the tool schema.
+These are registered with Gemini via bind_tools() and executed inside llm_hr_reasoning_node.
+
+Phase 1: Added get_cv_summary tool to fix CV count hallucination.
+Note: position_id is auto-injected at runtime from HRChatState — not exposed in tool schema
+to prevent LLM from fabricating it.
 """
 
 from langchain_core.tools import tool
@@ -17,7 +20,7 @@ async def get_candidate_details(candidate_id: str, position_id: int) -> str:
 
     Args:
         candidate_id: UUID của ứng viên
-        position_id: ID của vị trí ứng tuyển (từ context phiên làm việc)
+        position_id: ID của vị trí ứng tuyển (tự động inject từ session)
     """
     try:
         details = await recruitment_api.get_candidate_details(
@@ -27,7 +30,7 @@ async def get_candidate_details(candidate_id: str, position_id: int) -> str:
         if not details:
             return f"Không tìm thấy thông tin ứng viên {candidate_id} cho vị trí {position_id}."
 
-        score = details.get("score", "N/A")
+        score    = details.get("score", "N/A")
         feedback = details.get("feedback", "Không có nhận xét.")
         app_cv_id = details.get("appCvId", "N/A")
         return (
@@ -37,6 +40,32 @@ async def get_candidate_details(candidate_id: str, position_id: int) -> str:
         )
     except Exception as e:
         return f"Lỗi khi lấy thông tin ứng viên: {str(e)}"
+
+
+@tool
+async def get_cv_summary(position_id: int) -> str:
+    """
+    Lấy thống kê tổng quan về số lượng CV và kết quả chấm điểm cho một vị trí tuyển dụng.
+    Gọi tool này khi HR hỏi về số lượng CV, tỷ lệ pass/fail, hoặc phân bổ điểm số.
+
+    Args:
+        position_id: ID của vị trí cần xem thống kê (tự động inject từ session)
+    """
+    try:
+        data = await recruitment_api.get_cv_statistics(position_id=position_id)
+        total  = data.get("total", 0)
+        scored = data.get("scored", 0)
+        passed = data.get("passed", 0)
+        failed = scored - passed
+        return (
+            f"Vị trí ID {position_id}:\n"
+            f"• Tổng CV đã upload: {total}\n"
+            f"• Đã chấm điểm: {scored}\n"
+            f"• Pass (≥75đ): {passed}\n"
+            f"• Fail (<75đ): {failed}"
+        )
+    except Exception as e:
+        return f"Lỗi khi lấy thống kê CV: {str(e)}"
 
 
 @tool
@@ -55,14 +84,14 @@ async def send_interview_email(
     Hỗ trợ 3 loại: INTERVIEW_INVITE, OFFER_LETTER, REJECTION.
 
     Args:
-        candidate_id: UUID của ứng viên
+        candidate_id: UUID của ứng viên (tự động inject từ session nếu có)
         candidate_email: Địa chỉ email của ứng viên
         candidate_name: Tên đầy đủ của ứng viên
-        position_id: ID vị trí ứng tuyển
-        position_name: Tên vị trí ứng tuyển (hiển thị trong email)
+        position_id: ID vị trí ứng tuyển (tự động inject từ session)
+        position_name: Tên vị trí hiển thị trong email
         email_type: Loại email — INTERVIEW_INVITE | OFFER_LETTER | REJECTION
         custom_message: Nội dung tùy chỉnh thêm vào email
-        interview_date: Ngày phỏng vấn theo định dạng ISO (chỉ dùng cho INTERVIEW_INVITE)
+        interview_date: Ngày phỏng vấn ISO format (chỉ dùng cho INTERVIEW_INVITE)
     """
     valid_types = {"INTERVIEW_INVITE", "OFFER_LETTER", "REJECTION"}
     if email_type.upper() not in valid_types:
@@ -81,8 +110,8 @@ async def send_interview_email(
         )
         type_label = {
             "INTERVIEW_INVITE": "mời phỏng vấn",
-            "OFFER_LETTER": "offer letter",
-            "REJECTION": "từ chối"
+            "OFFER_LETTER":     "offer letter",
+            "REJECTION":        "từ chối",
         }.get(email_type.upper(), email_type)
         return f"Đã gửi email {type_label} thành công tới {candidate_name} ({candidate_email})."
     except Exception as e:
@@ -90,4 +119,4 @@ async def send_interview_email(
 
 
 # Registered tool list — order matters for bind_tools()
-HR_TOOLS = [get_candidate_details, send_interview_email]
+HR_TOOLS = [get_candidate_details, get_cv_summary, send_interview_email]

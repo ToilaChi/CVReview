@@ -3,6 +3,7 @@ package org.example.recruitmentservice.services;
 import lombok.RequiredArgsConstructor;
 import org.example.recruitmentservice.dto.response.ActivePositionResponse;
 import org.example.recruitmentservice.dto.response.ApplicationSummaryResponse;
+import org.example.recruitmentservice.dto.response.CvStatisticsResponse;
 import org.example.recruitmentservice.dto.response.PositionDetailsResponse;
 import org.example.recruitmentservice.models.entity.CandidateCV;
 import org.example.recruitmentservice.models.entity.Positions;
@@ -66,6 +67,26 @@ public class ChatbotInternalService {
                 .stream()
                 .map(this::toApplicationSummaryResponse)
                 .collect(Collectors.toList());
+    }
+
+    /**
+     * Thống kê CV cho HR chatbot: tổng số, đã chấm, pass (>=75), fail.
+     * Dùng bởi get_cv_summary tool để trả lời chính xác khi HR hỏi số lượng CV.
+     *
+     * @param positionId ID vị trí cần thống kê
+     * @param passThreshold ngưỡng điểm pass (mặc định 75)
+     */
+    public CvStatisticsResponse getCvStatistics(int positionId, int passThreshold) {
+        long total  = candidateCVRepository.countByPositionId(positionId);  // int → auto-widened to long
+        long scored = cvAnalysisRepository.countScoredByPositionId(positionId);
+        long passed = cvAnalysisRepository.countPassedByPositionId(positionId, passThreshold);
+        return CvStatisticsResponse.builder()
+                .positionId(positionId)
+                .total(total)
+                .scored(scored)
+                .passed(passed)
+                .failed(scored - passed)
+                .build();
     }
 
     private PositionDetailsResponse toPositionDetailsResponse(Positions position) {

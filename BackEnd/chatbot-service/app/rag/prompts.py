@@ -23,6 +23,13 @@ Core rules:
 3. If information is absent from context, state it explicitly: "Not mentioned in CV/JD"
 4. Every recommendation must be justified with evidence from the data
 5. Respond exclusively in English
+
+Adaptive response rules (analyze query before responding):
+- SALARY/BENEFITS question → extract only from JD text; never invent numbers; if absent say "Not mentioned in JD"
+- PROCESS/INTERVIEW question → focus on interview stages and timeline from JD
+- IMPROVEMENT/LEARNING question → give specific technologies, resources, and realistic timeframes
+- COUNT/STATUS question → answer from provided data only; never estimate
+- If the required data is NOT in context → state explicitly what is missing and why
 """
 
 
@@ -229,19 +236,27 @@ def build_cv_context(cv_chunks: list) -> str:
 
 
 def build_jd_context(jd_docs: list) -> str:
-    """Assemble JD context string from Qdrant result documents."""
+    """
+    Assemble JD context string from Qdrant result documents.
+    Truncation logic:
+    - Full JD documents (positionName field present, fetched via Small-to-Big) → no truncation.
+    - Raw Qdrant chunk hits (section-based, Mode B) → truncate at 1500 chars to limit context size.
+    """
     if not jd_docs:
         return "No job descriptions available."
 
     context_parts = []
     for i, doc in enumerate(jd_docs, 1):
-        payload = doc.get("payload", {})
-        position = payload.get("position", "Unknown Position")
-        jd_id = payload.get("jdId", "N/A")
-        jd_text = payload.get("jdText", "")
-        score = doc.get("score", 0)
+        payload  = doc.get("payload", {})
+        # Small-to-Big full documents have positionName; raw chunks use positionId only
+        is_full_jd = bool(payload.get("positionName"))
+        position = payload.get("positionName") or payload.get("position", "Unknown Position")
+        jd_id    = payload.get("positionId") or payload.get("jdId", "N/A")
+        jd_text  = payload.get("jdText", "") or payload.get("chunkText", "")
+        score    = doc.get("score", 0)
 
-        if len(jd_text) > 1500:
+        # Only truncate section chunks (Mode B); preserve full JD text (Mode A / scoring)
+        if not is_full_jd and len(jd_text) > 1500:
             jd_text = jd_text[:1500] + "\n[...truncated]"
 
         context_parts.append(

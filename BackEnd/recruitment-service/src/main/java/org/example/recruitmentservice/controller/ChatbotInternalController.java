@@ -10,6 +10,7 @@ import org.example.recruitmentservice.dto.request.FinalizeApplicationRequest;
 import org.example.recruitmentservice.dto.request.InterviewNotificationRequest;
 import org.example.recruitmentservice.dto.request.SaveMessageRequest;
 import org.example.recruitmentservice.dto.response.*;
+import org.example.recruitmentservice.dto.response.CvStatisticsResponse;
 import org.example.recruitmentservice.services.ChatSessionService;
 import org.example.recruitmentservice.services.ChatbotInternalService;
 import org.example.recruitmentservice.services.FinalizeApplicationService;
@@ -117,6 +118,23 @@ public class ChatbotInternalController {
         validateInternalRequest(httpRequest);
         List<PositionDetailsResponse> details = chatbotInternalService.getPositionDetails(positionIds);
         return new ApiResponse<>(ErrorCode.SUCCESS.getCode(), "Position details fetched", details);
+    }
+
+    /**
+     * GET /internal/chatbot/positions/{positionId}/cv-statistics
+     * Thống kê số CV, số đã chấm, pass/fail cho HR chatbot.
+     * Ngăn hallucination khi HR hỏi "Tôi đã upload bao nhiêu CV?".
+     *
+     * @param passThreshold ngưỡng pass, mặc định 75
+     */
+    @GetMapping("/positions/{positionId}/cv-statistics")
+    public ApiResponse<CvStatisticsResponse> getCvStatistics(
+            @PathVariable int positionId,
+            @RequestParam(defaultValue = "75") int passThreshold,
+            HttpServletRequest httpRequest) {
+        validateInternalRequest(httpRequest);
+        CvStatisticsResponse stats = chatbotInternalService.getCvStatistics(positionId, passThreshold);
+        return new ApiResponse<>(ErrorCode.SUCCESS.getCode(), "CV statistics fetched", stats);
     }
 
     /**

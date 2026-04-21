@@ -143,5 +143,20 @@ class RecruitmentAPI:
             res = response.json()
             return res.get("data") or {}
 
+    async def get_cv_statistics(self, position_id: int) -> Dict[str, Any]:
+        """
+        Fetch CV count statistics for a position from the Java internal API.
+        Returns total, scored, passed (>=75), and failed counts.
+        Used by the get_cv_summary HR tool to prevent hallucination on CV count queries.
+        """
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(
+                f"{self.base_url}/internal/chatbot/positions/{position_id}/cv-statistics",
+                headers=self.headers,
+            )
+            response.raise_for_status()
+            res = response.json()
+            return res.get("data") or {}
+
 
 recruitment_api = RecruitmentAPI()

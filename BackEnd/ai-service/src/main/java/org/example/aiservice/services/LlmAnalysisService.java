@@ -66,48 +66,48 @@ public class LlmAnalysisService {
      */
     private String buildPrompt(String jd, String cv) {
         return """
-                You are a Senior Technical Recruiter with 15 years of experience in Silicon Valley. Your task is to conduct a highly objective, evidence-based screening of a Candidate CV against a Job Description (JD).
+                You are a Senior Technical Recruiter with 15 years of experience. Your task is to conduct an objective, evidence-based screening of a Candidate CV against a Job Description.
 
                 ### SCORING SYSTEM (Total 100 pts)
+
                 1. Core Requirement Fit (Max 60 pts):
-                   - Check against "Must-have" skills and technologies.
-                   - Deduction: -10 pts for each missing core technology mentioned in JD.
-                   - Deduction: -15 pts if the candidate has less than 70%% of the required tech stack.
+                   - Start with 60 pts.
+                   - Deduct 8 pts for each missing REQUIRED skill explicitly stated in JD.
+                   - Deduct 12 pts if candidate has < 70%% of the required tech stack overall.
 
                 2. Depth of Experience (Max 30 pts):
-                   - Evaluate project complexity, scale (microservices, high traffic), and architectural impact.
-                   - 25-30 pts: Expert level, led architectural decisions, measurable business impact.
-                   - 15-24 pts: Mid-level, implemented features, understands the 'why' behind tech choices.
-                   - 0-14 pts: Junior/Basic projects, CRUD applications only, no evidence of scale or complexity.
+                   - 22-30 pts: Led architectural decisions, measurable business impact, system design ownership.
+                   - 12-21 pts: Mid-level, implemented features with design rationale, understands trade-offs.
+                   - 0-11 pts:  Junior/basic CRUD projects only, no evidence of scale or architectural thinking.
 
-                3. Gaps & Professionalism (Max 10 pts):
-                   - Soft skills, education, certifications, and career progression.
-                   - Deduction: -5 pts for missing degree if required; -5 pts for poor formatting or lack of soft skills evidence.
+                3. Professionalism & Gaps (Max 10 pts):
+                   - Deduct 4 pts for missing required degree/certification if explicitly stated in JD.
+                   - Deduct 3 pts for poor CV structure or inconsistent skill claims.
 
-                ### OPERATIONAL RULES
-                - BE STRICT. If a skill is not explicitly stated in the CV, assume the candidate DOES NOT have it.
-                - NO HALLUCINATION. Do not infer skills from context unless clearly mentioned.
-                - CONSISTENCY: Use the same logic for every evaluation.
+                ### RULES
+                - STRICT: If a skill is not explicitly stated in CV, assume the candidate does NOT have it.
+                - NO HALLUCINATION: Do not infer skills from project context alone.
+                - CONSISTENCY: Apply the same logic for every evaluation.
+                - Score 0 only if the candidate clearly fails ALL minimum requirements.
 
-                ### WORKFLOW (Internal Reasoning)
-                Step 1: List all mandatory skills from JD.
-                Step 2: Compare each skill with the CV and mark as "Match" or "Miss".
-                Step 3: Calculate deductions for each section based on the criteria above.
-                Step 4: Generate a concise summary of the score.
+                ### WORKFLOW (Internal — do not include in output)
+                Step 1: List all required skills from JD.
+                Step 2: Mark each as Match or Miss against the CV.
+                Step 3: Evaluate project depth for the Depth score.
+                Step 4: Calculate deductions and sum all categories.
 
                 ### INPUT DATA
                 JD: %s
                 CV: %s
 
-                ### OUTPUT FORMAT (JSON ONLY)
-                Respond with ONLY a raw JSON object. No markdown tags, no preamble.
+                ### OUTPUT FORMAT (JSON ONLY — no markdown, no preamble)
                 {
-                  "reasoning_process": "Briefly state the math: e.g., 60(Core)-10(Missing X)-5(Missing Y) + 20(Exp)...",
-                  "score": <integer>,
+                  "reasoning_process": "Brief math: e.g., Core: 60-8(Missing X)-8(Missing Y)=44 + Depth: 18 + Gaps: 7 = 69",
+                  "score": <integer 0-100>,
                   "feedback": "<concise paragraph focused on the gap between CV and JD>",
                   "skillMatch": ["skill1", "skill2"],
                   "skillMiss": ["skill1", "skill2"],
-                  "decision": "PASS/REJECT" (Threshold 75)
+                  "decision": "PASS/REJECT"
                 }"""
                 .formatted(jd, cv);
     }
