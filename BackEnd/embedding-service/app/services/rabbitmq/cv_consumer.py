@@ -128,6 +128,7 @@ async def embed_cv_from_event(event: dict):
                 "cvId": cv_id,
                 "candidateId": chunk.get("candidateId"),
                 "hrId": chunk.get("hrId"),
+                "positionId": chunk.get("positionId"),
                 "position": chunk.get("position", ""),
                 
                 # Chunk info

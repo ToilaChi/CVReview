@@ -308,6 +308,7 @@ public class HybridChunkingStrategy implements ChunkingStrategy {
         return ChunkPayload.builder()
                 .candidateId(cv.getCandidateId())
                 .hrId(cv.getHrId())
+                .positionId(cv.getPosition() != null ? cv.getPosition().getId() : null)
                 .position(cv.getPosition() != null ? cv.getPosition().getName() : null)
                 .section(section)
                 .chunkIndex(chunkIdx)

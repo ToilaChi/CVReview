@@ -39,6 +39,7 @@ def create_indexes():
     cv_indexes = {
         # Integer fields
         "cvId": PayloadSchemaType.INTEGER,
+        "positionId": PayloadSchemaType.INTEGER,
         
         # Keyword fields (exact match) - cho UUID strings
         "candidateId": PayloadSchemaType.KEYWORD,
@@ -47,6 +48,7 @@ def create_indexes():
         "seniorityLevel": PayloadSchemaType.KEYWORD,
         "cvStatus": PayloadSchemaType.KEYWORD,
         "sourceType": PayloadSchemaType.KEYWORD,
+        "skills": PayloadSchemaType.KEYWORD,
         
         # Boolean fields
         "is_latest": PayloadSchemaType.BOOL,

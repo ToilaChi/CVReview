@@ -12,6 +12,7 @@ import java.util.List;
 public class ChunkPayload {
     private String candidateId;
     private String hrId;
+    private Integer positionId;
     private String position;
     private String section;
     private int chunkIndex;
@@ -25,15 +26,10 @@ public class ChunkPayload {
     private String sourceType;
     private LocalDateTime createdAt;
 
-
     private List<String> skills;
     private Integer experienceYears;
     private String seniorityLevel;
     private List<String> companies;
     private List<String> degrees;
     private List<String> dateRanges;
-//
-//    private String documentSummary;
-//    private String sectionSummary;
-//    private String chunkSummary;
 }

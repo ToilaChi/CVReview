@@ -30,7 +30,6 @@ public class LlmAnalysisService {
 
     private static final String GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=";
     private static final String MODEL = "gemini-2.5-flash";
-    private static final int MAX_OUTPUT_TOKENS = 8192;
 
     /**
      * Singleton Jackson mapper tolerant of unescaped control characters
@@ -73,7 +72,7 @@ public class LlmAnalysisService {
                 1. Core Requirement Fit (Max 60 pts):
                    - Check against "Must-have" skills and technologies.
                    - Deduction: -10 pts for each missing core technology mentioned in JD.
-                   - Deduction: -15 pts if the candidate has less than 70% of the required tech stack.
+                   - Deduction: -15 pts if the candidate has less than 70%% of the required tech stack.
 
                 2. Depth of Experience (Max 30 pts):
                    - Evaluate project complexity, scale (microservices, high traffic), and architectural impact.
@@ -124,11 +123,12 @@ public class LlmAnalysisService {
                 {
                   "contents": [{"parts": [{"text": %s}]}],
                   "generationConfig": {
-                    "temperature": 0.0,
-                    "maxOutputTokens": %d
+                    "temperature": 0.1,
+                    "maxOutputTokens": 8192,
+                    "responseMimeType": "application/json"
                   }
                 }
-                """.formatted(escapeJsonContent(prompt), MAX_OUTPUT_TOKENS);
+                """.formatted(escapeJsonContent(prompt));
 
         HttpClient client = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(30))

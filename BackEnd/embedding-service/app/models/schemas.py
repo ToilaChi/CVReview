@@ -8,6 +8,7 @@ class CVChunk(BaseModel):
     """Single chunk from CV"""
     candidateId: Optional[str] = None
     hrId: Optional[str] = None
+    positionId: Optional[int] = None
     position: Optional[str] = None
     section: str
     chunkIndex: int
