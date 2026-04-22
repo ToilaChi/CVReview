@@ -10,6 +10,7 @@ import org.example.recruitmentservice.dto.request.FinalizeApplicationRequest;
 import org.example.recruitmentservice.dto.request.InterviewNotificationRequest;
 import org.example.recruitmentservice.dto.request.SaveMessageRequest;
 import org.example.recruitmentservice.dto.response.*;
+import org.example.recruitmentservice.dto.response.CandidateApplicationStatusResponse;
 import org.example.recruitmentservice.dto.response.CvStatisticsResponse;
 import org.example.recruitmentservice.services.ChatSessionService;
 import org.example.recruitmentservice.services.ChatbotInternalService;
@@ -19,6 +20,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Optional;
 
 /**
  * Controller xử lý tất cả internal endpoints cho chatbot-service.
@@ -148,6 +150,23 @@ public class ChatbotInternalController {
         validateInternalRequest(httpRequest);
         List<ApplicationSummaryResponse> applications = chatbotInternalService.getApplicationsByPosition(positionId);
         return new ApiResponse<>(ErrorCode.SUCCESS.getCode(), "Applications fetched", applications);
+    }
+
+    /**
+     * GET /internal/chatbot/candidate/application-status?candidateId=X[&positionId=Y]
+     * Trạng thái ứng tuyển của candidate — check_application_status tool dùng để trả lời
+     * câu hỏi "Tôi đã apply chưa?" mà không cần điều hướng UI.
+     * positionId là optional: nếu có thì lọc cụ thể 1 vị trí.
+     */
+    @GetMapping("/candidate/application-status")
+    public ApiResponse<CandidateApplicationStatusResponse> getCandidateApplicationStatus(
+            @RequestParam String candidateId,
+            @RequestParam(required = false) Integer positionId,
+            HttpServletRequest httpRequest) {
+        validateInternalRequest(httpRequest);
+        CandidateApplicationStatusResponse status = chatbotInternalService.getApplicationStatus(
+                candidateId, Optional.ofNullable(positionId));
+        return new ApiResponse<>(ErrorCode.SUCCESS.getCode(), "Application status fetched", status);
     }
 
     // -------------------------------------------------------

@@ -469,6 +469,19 @@ async def llm_reasoning_node(state: ChatState) -> ChatState:
             state["function_calls"].append({"name": tool_name, "arguments": tool_args})
             messages.append(ToolMessage(content=scored_summary, tool_call_id=call["id"]))
 
+        elif tool_name == "check_application_status":
+            # Auto-inject candidate_id — user never needs to provide their own UUID
+            enriched_args = {
+                **tool_args,
+                "candidate_id": state["candidate_id"],
+            }
+            try:
+                tool_res = await tool_map["check_application_status"].ainvoke(enriched_args)
+                state["function_calls"].append({"name": tool_name, "arguments": enriched_args, "result": tool_res})
+                messages.append(ToolMessage(content=str(tool_res), tool_call_id=call["id"]))
+            except Exception as e:
+                messages.append(ToolMessage(content=f"Status check error: {str(e)}", tool_call_id=call["id"]))
+
     # Short-circuit: skip second LLM pass if finalize_application was successful
     if did_finalize_app:
         state["llm_response"] = (
@@ -477,7 +490,7 @@ async def llm_reasoning_node(state: ChatState) -> ChatState:
         )
         return state
 
-    # Second pass to synthesize tool results
+    # Second pass to synthesize tool results into natural language
     if state["function_calls"]:
         llm_no_tools = ChatGoogleGenerativeAI(
             model=settings.GEMINI_MODEL,

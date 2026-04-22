@@ -71,8 +71,17 @@ class RecruitmentAPI:
             return res.get("data") or []
             
     async def get_applications(self, position_id: int) -> List[Dict[str, Any]]:
+        """
+        Fetch all CVs linked to a position (both HR-uploaded and Candidate-applied).
+        Each record includes `appCvId`, `sourceType`, `candidateName`, `candidateEmail`, `score`.
+        Python hr_graph uses appCvId as the bridge key to map Qdrant chunks → candidate names.
+        """
         async with httpx.AsyncClient() as client:
-            response = await client.get(f"{self.base_url}/internal/chatbot/applications", params={"positionId": position_id}, headers=self.headers)
+            response = await client.get(
+                f"{self.base_url}/internal/chatbot/applications",
+                params={"positionId": position_id},
+                headers=self.headers
+            )
             response.raise_for_status()
             res = response.json()
             return res.get("data") or []
@@ -152,6 +161,33 @@ class RecruitmentAPI:
         async with httpx.AsyncClient(timeout=10.0) as client:
             response = await client.get(
                 f"{self.base_url}/internal/chatbot/positions/{position_id}/cv-statistics",
+                headers=self.headers,
+            )
+            response.raise_for_status()
+            res = response.json()
+            return res.get("data") or {}
+
+    async def check_application_status(
+        self, candidate_id: str, position_id: Optional[int] = None
+    ) -> Dict[str, Any]:
+        """
+        Check whether a candidate has already applied (finalized an Application CV).
+        Returns a list of application records (positionId, positionName, score, status).
+        Used by check_application_status tool so candidates can ask "Have I applied yet?"
+        without being redirected to the UI.
+
+        Args:
+            candidate_id: UUID of the candidate.
+            position_id:  Optional — narrow to a specific position.
+        """
+        params: Dict[str, Any] = {"candidateId": candidate_id}
+        if position_id is not None:
+            params["positionId"] = position_id
+
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(
+                f"{self.base_url}/internal/chatbot/candidate/application-status",
+                params=params,
                 headers=self.headers,
             )
             response.raise_for_status()

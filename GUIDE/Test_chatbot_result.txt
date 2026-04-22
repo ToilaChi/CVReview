@@ -1,0 +1,99 @@
+Đánh giá sau khi test.
+1. Candidate chatbot
+1.2 
+- Trả lời vẫn hơi dài dòng quá, nên giảm bớt 1 chút
+- Nếu user đủ trình độ cho Fresher (80 điểm) thì lẽ ra level Intern phải là 100 điểm or chatbot sẽ gợi ý là bạn đã có đủ trình độ rồi nên đừng apply vào vị trí thấp hơn nhé. Chatbot đang bị quá cứng ngắc ở việc dựa vào điểm số để đánh giá, mà quên mất nó cũng phải đưa ra những lời gợi ý thực tế chứ không phải khuôn mẫu dựa vào điểm số.
+
+1.3:
+- Hỏi về lương nhưng không trả lời được mặc dù trong jd có section What we offer: - Allowance: 4–7M VND/month based on competency - Mentorship: 1-on-1 with a Senior/Tech Lead - Learning: Udemy, books, and Cloud courses sponsored - Real Production: Code serving real users from Sprint 1 - Career Path: Review for full-time offer after 3 months - Flexibility: Core hours 9AM–4PM; WFH 2 days/week
+
+"query": "What is the allowance/salary for a Intern Java Developer position?"
+"answer": "## Compensation & Benefits\n\n**Base Salary / Stipend:**\nNot specified in JD.\n\n**Benefits Package:**\n• Not mentioned in JD.\n\n**Work Arrangement:** Not mentioned in JD.\n\n**Additional Perks:**\nNot mentioned in JD."
+
+1.4 
+Tương tự khi hỏi về quy trình phỏng vấn cũng không trả lời được mặc dù trong qdrant có section Selection Process và log chatbot cũng cho thấy đã using 2 chunks
+[Cache Hitting] Restored 3 scored jobs from history.
+[Intent] jd_analysis (conf: 0.77, domain: career)
+[Retriever] Intent: jd_analysis, Query length: 14 words
+[Retriever] Adaptive top_k: CV=5, JD=2
+[Retrieval] CV threshold: 0.30, JD threshold: 0.50
+[Quality] CV: ACCEPTABLE (max=0.68)
+[Quality] JD: GOOD (max=0.71)
+[Retriever] Mode B (scoring cache hit): using 2 section chunks
+
+"query": "How many rounds are there in the interview process for Fresher Java Developer position?"
+"answer": "## Recruitment Process\n\n**Stages:**\nInterview process not detailed in JD.\n\n**Assessment Format:**\nInterview process not detailed in JD.\n\n**Timeline / Response Time:**\nTimeline not specified in JD.\n\n**Interview Language:**\nNot specified.\n\n---\nThe provided Job Descriptions do not contain details about the recruitment or interview process, including the number of rounds, assessment format, timeline, or interview language. It is recommended to ask the recruiter directly for this information."
+
+1.5 
+Khi hỏi về kế hoạch học tập, cải thiện thì chatbot trả lời quá dài dòng, bao gồm cả phần "Top matching position" + Gợi ý học tập, trong khi tôi chỉ cần gợi ý học tập vị trí Mid Java Developer. 
+"answer": "## Top Matching Positions\n\n### 1. Developer — Fit Score: 81/100\n\n**HR Assessment:** This Fresher role aligns perfectly with your current academic foundation and project experience, indicating a strong technical match for all core requirements. Your demonstrated skills in Java Core and Spring Boot are particularly relevant.\n\n**Matched Skills:**\n• Java Core\n• Spring Boot\n• SQL\n• Git\n\n**Skill Gaps:**\n• None\n\n**Verdict:** Apply Now ✓\n\n### 2. Developer — Fit Score: 54/100\n\n**HR Assessment:** While your experience level is appropriate for an internship, you currently lack a few core technical skills essential for this specific role, notably in basic multithreading and security implementations.\n\n**Matched Skills:**\n• Java Core (OOP)\n• Spring Boot (REST/JPA)\n• SQL\n\n**Skill Gaps:**\n• basic Multithreading\n• basic Security\n• Git branching strategy\n\n**Verdict:** Prepare First ⚡\n\n### 3. Developer — Fit Score: 12/100\n\n**HR Assessment:** Your current intern-level experience and foundational skill set are significantly misaligned with the mid-level requirements of this position, which demands independent module ownership and architectural contributions.\n\n**Matched Skills:**\n• Java 11+\n• Spring Boot\n• Git\n\n**Skill Gaps:**\n• Spring Security (JWT/OAuth2)\n• Spring Batch\n• Spring Cloud\n• Redis\n• Advanced Database Skills\n• Microservices Patterns\n• Advanced Testing (Mockito/TestContainers)\n• Docker\n\n**Verdict:** Not Suitable ✗\n\n## Overall Recommendation\n\nBased on your current CV and the available positions, your strongest fit is for the **Fresher Java Developer** role (Position ID 2), where you meet all core technical requirements. I highly recommend applying for this position immediately. For the Mid Java Developer position (Position ID 1), your current skill set and experience are not a match. You should focus on gaining substantial practical experience and developing advanced skills before considering mid-level roles.\n\n---\n\nRegarding what you need to learn to qualify for the Mid Java Developer position (Position ID 1), you need to acquire significant experience and develop proficiency in several key areas beyond your current foundation. Based on the job description and your current profile, the following are critical skill gaps to address:\n\n*   **Advanced Spring Ecosystem:** Gain deep knowledge and practical experience with Spring Security (JWT/OAuth2), Spring Batch, and Spring Cloud.\n*   **Database Expertise:** Develop advanced database skills including query optimization, indexing strategies, transaction management, and hands-on experience with Redis.\n*   **Microservices Mastery:** Move beyond basic familiarity to understanding and implementing microservices patterns such as API Gateway, Service Discovery, and Circuit Breaker in real-world scenarios.\n*   **Comprehensive Testing:** Become proficient in advanced testing frameworks and methodologies, including JUnit 5, Mockito, TestContainers, and truly understanding and applying TDD concepts.\n*   **Containerization:** Master Docker, including building images, using `docker-compose`, and understanding basic container networking.\n\nBeyond these technical skills, the Mid Java Developer role explicitly seeks candidates with 2-4 years of experience who can \"own independent modules,\" \"participate in API design,\" \"review junior code,\" and \"contribute to architecture decisions.\" This indicates a need for not just technical knowledge, but also significant practical experience in building, maintaining, and evolving complex systems, along with strong leadership and architectural thinking skills that are typically developed over several years in professional settings."
+
+2. HR chatbot
+--- Candidate mode
+2.1: Không thể tìm được 3 ứng viên có điểm cao nhất. - Candidate mode
+"query": "Find the 3 candidates with the highest scores for Fresher Java Developer position."
+"answer": "I cannot identify the 3 candidates with the highest scores as the provided CV data does not include specific scores for each candidate, nor do I have a tool to rank all candidates by score."
+
+2.2 Chatbot tính được số CV nhưng bị nhầm, ta phải có thêm bước filter source_type nữa vì hiện tại chatbot đang count tất cả các CV thuộc specific position như vậy thì sẽ bị miss mất trường hợp CV do Candidate apply or master CV của Candidate. - Candidate mode
+
+2.3 Trả lời tạm ổn, lẽ ra chatbot nên gợi ý là tôi đã analysis rồi bạn có thể xem chi tiết feedback, skill miss/match ở phần "view" chẳng hạn - view là phần get cv analysis chi tiết của Candidate ra, nếu sau này làm UI sẽ có api call tới để HR tiện theo dõi mỗi CV.
+"query": "Ứng viên Pham Minh Chi có điểm mạnh và yếu là gì?"
+"answer": "Điểm mạnh của ứng viên Pham Minh Chi là phù hợp tốt với vị trí Fresher, đáp ứng tất cả các yêu cầu kỹ thuật cốt lõi. Trong dữ liệu cung cấp, không có thông tin chi tiết về điểm yếu của ứng viên này." - Candidate mode
+
+"query": "Bạn hãy so sánh ứng viên Phạm Minh Chí và Nguyễn Văn A xem rằng ai phù hợp với vị trí này hơn"
+"answer": "Để so sánh Phạm Minh Chí và Nguyễn Văn A:\n\n*   **Phạm Minh Chí** đạt 80/100 điểm. Ứng viên này phù hợp tốt với vị trí Fresher và đáp ứng tất cả các yêu cầu kỹ thuật cốt lõi.\n*   **Nguyễn Văn A** (candidate ID: 270e915d-1ef7-11f1-9dd4-423ac0aaa300) đạt 85/100 điểm. Ứng viên này có kỹ năng Java và Spring Boot nền tảng rất phù hợp với các yêu cầu cốt lõi, bao gồm kinh nghiệm dự án đã chứng minh. Không có khoảng trống kỹ năng quan trọng nào được xác định cho vị trí Fresher này.\n\nDựa trên điểm số và phản hồi, **Nguyễn Văn A** có vẻ phù hợp hơn một chút với vị trí này do điểm số cao hơn và phản hồi chi tiết hơn về sự phù hợp kỹ năng và kinh nghiệm dự án." - Candidate mode
+--> trả lời khá tốt nhưng lại get ra sensitive data, loại bỏ ngay giúp tôi.
+
+"query": "Bạn hãy đánh giá xem ứng viên nào có khả năng để lên level Mid nhanh nhất"
+"answer": "Dựa trên thông tin được cung cấp:\n\n**Nguyễn Văn A** có khả năng lên level Mid nhanh nhất.\n\nLý do:\n*   **Kỹ năng đa dạng:** Ngoài các kỹ năng cốt lõi, Nguyễn Văn A còn liệt kê các công nghệ như Microservices, Eureka, Kafka (mức độ cơ bản), đây là những công nghệ thường gặp ở các vị trí cấp cao hơn.\n*   **Kinh nghiệm dự án:** Phản hồi của Nguyễn Văn A (ID: 270e915d-1ef7-11f1-9dd4-423ac0aaa300) đề cập đến \"kinh nghiệm dự án đã chứng minh\" và \"nền tảng vững chắc cho sự thành công\". Ứng viên này cũng có kinh nghiệm dự án học thuật liên quan.\n*   **Điểm mạnh soft skill:** CV của Nguyễn Văn A liệt kê \"fast learning\" (khả năng học hỏi nhanh) trong phần kỹ năng mềm, đây là một yếu tố quan trọng cho sự thăng tiến nhanh chóng." - Candidate mode
+
+"query": "Bạn hãy liệt kê các project mà Nguyen Văn A đã làm và đánh giá độ phức tạp cũng như nhũng kĩ năng đã dùng ở đó đi."
+"answer": "Tôi không thể cung cấp thông tin chi tiết về các dự án mà Nguyễn Văn A đã thực hiện, đánh giá độ phức tạp cũng như kỹ năng đã sử dụng, vì dữ liệu CV được cung cấp cho ứng viên Nguyễn Văn A không bao gồm phần mô tả dự án."
+--> có section project nhưng không filter được. Àaa tôi phát hiện ra lỗi NGHIÊM TRỌNG khi Candidate upload CV thì không có positionId cụ thể, chỉ khi apply thì mới tạo bản sao CV và gán positionId trong db nhưng thực tế trên qdrant thì không hề có positionId. Liệu đây có phải nguyên nhân khiến chatbot không search được data để trả lời không?
+
+
+---- HR mode
+"query": "Find the 3 candidates with the highest scores for Fresher Java Developer position."
+"answer": "I cannot identify the 3 candidates with the highest scores as the provided CV data does not include specific scores for each candidate, nor do I have a tool to rank all candidates by score."
+
+"query": Có ứng viên nào có nền tảng SQL trong dánh sách không? Đưa tên cụ thể cho tôi
+"answer": "Có, có ứng viên có nền tảng SQL trong danh sách. Tuy nhiên, tên của các ứng viên này không được cung cấp trong dữ liệu CV hiện có."
+
+"query": "Ai có khả năng phát triển thành Mid level trong 2-3 năm tới?"
+"answer": "Dựa trên thông tin CV được cung cấp:
+ 
+ Ứng viên có kinh nghiệm với dự án 'Smart Attendance' thể hiện tiềm năng phát triển thành Mid-level trong 2-3 năm tới. Mặc dù được đánh dấu là "Intern", kinh nghiệm dự án của ứng viên này rất ấn tượng với việc sử dụng Spring Boot, Microservices, Docker, PostgreSQL và Redis, cho thấy nền tảng kỹ thuật vững chắc và khả năng học hỏi nhanh.
+ 
+ Ngoài ra, ứng viên đang học tại Đại học Giao thông Vận tải (UTH) với kết quả học tập tốt ở các môn chuyên ngành như Lập trình hướng đối tượng, Cấu trúc dữ liệu và giải thuật, Cơ sở dữ liệu, Lập trình Web và Lập trình Java cũng có tiềm năng lớn để phát triển lên cấp độ Mid-level trong khoảng thời gian tương tự."
+
+"query": "Có ai tên Minh không?"
+"answer": "Có, có một ứng viên tên là Phạm Minh Chi với ID 270e934c-1ef7-11f1-9dd4-423ac0aaa300 và điểm 80."
+--> không hiểu ngữ cảnh, Minh ở đây là last name nhưng hệ thống lại filter sao cho miễn có chữ Minh là được.
+
+"query": "bạn hãy gửi mail mời phỏng vấn đến Pham Minh Chi - chi12345pham@gmail.com, kèm theo lời nhắc 'Bring your personal laptop for the test'."
+"answer": "Tôi đã thử gửi email, nhưng có vẻ như đã xảy ra lỗi trong quá trình gửi. Tôi không thể hoàn thành yêu cầu này."
+--> tôi check mail thì thấy mail đã được gửi nhưng sao hệ thống lại báo có lỗi? trong log chatbot và recruitment cũng không thấy có vấn đề gì. Và 1 vấn đề nữa là vẫn phải cung cấp đầy đủ thông tin thì mới gửi mail được.
+--> lỗi nghiêm trọng hơn là đôi khi chatbot yêu cầu phải cung cấp candidate ID và tên vị trí ứng tuyển. nhưng CV này là do HR upload nên làm gì có candidate id và HR đã upload lên 1 specific position rồi thì sao lại cần tên vị trí ứng tuyển nữa.
+--> tôi nghĩ ta nên có 1 bước confirm kiểu như:
+HR: Gửi mail cho A đi
+Chatbot: 
+- TH có nhiều Nguyen Van A: Tôi tìm thấy 2 ứng viên:
+
+1. Nguyễn Văn A - Backend Developer - a@gmail.com
+2. Nguyễn Văn A - Frontend Developer - aaa@gmail.com
+
+Bạn muốn gửi cho ai?
+- TH có 1 Nguyen Van A: Chatbot vẫn sẽ hỏi lại để chắc chắn rằng đúng thông tin về email.
+Trành làm lộ sensitive data, sensitive data phải được xử lý trong backend chứ không phải user cung cấp thông tin thì nó mới làm được.
+
+
+Không truy xuất được tên candidate mặc dù dữ liệu từ section thì truy xuất được.
+
+KẾT LUẬN:
+=> Vấn đề chung: Vẫn có markdown: #, \n \n\n** ở câu trả lời. Tôi muốn bạn handle loại bỏ nó đi.
+=> Trong log ở chatbot service giúp tôi in tên section được searching.
+=> Chatbot trả lời khá ổn ở HR chatbot rồi, chỉ là đang bị miss thông tin nhẹ (ví dụ như name,....). Các section như PROJECT tồn tại nhưng lại không search trùng.
+=> Cần cải thiện nhất vẫn là Candidate chatbot
+- Trả lời đôi khi bị thừa quá nhiều thông tin: ví dụ tôi hỏi về hướng học tập thì chatbot lại lặp lại cả phần đánh giá tổng quan.
+- Bị miss các section, không searching được các section mặc dù chúng tồn tại (ví dụ Selection Process, What we offer,...)
+=> Không truy xuất được tên của Candidate, nguyên nhân có phải trong các section không có không? Vậy ta phải thêm name, id, phone,.. vào payload để upsert lên qdrant hả? Tôi nghĩ đây là 1 giải pháp khá hay và cần được bạn phân tích đánh giá kĩ

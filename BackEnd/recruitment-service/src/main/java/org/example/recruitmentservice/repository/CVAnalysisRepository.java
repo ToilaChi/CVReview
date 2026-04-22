@@ -11,7 +11,9 @@ public interface CVAnalysisRepository extends JpaRepository<CVAnalysis, Integer>
 
     Optional<CVAnalysis> findByCandidateCV_Id(Integer cvId);
 
-    /** Đếm số CVAnalysis records cho một vị trí — tức là số CV đã được chấm điểm. */
+    /**
+     * Đếm số CVAnalysis records cho một vị trí — tức là số CV đã được chấm điểm.
+     */
     @Query("SELECT COUNT(a) FROM CVAnalysis a WHERE a.candidateCV.position.id = :positionId")
     long countScoredByPositionId(@Param("positionId") int positionId);
 

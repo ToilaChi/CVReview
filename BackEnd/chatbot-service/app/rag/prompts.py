@@ -1,12 +1,17 @@
 """
-Prompt templates for the CV Review chatbot system.
+Prompt templates for the CVReview chatbot system.
 - All prompts in English with professional HR tone.
-- JD_SEARCH_PROMPT performs scoring inline to avoid a second LLM call.
-- Skill lists are compact bullet points, not paragraphs.
+- JD_SEARCH_PROMPT uses pre-screened scores from scoring_node — no second LLM call.
+- build_jd_context() applies NO truncation: Mode A (full JD) and Mode B (section chunks)
+  are both passed verbatim so the LLM can extract the exact section it needs.
+- Three focused sub-templates cover the most common follow-up intents:
+    JD_BENEFITS_PROMPT   — salary / compensation / perks questions
+    JD_PROCESS_PROMPT    — interview process / timeline questions
+    CV_IMPROVE_PROMPT    — skill-gap / learning roadmap questions
 """
 
 # ============================================================
-# SYSTEM PROMPT — Senior HR Professional persona
+# SYSTEM PROMPT — Senior HR Professional persona (Tầng 3 adaptive)
 # ============================================================
 
 SYSTEM_PROMPT = """You are a Senior HR Professional and Talent Acquisition Specialist with 10+ years of experience in technology recruitment.
@@ -194,6 +199,117 @@ Rules:
 
 
 # ============================================================
+# JD BENEFITS PROMPT — focused on salary / compensation / perks
+# ============================================================
+
+JD_BENEFITS_PROMPT = """You are a Senior HR Professional answering a compensation and benefits question.
+
+JOB DESCRIPTION:
+{jd_context}
+
+CANDIDATE QUESTION:
+{query}
+
+Extract and present ONLY the compensation and benefits information that is explicitly stated in the JD above.
+
+## Compensation & Benefits
+
+**Base Salary / Stipend:**
+[Extract exactly as stated. If not mentioned: "Not specified in JD."]
+
+**Benefits Package:**
+• [Benefit] • [Benefit] • [Benefit]
+[Only items explicitly listed. No invented items.]
+
+**Work Arrangement:** [Remote / Hybrid / Onsite — if stated]
+
+**Additional Perks:**
+[Any other explicitly mentioned perks — training, equipment, etc.]
+
+---
+Critical rule: Every item above MUST come directly from the JD text. If a detail is not in the JD, say "Not mentioned in JD" — never guess or extrapolate from market norms."""
+
+
+# ============================================================
+# JD PROCESS PROMPT — focused on interview process / timeline
+# ============================================================
+
+JD_PROCESS_PROMPT = """You are a Senior HR Professional explaining the recruitment process for a position.
+
+JOB DESCRIPTION:
+{jd_context}
+
+CANDIDATE QUESTION:
+{query}
+
+Extract and present the recruitment and interview process as described in the JD.
+
+## Recruitment Process
+
+**Stages:**
+1. [Stage — description if provided]
+2. [Stage]
+...
+[Only stages explicitly mentioned. If not described: "Interview process not detailed in JD."]
+
+**Assessment Format:**
+[Online test / Live coding / Case study / Portfolio review — only if stated]
+
+**Timeline / Response Time:**
+[Only if explicitly stated. Otherwise: "Timeline not specified in JD."]
+
+**Interview Language:**
+[Only if explicitly stated. Otherwise: "Not specified."]
+
+---
+Rule: State only what is in the JD. If the process is not described, say so clearly and suggest the candidate ask the recruiter directly."""
+
+
+# ============================================================
+# CV IMPROVE PROMPT — focused on skill-gap / learning roadmap
+# ============================================================
+
+CV_IMPROVE_PROMPT = """You are a Senior HR Professional building a concrete skill-improvement roadmap.
+
+CANDIDATE CV:
+{cv_context}
+
+TARGET JD (for context on what gaps to close):
+{jd_context}
+
+CANDIDATE QUESTION:
+{query}
+
+## Skill Gap Analysis
+
+**Your Current Profile (from CV):**
+• [Confirmed strengths relevant to the target level]
+
+**Critical Gaps to Close (based on JD requirements):**
+
+| Gap | Why It Matters | Priority |
+|-----|---------------|----------|
+| [Skill/exp] | [Why hiring managers care about this] | 🔴 High / 🟠 Medium |
+
+## 90-Day Learning Roadmap
+
+**Month 1 — Foundation:**
+- [Specific resource / course / practice] → [Measurable outcome]
+
+**Month 2 — Application:**
+- [Project / contribution / certification] → [Portfolio artifact]
+
+**Month 3 — Validation:**
+- [Interview prep / mock project / certification exam]
+
+## Honest Assessment
+[2–3 sentences. Will these improvements realistically change the hiring outcome? What is the minimum viable improvement to reach score ≥70?]
+
+---
+Rules: Base all gaps on the provided CV vs JD data. Give real resource names (Udemy, LeetCode, official docs), realistic timeframes. No generic advice."""
+
+
+# ============================================================
 # GENERAL PROMPT
 # ============================================================
 
@@ -224,13 +340,15 @@ def build_cv_context(cv_chunks: list) -> str:
     for i, chunk in enumerate(cv_chunks, 1):
         payload = chunk.get("payload", {})
         section = payload.get("section", "Unknown")
-        text = payload.get("chunkText", "").strip()
-        score = chunk.get("score", 0)
+        text    = payload.get("chunkText", "").strip()
+        score   = chunk.get("score", 0)
 
         if not text:
             continue
 
-        context_parts.append(f"[CV Section {i} — {section} | Relevance: {score:.2f}]\n{text}\n")
+        context_parts.append(
+            f"[CV Section {i} — {section} | Relevance: {score:.2f}]\n{text}\n"
+        )
 
     return "\n".join(context_parts) if context_parts else "No relevant CV sections found."
 
@@ -238,9 +356,11 @@ def build_cv_context(cv_chunks: list) -> str:
 def build_jd_context(jd_docs: list) -> str:
     """
     Assemble JD context string from Qdrant result documents.
-    Truncation logic:
-    - Full JD documents (positionName field present, fetched via Small-to-Big) → no truncation.
-    - Raw Qdrant chunk hits (section-based, Mode B) → truncate at 1500 chars to limit context size.
+
+    No truncation applied to either mode:
+    - Mode A (full JD, small-to-big): `positionName` field present → pass full jdText.
+    - Mode B (section chunks): pass chunk text verbatim so the LLM can extract
+      the relevant section (salary, benefits, process) without data loss.
     """
     if not jd_docs:
         return "No job descriptions available."
@@ -248,16 +368,13 @@ def build_jd_context(jd_docs: list) -> str:
     context_parts = []
     for i, doc in enumerate(jd_docs, 1):
         payload  = doc.get("payload", {})
-        # Small-to-Big full documents have positionName; raw chunks use positionId only
-        is_full_jd = bool(payload.get("positionName"))
         position = payload.get("positionName") or payload.get("position", "Unknown Position")
         jd_id    = payload.get("positionId") or payload.get("jdId", "N/A")
-        jd_text  = payload.get("jdText", "") or payload.get("chunkText", "")
+        jd_text  = (payload.get("jdText") or payload.get("chunkText", "")).strip()
         score    = doc.get("score", 0)
 
-        # Only truncate section chunks (Mode B); preserve full JD text (Mode A / scoring)
-        if not is_full_jd and len(jd_text) > 1500:
-            jd_text = jd_text[:1500] + "\n[...truncated]"
+        if not jd_text:
+            continue
 
         context_parts.append(
             f"[Position {i} | ID: {jd_id} | Title: {position} | Similarity: {score:.2f}]\n{jd_text}\n"
@@ -267,7 +384,7 @@ def build_jd_context(jd_docs: list) -> str:
 
 
 def build_combined_context(cv_chunks: list, jd_docs: list) -> str:
-    """Combined CV + JD context for general intent."""
+    """Combined CV + JD context for the general intent fall-through."""
     return (
         f"=== CANDIDATE PROFILE ===\n{build_cv_context(cv_chunks)}\n\n"
         f"=== JOB POSITIONS ===\n{build_jd_context(jd_docs)}"
@@ -291,6 +408,31 @@ def build_scored_jobs_context(scored_jobs: list) -> str:
 
 
 # ============================================================
+# SUB-INTENT DETECTION — for focused prompt routing
+# ============================================================
+
+import re as _re
+
+_BENEFITS_RE  = _re.compile(r"\b(salary|compensation|wage|pay|stipend|benefit|insurance|bonus|perk|allowance)\b", _re.I)
+_PROCESS_RE   = _re.compile(r"\b(interview|process|round|stage|step|test|coding challenge|timeline|how long|response time)\b", _re.I)
+_IMPROVE_RE   = _re.compile(r"\b(improve|learn|study|roadmap|plan|prepare|how to get|what to add|skill gap|missing)\b", _re.I)
+
+
+def _detect_jd_sub_intent(query: str) -> str:
+    """
+    Lightweight sub-intent detection within jd_analysis / cv_analysis:
+    Returns 'benefits' | 'process' | 'improve' | 'general'
+    """
+    if _BENEFITS_RE.search(query):
+        return "benefits"
+    if _PROCESS_RE.search(query):
+        return "process"
+    if _IMPROVE_RE.search(query):
+        return "improve"
+    return "general"
+
+
+# ============================================================
 # PROMPT SELECTOR
 # ============================================================
 
@@ -300,15 +442,19 @@ def get_prompt_for_intent(
     cv_context: list = None,
     jd_context: list = None,
     conversation_history: list = None,
-    scored_jobs: list = None
+    scored_jobs: list = None,
 ) -> tuple[str, str]:
-    """Select and build the appropriate system + user prompt pair for a given intent."""
-    cv_context = cv_context or []
-    jd_context = jd_context or []
+    """
+    Select and build the appropriate system + user prompt pair for a given intent.
+    Within jd_analysis, routes to a focused sub-template (benefits / process / improve)
+    to improve answer precision without extra LLM calls.
+    """
+    cv_context  = cv_context  or []
+    jd_context  = jd_context  or []
     scored_jobs = scored_jobs or []
 
-    cv_ctx = build_cv_context(cv_context)
-    jd_ctx = build_jd_context(jd_context)
+    cv_ctx  = build_cv_context(cv_context)
+    jd_ctx  = build_jd_context(jd_context)
 
     history_text = ""
     if conversation_history:
@@ -319,26 +465,42 @@ def get_prompt_for_intent(
         history_text = "\n\nPREVIOUS CONVERSATION:\n" + "\n".join(history_lines) + "\n"
 
     if intent == "cv_analysis":
-        user_prompt = CV_ANALYSIS_PROMPT.format(cv_context=cv_ctx, query=query) + history_text
+        sub_intent = _detect_jd_sub_intent(query)
+        if sub_intent == "improve":
+            user_prompt = CV_IMPROVE_PROMPT.format(
+                cv_context=cv_ctx, jd_context=jd_ctx, query=query
+            )
+        else:
+            user_prompt = CV_ANALYSIS_PROMPT.format(cv_context=cv_ctx, query=query)
+        user_prompt += history_text
 
     elif intent == "jd_search":
-        scored_ctx = build_scored_jobs_context(scored_jobs)
+        scored_ctx  = build_scored_jobs_context(scored_jobs)
         user_prompt = JD_SEARCH_PROMPT.format(
             cv_context=cv_ctx,
             jd_context=jd_ctx,
             scored_jobs=scored_ctx,
-            query=query
+            query=query,
         ) + history_text
 
     elif intent == "jd_analysis":
-        user_prompt = JD_ANALYSIS_PROMPT.format(
-            jd_context=jd_ctx,
-            cv_context=cv_ctx,
-            query=query
-        ) + history_text
+        sub_intent = _detect_jd_sub_intent(query)
+        if sub_intent == "benefits":
+            user_prompt = JD_BENEFITS_PROMPT.format(jd_context=jd_ctx, query=query)
+        elif sub_intent == "process":
+            user_prompt = JD_PROCESS_PROMPT.format(jd_context=jd_ctx, query=query)
+        elif sub_intent == "improve":
+            user_prompt = CV_IMPROVE_PROMPT.format(
+                cv_context=cv_ctx, jd_context=jd_ctx, query=query
+            )
+        else:
+            user_prompt = JD_ANALYSIS_PROMPT.format(
+                jd_context=jd_ctx, cv_context=cv_ctx, query=query
+            )
+        user_prompt += history_text
 
     else:  # general
-        combined = build_combined_context(cv_context, jd_context) if (cv_context or jd_context) else "No CV or JD context available."
+        combined    = build_combined_context(cv_context, jd_context) if (cv_context or jd_context) else "No CV or JD context available."
         user_prompt = GENERAL_PROMPT.format(context=combined, query=query)
 
     return SYSTEM_PROMPT, user_prompt

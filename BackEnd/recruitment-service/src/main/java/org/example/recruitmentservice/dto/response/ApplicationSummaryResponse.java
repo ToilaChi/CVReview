@@ -5,17 +5,19 @@ import lombok.Builder;
 import lombok.Getter;
 
 /**
- * DTO trả về thông tin ứng viên đã ứng tuyển vào 1 position.
- * HR chatbot mode CANDIDATE dùng candidateId list này để filter Qdrant master CV vectors.
+ * DTO trả về thông tin CV đã được liên kết với một position.
+ * Bao gồm cả HR-uploaded CVs (candidateId = null) và Candidate-applied CVs.
+ * Python hr_graph dùng sourceType để phân biệt 2 mode và build sql_metadata map đúng.
  */
 @Getter
 @Builder
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public class ApplicationSummaryResponse {
-    private String candidateId;
+    private String candidateId;   // null nếu là HR-uploaded CV
     private String candidateName;
     private String candidateEmail;
-    private Integer appCvId;
+    private Integer appCvId;      // cvId trong Qdrant — cầu nối để map name từ SQL
+    private String sourceType;    // "HR" | "CANDIDATE"
     private Integer score;
     private String feedback;
     private String skillMatch;
