@@ -29,6 +29,10 @@ public interface CandidateCVRepository extends JpaRepository<CandidateCV, Intege
 
         int countByPositionId(int positionId);
 
+        @Query("SELECT COUNT(c) FROM CandidateCV c WHERE c.position.id = :positionId AND c.sourceType = :sourceType")
+        long countByPositionIdAndSourceType(@Param("positionId") int positionId,
+                        @Param("sourceType") SourceType sourceType);
+
         @Query("SELECT COUNT(c) FROM CandidateCV c WHERE c.updatedAt >= :date")
         long countTotalCVsAfterDate(@Param("date") java.time.LocalDateTime date);
 

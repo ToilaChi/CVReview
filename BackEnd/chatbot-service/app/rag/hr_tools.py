@@ -48,7 +48,7 @@ async def get_candidate_details(candidate_id: str, position_id: int) -> str:
 
 
 @tool
-async def get_cv_summary(position_id: int) -> str:
+async def get_cv_summary(position_id: int, mode: str) -> str:
     """
     Lấy thống kê tổng quan về số lượng CV và kết quả chấm điểm cho một vị trí tuyển dụng.
     Gọi khi HR hỏi về số lượng CV, tỷ lệ pass/fail, hoặc phân bổ điểm số.
@@ -57,7 +57,7 @@ async def get_cv_summary(position_id: int) -> str:
         position_id: ID của vị trí cần xem thống kê (tự động inject từ session)
     """
     try:
-        data   = await recruitment_api.get_cv_statistics(position_id=position_id)
+        data   = await recruitment_api.get_cv_statistics(position_id=position_id, mode=mode)
         total  = data.get("total", 0)
         scored = data.get("scored", 0)
         passed = data.get("passed", 0)
@@ -121,7 +121,7 @@ async def send_interview_email(
             "OFFER_LETTER":     "offer letter",
             "REJECTION":        "từ chối",
         }.get(email_type.upper(), email_type)
-        return f"✅ Đã gửi email {type_label} thành công tới {candidate_name} ({candidate_email})."
+        return f"Đã gửi email {type_label} thành công tới {candidate_name} ({candidate_email})."
     except Exception as e:
         return f"Lỗi khi gửi email: {str(e)}"
 
@@ -129,6 +129,7 @@ async def send_interview_email(
 @tool
 async def search_candidates_by_criteria(
     position_id: int,
+    mode: str,
     min_score: Optional[int] = None,
     skill_keyword: Optional[str] = None,
     name_keyword: Optional[str] = None,
@@ -141,6 +142,7 @@ async def search_candidates_by_criteria(
 
     Args:
         position_id:   ID vị trí cần lọc (tự động inject từ session)
+        mode:          Chế độ HR_MODE hoặc CANDIDATE_MODE (tự động inject từ session)
         min_score:     Lọc ứng viên có điểm >= giá trị này (optional)
         skill_keyword: Từ khóa kỹ năng tìm trong skillMatch (optional, không phân biệt hoa thường)
         name_keyword:  Từ khóa tên ứng viên (optional, không phân biệt hoa thường)
@@ -151,7 +153,8 @@ async def search_candidates_by_criteria(
         if not applications:
             return f"Không có ứng viên nào trong vị trí ID {position_id}."
 
-        results = applications
+        target_source = "HR" if mode == "HR_MODE" else "CANDIDATE"
+        results = [app for app in applications if app.get("sourceType") == target_source]
 
         if min_score is not None:
             results = [app for app in results if (app.get("score") or 0) >= min_score]

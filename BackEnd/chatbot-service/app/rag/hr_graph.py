@@ -81,7 +81,7 @@ class HRChatState(TypedDict):
     cv_id_to_meta: Dict[int, Dict[str, Any]]  # fast lookup: cvId → metadata record
 
     # Email confirmation flow state
-    pending_email: Optional[Dict[str, Any]]  # email args waiting for HR confirmation
+    pending_emails: Optional[List[Dict[str, Any]]]  # list of email args waiting for HR confirmation
 
     # Session memory
     conversation_history: List[Dict[str, Any]]
@@ -126,6 +126,19 @@ async def load_hr_session_history_node(state: HRChatState) -> HRChatState:
             limit=settings.MAX_HISTORY_TURNS
         )
         state["conversation_history"] = history
+        
+        for turn in reversed(history):
+            if turn.get("role") == "ASSISTANT":
+                func_data_str = turn.get("functionCall")
+                if func_data_str:
+                    try:
+                        func_data = json.loads(func_data_str)
+                        if isinstance(func_data, dict) and "pending_emails" in func_data:
+                            state["pending_emails"] = func_data["pending_emails"]
+                            print(f"[Cache Hit] Restored {len(state['pending_emails'])} pending_email(s)")
+                    except json.JSONDecodeError:
+                        pass
+                break
     except Exception as e:
         print(f"[HR Graph] Could not load history: {e}")
         state["conversation_history"] = []
@@ -162,12 +175,13 @@ async def load_candidate_scope_node(state: HRChatState) -> HRChatState:
         applications = await recruitment_api.get_applications(
             position_id=state["position_id"]
         )
-        state["sql_metadata"] = applications
+        target_source = "HR" if state["mode"] == "HR_MODE" else "CANDIDATE"
+        filtered_apps = [app for app in applications if app.get("sourceType") == target_source]
 
         # Build fast cvId → metadata lookup (works regardless of mode)
         state["cv_id_to_meta"] = {
             app["appCvId"]: app
-            for app in applications
+            for app in filtered_apps
             if app.get("appCvId") is not None
         }
 
@@ -175,13 +189,15 @@ async def load_candidate_scope_node(state: HRChatState) -> HRChatState:
             # For Qdrant filter: use candidateIds of CANDIDATE-type CVs only
             state["candidate_ids"] = [
                 app["candidateId"]
-                for app in applications
-                if app.get("sourceType") == "CANDIDATE" and app.get("candidateId")
+                for app in filtered_apps
+                if app.get("candidateId")
             ]
             print(f"[HR Graph] CANDIDATE_MODE: {len(state['candidate_ids'])} candidate(s) in scope.")
         else:
             state["candidate_ids"] = None
-            print(f"[HR Graph] HR_MODE: {len(applications)} CV(s) loaded from SQL.")
+            print(f"[HR Graph] HR_MODE: {len(filtered_apps)} CV(s) loaded from SQL.")
+
+        state["sql_metadata"] = filtered_apps
 
     except Exception as e:
         print(f"[HR Graph] Could not load candidate scope: {e}")
@@ -316,11 +332,8 @@ def _format_sql_metadata(sql_metadata: List[Dict[str, Any]], mode: str) -> str:
     if not sql_metadata:
         return ""
 
-    target_source = "HR" if mode == "HR_MODE" else "CANDIDATE"
     rows = []
     for app in sql_metadata:
-        if app.get("sourceType") != target_source:
-            continue
         name  = app.get("candidateName", "N/A")
         email = app.get("candidateEmail", "N/A")
         score = app.get("score", "Not scored")
@@ -342,13 +355,11 @@ def _resolve_candidates_by_name(
     if not name_query or not sql_metadata:
         return []
 
-    target_source = "HR" if mode == "HR_MODE" else "CANDIDATE"
     query_lower = name_query.lower().strip()
 
     return [
         app for app in sql_metadata
-        if app.get("sourceType") == target_source
-        and query_lower in (app.get("candidateName") or "").lower()
+        if query_lower in (app.get("candidateName") or "").lower()
     ]
 
 
@@ -447,20 +458,35 @@ async def llm_hr_reasoning_node(state: HRChatState) -> HRChatState:
     # -----------------------------------------------------------------------
     # Handle email confirmation turn (HR says "đồng ý", "ok", etc.)
     # -----------------------------------------------------------------------
-    pending_email = state.get("pending_email")
-    if pending_email and _EMAIL_CONFIRM_PATTERN.search(state["query"]):
-        print("[Email Confirm] HR confirmed — executing send_interview_email.")
-        tool_map  = {t.name: t for t in HR_TOOLS}
-        email_tool = tool_map.get("send_interview_email")
-        if email_tool:
-            try:
-                result = await email_tool.ainvoke(pending_email)
-                state["llm_response"] = result
-                state["function_calls"] = [{"name": "send_interview_email", "arguments": pending_email, "result": result}]
-            except Exception as e:
-                state["llm_response"] = f"Lỗi khi gửi email: {str(e)}"
-        state["pending_email"] = None
-        return state
+    pending_emails = state.get("pending_emails")
+    if pending_emails:
+        if _EMAIL_CONFIRM_PATTERN.search(state["query"]):
+            print(f"[Email Confirm] HR confirmed — executing {len(pending_emails)} send_interview_email(s).")
+            tool_map  = {t.name: t for t in HR_TOOLS}
+            email_tool = tool_map.get("send_interview_email")
+            
+            results = []
+            function_calls = []
+            
+            if email_tool:
+                for pe in pending_emails:
+                    try:
+                        res = await email_tool.ainvoke(pe)
+                        results.append(str(res))
+                        function_calls.append({"name": "send_interview_email", "arguments": pe, "result": res})
+                    except Exception as e:
+                        err_msg = f"Lỗi khi gửi email tới {pe.get('candidate_name')}: {str(e)}"
+                        results.append(err_msg)
+                        function_calls.append({"name": "send_interview_email", "arguments": pe, "result": err_msg})
+            
+            state["llm_response"] = "\n".join(results)
+            state["function_calls"] = function_calls
+            state["pending_emails"] = None
+            return state
+        else:
+            # HR didn't confirm. Clear pending emails and let LLM handle the new query.
+            print("[Email Confirm] HR did not confirm. Clearing pending_emails.")
+            state["pending_emails"] = None
 
     # -----------------------------------------------------------------------
     # No tool calls → plain text answer
@@ -473,6 +499,7 @@ async def llm_hr_reasoning_node(state: HRChatState) -> HRChatState:
     # Tool execution loop with auto-injection
     # -----------------------------------------------------------------------
     executed_calls = []
+    new_pending_emails = []
     tool_map  = {t.name: t for t in HR_TOOLS}
     messages.append(response)
 
@@ -480,11 +507,13 @@ async def llm_hr_reasoning_node(state: HRChatState) -> HRChatState:
         tool_name = call["name"]
         tool_args = call["args"].copy()
 
-        # Auto-inject position_id
+        # Auto-inject position_id and mode
         if tool_name in ("send_interview_email", "get_candidate_details", "get_cv_summary", "search_candidates_by_criteria"):
             if not tool_args.get("position_id"):
                 tool_args["position_id"] = state["position_id"]
                 print(f"[Tool Inject] position_id={state['position_id']} → {tool_name}")
+            if tool_name in ("search_candidates_by_criteria", "get_cv_summary"):
+                tool_args["mode"] = state["mode"]
 
         # -----------------------------------------------------------------------
         # Email: Resolve name → mandatory confirmation before sending
@@ -513,19 +542,13 @@ async def llm_hr_reasoning_node(state: HRChatState) -> HRChatState:
 
             # Exactly 1 match — fill in resolved data, then ask HR to confirm
             matched = matches[0]
-            tool_args["candidate_id"]    = matched.get("candidateId") or matched.get("appCvId", "")
+            tool_args["candidate_id"]    = str(matched.get("candidateId") or matched.get("appCvId", ""))
             tool_args["candidate_email"] = tool_args.get("candidate_email") or matched.get("candidateEmail", "")
             tool_args["candidate_name"]  = matched.get("candidateName", candidate_name)
 
-            # Store pending email and ask for confirmation
-            state["pending_email"] = tool_args
-            state["llm_response"] = (
-                f"Bạn có chắc muốn gửi email **{tool_args.get('email_type', 'INTERVIEW_INVITE')}** "
-                f"tới **{tool_args['candidate_name']}** ({tool_args['candidate_email']}) không?\n"
-                f"Gõ 'Đồng ý' để xác nhận hoặc 'Huỷ' để bỏ qua."
-            )
-            print(f"[Email Confirm] Pending confirmation for {tool_args['candidate_name']} ({tool_args['candidate_email']})")
-            return state  # Do NOT execute the tool yet
+            # Store pending email
+            new_pending_emails.append(tool_args)
+            continue  # Do NOT execute the tool yet
 
         # -----------------------------------------------------------------------
         # All other tools — execute normally
@@ -541,6 +564,17 @@ async def llm_hr_reasoning_node(state: HRChatState) -> HRChatState:
 
         executed_calls.append({"name": tool_name, "arguments": tool_args, "result": tool_result})
         messages.append(ToolMessage(content=str(tool_result), tool_call_id=call["id"]))
+
+    if new_pending_emails:
+        state["pending_emails"] = new_pending_emails
+        lines = ["Bạn có chắc muốn gửi email tới các ứng viên sau không?"]
+        for pe in new_pending_emails:
+            lines.append(f"- **{pe.get('candidate_name')}** ({pe.get('candidate_email')})")
+        lines.append("\nGõ 'Đồng ý' để xác nhận hoặc 'Huỷ' để bỏ qua.")
+        state["llm_response"] = "\n".join(lines)
+        print(f"[Email Confirm] Pending confirmation for {len(new_pending_emails)} candidate(s)")
+        state["function_calls"] = None
+        return state
 
     state["function_calls"] = executed_calls
 
@@ -565,7 +599,14 @@ async def save_hr_turn_node(state: HRChatState) -> HRChatState:
             content=state["query"],
         )
         raw_calls = state.get("function_calls")
-        function_call_payload: Optional[str] = json.dumps(raw_calls, ensure_ascii=False) if raw_calls else None
+        pending_emails = state.get("pending_emails")
+        
+        if raw_calls:
+            function_call_payload: Optional[str] = json.dumps(raw_calls, ensure_ascii=False)
+        elif pending_emails:
+            function_call_payload: Optional[str] = json.dumps({"pending_emails": pending_emails}, ensure_ascii=False)
+        else:
+            function_call_payload = None
 
         await recruitment_api.save_message(
             session_id=state["session_id"],
@@ -595,7 +636,7 @@ def format_hr_response_node(state: HRChatState) -> HRChatState:
         "sql_records_count":   len(state.get("sql_metadata", [])),
         "function_calls":      state.get("function_calls"),
         "retrieval_stats":     state.get("retrieval_stats", {}),
-        "pending_email":       state.get("pending_email"),
+        "pending_emails":       state.get("pending_emails"),
     }
     return state
 
@@ -653,7 +694,7 @@ class HRChatbot:
             "candidate_ids":        None,
             "sql_metadata":         [],
             "cv_id_to_meta":        {},
-            "pending_email":        None,
+            "pending_emails":       None,
             "conversation_history": [],
             "cv_context":           [],
             "retrieval_stats":      {},

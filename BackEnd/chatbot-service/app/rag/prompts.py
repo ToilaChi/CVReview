@@ -27,7 +27,7 @@ Core rules:
 2. Cite specific sections when referencing CV content (e.g., "From your EXPERIENCE section...")
 3. If information is absent from context, state it explicitly: "Not mentioned in CV/JD"
 4. Every recommendation must be justified with evidence from the data
-5. Respond exclusively in English
+5. Respond in the same language as the candidate's question (default to Vietnamese).
 
 Adaptive response rules (analyze query before responding):
 - SALARY/BENEFITS question → extract only from JD text; never invent numbers; if absent say "Not mentioned in JD"
@@ -81,7 +81,7 @@ Respond using this structure:
 [2–3 sentences written as a hiring manager advising this candidate. Be direct and practical.]
 
 ---
-Rules: Cite CV sections, no invented data, English only."""
+Rules: Cite CV sections, no invented data. Language: Same as the user's question (Vietnamese by default)."""
 
 
 # ============================================================
@@ -134,7 +134,8 @@ Respond using this structure:
 3. [Actionable step]
 
 ---
-Rules: Evidence-based only, no salary invention, English only."""
+Rules: Evidence-based only, no salary invention. Language: Same as the user's question (Vietnamese by default).
+- HIERARCHICAL SKILL INFERENCE: If candidate has advanced skills for a lower-level role, DO NOT penalize missing basic keywords. Assume basic proficiency. Label as 'Overqualified' and recommend higher roles."""
 
 
 # ============================================================
@@ -170,15 +171,9 @@ CANDIDATE QUESTION:
 
 ### [Rank]. [Position Title] — Fit Score: [score]/100
 
-**HR Assessment:** [2 sentences max — frank evaluation of this candidate for this specific role. Mention the single strongest alignment and the most critical gap. No generic filler.]
+**HR Assessment:** [2-3 sentences — frank evaluation of this candidate for this specific role. Mention the single strongest alignment and the most critical gap. No generic filler.]
 
-**Matched Skills:**
-• [Skill] • [Skill] • [Skill]
-[Only confirmed matches between CV and JD. Bullet list, no explanations unless a skill is notably impressive.]
-
-**Skill Gaps:**
-• [Missing skill] • [Missing skill] • [Missing skill]
-[Only genuine gaps from JD requirements. Bullet list.]
+**Actionable Advice:** [1-2 sentences. Tell them exactly what to fix or what to do next for this role.]
 
 **Verdict:** [Apply Now ✓ / Prepare First ⚡ / Not Suitable ✗]
 
@@ -186,15 +181,16 @@ CANDIDATE QUESTION:
 [Repeat for each position, ranked by score descending]
 
 ## Overall Recommendation
-[3–4 sentences. Which position(s) to prioritize and why. Flag if score < 70 and advise the candidate NOT to apply yet — tell them exactly what to fix first.]
+[1-2 sentences summarizing which position(s) to prioritize and the immediate next step.]
 
 ---
 Rules:
 - Scores come from pre-screened fit data — do not invent new scores
-- Skills must be bullet lists (• item), NO paragraphs
-- HR Assessment per position: max 2 sentences, be substantive not generic
+- HR Assessment per position: max 3 sentences, be substantive not generic
+- Actionable Advice per position: max 2 sentences
+- If candidate is labeled "Overqualified" in the Initial Feedback, strongly suggest applying for higher-level roles instead of penalizing missing basic skills.
 - If no positions available: state clearly and advise on next steps
-- English only
+- Language: Same as the user's question (Vietnamese by default)
 """
 
 
@@ -227,7 +223,7 @@ Extract and present ONLY the compensation and benefits information that is expli
 [Any other explicitly mentioned perks — training, equipment, etc.]
 
 ---
-Critical rule: Every item above MUST come directly from the JD text. If a detail is not in the JD, say "Not mentioned in JD" — never guess or extrapolate from market norms."""
+Critical rule: Every item above MUST come directly from the JD text. If a detail is not in the JD, say "Not mentioned in JD" — never guess or extrapolate from market norms. Language: Same as the user's question (Vietnamese by default)."""
 
 
 # ============================================================
@@ -262,7 +258,7 @@ Extract and present the recruitment and interview process as described in the JD
 [Only if explicitly stated. Otherwise: "Not specified."]
 
 ---
-Rule: State only what is in the JD. If the process is not described, say so clearly and suggest the candidate ask the recruiter directly."""
+Rule: State only what is in the JD. If the process is not described, say so clearly and suggest the candidate ask the recruiter directly. Language: Same as the user's question (Vietnamese by default)."""
 
 
 # ============================================================
@@ -306,7 +302,7 @@ CANDIDATE QUESTION:
 [2–3 sentences. Will these improvements realistically change the hiring outcome? What is the minimum viable improvement to reach score ≥70?]
 
 ---
-Rules: Base all gaps on the provided CV vs JD data. Give real resource names (Udemy, LeetCode, official docs), realistic timeframes. No generic advice."""
+Rules: Base all gaps on the provided CV vs JD data. Give real resource names (Udemy, LeetCode, official docs), realistic timeframes. No generic advice. Language: Same as the user's question (Vietnamese by default)."""
 
 
 # ============================================================
@@ -324,7 +320,7 @@ CANDIDATE QUESTION:
 Provide concise, professional guidance grounded in the available context.
 If additional information is needed (CV or JD), state specifically what you need and why.
 
-Response tone: Direct, experienced, actionable. Not generic. English only."""
+Response tone: Direct, experienced, actionable. Not generic. Language: Same as the user's question (Vietnamese by default)."""
 
 
 # ============================================================

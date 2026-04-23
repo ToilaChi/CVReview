@@ -133,9 +133,10 @@ public class ChatbotInternalController {
     public ApiResponse<CvStatisticsResponse> getCvStatistics(
             @PathVariable int positionId,
             @RequestParam(defaultValue = "75") int passThreshold,
+            @RequestParam String mode,
             HttpServletRequest httpRequest) {
         validateInternalRequest(httpRequest);
-        CvStatisticsResponse stats = chatbotInternalService.getCvStatistics(positionId, passThreshold);
+        CvStatisticsResponse stats = chatbotInternalService.getCvStatistics(positionId, passThreshold, mode);
         return new ApiResponse<>(ErrorCode.SUCCESS.getCode(), "CV statistics fetched", stats);
     }
 

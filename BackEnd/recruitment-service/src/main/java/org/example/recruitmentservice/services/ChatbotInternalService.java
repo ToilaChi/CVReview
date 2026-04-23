@@ -67,10 +67,16 @@ public class ChatbotInternalService {
          * Qdrant.
          */
         public List<ApplicationSummaryResponse> getApplicationsByPosition(int positionId) {
-                return candidateCVRepository
-                                .findApplicationsByPositionId(positionId)
-                                .stream()
-                                .map(this::toApplicationSummaryResponse)
+                List<CandidateCV> cvs = candidateCVRepository.findApplicationsByPositionId(positionId);
+                if (cvs.isEmpty()) return List.of();
+                
+                List<Integer> cvIds = cvs.stream().map(CandidateCV::getId).collect(Collectors.toList());
+                java.util.Map<Integer, org.example.recruitmentservice.models.entity.CVAnalysis> analysisMap = 
+                        cvAnalysisRepository.findByCandidateCV_IdIn(cvIds).stream()
+                        .collect(Collectors.toMap(a -> a.getCandidateCV().getId(), a -> a));
+                        
+                return cvs.stream()
+                                .map(cv -> toApplicationSummaryResponse(cv, analysisMap.get(cv.getId())))
                                 .collect(Collectors.toList());
         }
 
@@ -81,10 +87,11 @@ public class ChatbotInternalService {
          * @param positionId    ID vị trí cần thống kê
          * @param passThreshold ngưỡng điểm pass (mặc định 75)
          */
-        public CvStatisticsResponse getCvStatistics(int positionId, int passThreshold) {
-                long total = candidateCVRepository.countByPositionId(positionId);
-                long scored = cvAnalysisRepository.countScoredByPositionId(positionId);
-                long passed = cvAnalysisRepository.countPassedByPositionId(positionId, passThreshold);
+        public CvStatisticsResponse getCvStatistics(int positionId, int passThreshold, String mode) {
+                org.example.recruitmentservice.models.enums.SourceType sourceType = "HR_MODE".equals(mode) ? org.example.recruitmentservice.models.enums.SourceType.HR : org.example.recruitmentservice.models.enums.SourceType.CANDIDATE;
+                long total = candidateCVRepository.countByPositionIdAndSourceType(positionId, sourceType);
+                long scored = cvAnalysisRepository.countScoredByPositionIdAndSourceType(positionId, sourceType);
+                long passed = cvAnalysisRepository.countPassedByPositionIdAndSourceType(positionId, sourceType, passThreshold);
                 return CvStatisticsResponse.builder()
                                 .positionId(positionId)
                                 .total(total)
@@ -162,7 +169,7 @@ public class ChatbotInternalService {
                                 .build();
         }
 
-        private ApplicationSummaryResponse toApplicationSummaryResponse(CandidateCV cv) {
+        private ApplicationSummaryResponse toApplicationSummaryResponse(CandidateCV cv, org.example.recruitmentservice.models.entity.CVAnalysis analysis) {
                 ApplicationSummaryResponse.ApplicationSummaryResponseBuilder builder = ApplicationSummaryResponse
                                 .builder()
                                 .candidateId(cv.getCandidateId())
@@ -171,12 +178,12 @@ public class ChatbotInternalService {
                                 .appCvId(cv.getId())
                                 .sourceType(cv.getSourceType() != null ? cv.getSourceType().name() : null);
 
-                // Lấy score/feedback từ CVAnalysis (sử dụng repository để tránh LazyInitializationException)
-                cvAnalysisRepository.findByCandidateCV_Id(cv.getId())
-                                .ifPresent(analysis -> builder.score(analysis.getScore())
-                                                .feedback(analysis.getFeedback())
-                                                .skillMatch(analysis.getSkillMatch())
-                                                .skillMiss(analysis.getSkillMiss()));
+                if (analysis != null) {
+                        builder.score(analysis.getScore())
+                               .feedback(analysis.getFeedback())
+                               .skillMatch(analysis.getSkillMatch())
+                               .skillMiss(analysis.getSkillMiss());
+                }
 
                 return builder.build();
         }

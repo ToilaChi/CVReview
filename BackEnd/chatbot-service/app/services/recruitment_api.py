@@ -131,7 +131,7 @@ class RecruitmentAPI:
         custom_message: str
     ) -> Dict[str, Any]:
         """Trigger SMTP email via recruitment-service notification endpoint."""
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=15.0) as client:
             payload = {
                 "candidateId": candidate_id,
                 "candidateEmail": candidate_email,
@@ -152,7 +152,7 @@ class RecruitmentAPI:
             res = response.json()
             return res.get("data") or {}
 
-    async def get_cv_statistics(self, position_id: int) -> Dict[str, Any]:
+    async def get_cv_statistics(self, position_id: int, mode: str) -> Dict[str, Any]:
         """
         Fetch CV count statistics for a position from the Java internal API.
         Returns total, scored, passed (>=75), and failed counts.
@@ -161,6 +161,7 @@ class RecruitmentAPI:
         async with httpx.AsyncClient(timeout=10.0) as client:
             response = await client.get(
                 f"{self.base_url}/internal/chatbot/positions/{position_id}/cv-statistics",
+                params={"mode": mode},
                 headers=self.headers,
             )
             response.raise_for_status()

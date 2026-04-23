@@ -335,6 +335,7 @@ SCORING SYSTEM (Total 100 pts):
 RULES:
 - STRICT: If a skill is not explicitly stated in CV, assume candidate does NOT have it.
 - NO HALLUCINATION: Do not infer skills from project context alone.
+- HIERARCHICAL SKILL INFERENCE (Overqualified Candidates): Level Hierarchy is (Intern < Fresher < Junior < Mid-level < Senior < Principal). If a candidate demonstrates advanced skills (e.g., Microservices, React, System Design) or has a higher experience level but the JD requires lower-level basic skills (e.g., HTML/CSS, basic Java), DO NOT penalize for missing basic keywords. Assume basic proficiency. Score them highly. In the feedback, explicitly label them as "Overqualified" and state that their level exceeds the position's requirements.
 - Score 0 only if candidate clearly fails ALL minimum requirements.
 - Use the same logic consistently across all JDs.
 
