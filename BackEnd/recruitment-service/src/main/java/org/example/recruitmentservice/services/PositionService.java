@@ -437,9 +437,14 @@ public class PositionService {
     private void publishJDChunkedEvent(Positions position, List<JDChunkPayload> chunks) {
         try {
             int totalTokens = chunks.stream().mapToInt(JDChunkPayload::getTokensEstimate).sum();
+            String formattedName = (position.getLevel() != null ? position.getLevel() + " " : "")
+                    + (position.getLanguage() != null ? position.getLanguage() + " " : "")
+                    + (position.getName() != null ? position.getName() : "");
+            formattedName = formattedName.trim();
+
             JDChunkedEvent event = new JDChunkedEvent(
                     position.getId(),
-                    position.getName(),
+                    formattedName,
                     position.getLanguage(),
                     position.getLevel(),
                     chunks,

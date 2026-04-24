@@ -34,14 +34,16 @@ def create_indexes():
     # ========================================
     # CV COLLECTION INDEXES
     # ========================================
-    print("\n📋 Creating indexes for cv_embeddings...")
+    print("\n[CV] Creating indexes for cv_embeddings...")
     
     cv_indexes = {
         # Integer fields
         "cvId": PayloadSchemaType.INTEGER,
         "positionId": PayloadSchemaType.INTEGER,
-        
-        # Keyword fields (exact match) - cho UUID strings
+        # Phase 3: array field — indexed as INTEGER so MatchAny filter is efficient
+        "applied_position_ids": PayloadSchemaType.INTEGER,
+
+        # Keyword fields (exact match) — UUID strings
         "candidateId": PayloadSchemaType.KEYWORD,
         "hrId": PayloadSchemaType.KEYWORD,
         "section": PayloadSchemaType.KEYWORD,
@@ -49,10 +51,10 @@ def create_indexes():
         "cvStatus": PayloadSchemaType.KEYWORD,
         "sourceType": PayloadSchemaType.KEYWORD,
         "skills": PayloadSchemaType.KEYWORD,
-        
+
         # Boolean fields
         "is_latest": PayloadSchemaType.BOOL,
-        
+
         # Integer fields
         "chunkIndex": PayloadSchemaType.INTEGER,
         "version": PayloadSchemaType.INTEGER,
@@ -66,12 +68,12 @@ def create_indexes():
                 field_name=field_name,
                 field_schema=field_type
             )
-            print(f"  ✅ Created index: {field_name} ({field_type})")
+            print(f"  [OK] Created index: {field_name} ({field_type})")
         except Exception as e:
             if "already exists" in str(e).lower():
-                print(f"  ⏭️  Index exists: {field_name}")
+                print(f"  [--] Index exists: {field_name}")
             else:
-                print(f"  ❌ Error creating {field_name}: {e}")
+                print(f"  [ERR] Error creating {field_name}: {e}")
     
     # Text index for full-text search on chunkText
     try:
@@ -85,17 +87,17 @@ def create_indexes():
                 max_token_len=20
             )
         )
-        print(f"  ✅ Created text index: chunkText")
+        print(f"  [OK] Created text index: chunkText")
     except Exception as e:
         if "already exists" in str(e).lower():
-            print(f"  ⏭️  Text index exists: chunkText")
+            print(f"  [--] Text index exists: chunkText")
         else:
-            print(f"  ❌ Error creating text index: {e}")
+            print(f"  [ERR] Error creating text index: {e}")
     
     # ========================================
     # JD COLLECTION INDEXES
     # ========================================
-    print("\n📋 Creating indexes for jd_embeddings...")
+    print("\n[JD] Creating indexes for jd_embeddings...")
     
     jd_indexes = {
         # Integer fields
@@ -119,12 +121,12 @@ def create_indexes():
                 field_name=field_name,
                 field_schema=field_type
             )
-            print(f"  ✅ Created index: {field_name} ({field_type})")
+            print(f"  [OK] Created index: {field_name} ({field_type})")
         except Exception as e:
             if "already exists" in str(e).lower():
-                print(f"  ⏭️  Index exists: {field_name}")
+                print(f"  [--] Index exists: {field_name}")
             else:
-                print(f"  ❌ Error creating {field_name}: {e}")
+                print(f"  [ERR] Error creating {field_name}: {e}")
     
     # Text index for JD text
     try:
@@ -138,17 +140,17 @@ def create_indexes():
                 max_token_len=20
             )
         )
-        print(f"  ✅ Created text index: jdText")
+        print(f"  [OK] Created text index: jdText")
     except Exception as e:
         if "already exists" in str(e).lower():
-            print(f"  ⏭️  Text index exists: jdText")
+            print(f"  [--] Text index exists: jdText")
         else:
-            print(f"  ❌ Error creating text index: {e}")
+            print(f"  [ERR] Error creating text index: {e}")
     
-    print("\n✅ All indexes created successfully!")
+    print("\n[DONE] All indexes created successfully!")
     
     # Verify
-    print("\n📊 Verifying collections...")
+    print("\n[INFO] Verifying collections...")
     cv_info = client.get_collection(settings.CV_COLLECTION_NAME)
     jd_info = client.get_collection(settings.JD_COLLECTION_NAME)
     

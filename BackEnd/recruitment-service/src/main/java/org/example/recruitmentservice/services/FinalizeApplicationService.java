@@ -35,6 +35,10 @@ public class FinalizeApplicationService {
     private final CandidateCVRepository candidateCVRepository;
     private final CVAnalysisRepository cvAnalysisRepository;
     private final PositionRepository positionRepository;
+    private final org.springframework.web.client.RestTemplate restTemplate;
+
+    @org.springframework.beans.factory.annotation.Value("${EMBEDDING_SERVICE_URL}")
+    private String embeddingServiceUrl;
 
     @Transactional
     public FinalizeApplicationResponse finalizeApplication(FinalizeApplicationRequest request) {
@@ -64,11 +68,35 @@ public class FinalizeApplicationService {
         CVAnalysis analysis = buildCvAnalysis(applicationCv, position, request, now);
         cvAnalysisRepository.save(analysis);
 
+        // 7. Sync Phase 3: Update applied_position_ids array on Master CV in Qdrant
+        syncAppliedPositionToQdrant(masterCv.getId(), position.getId());
+
         return FinalizeApplicationResponse.builder()
                 .applicationCvId(applicationCv.getId())
                 .message("Application submitted successfully")
                 .appliedAt(now)
                 .build();
+    }
+
+    private void syncAppliedPositionToQdrant(Integer masterCvId, Integer positionId) {
+        try {
+            // masterCvId matches the cvId stored in Qdrant payloads for Master chunks
+            String url = String.format("%s/cv/%d/applied-positions/%d",
+                    embeddingServiceUrl, masterCvId, positionId);
+
+            // Using POST instead of PATCH to avoid default JDK RestTemplate limitations
+            restTemplate.exchange(
+                    url,
+                    org.springframework.http.HttpMethod.POST,
+                    null,
+                    String.class);
+            System.out.println("[Qdrant Sync] Successfully updated applied_position_ids for Master CV " + masterCvId);
+        } catch (Exception e) {
+            // We log but don't fail the transaction — sync can be recovered later via
+            // script if needed
+            System.err.println(
+                    "[Qdrant Sync Error] Failed to update Qdrant for Master CV " + masterCvId + ": " + e.getMessage());
+        }
     }
 
     private void checkDuplicateApplication(String candidateId, Integer positionId) {

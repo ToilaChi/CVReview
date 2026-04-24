@@ -176,6 +176,7 @@ public class ChatbotInternalService {
                                 .candidateName(cv.getName())
                                 .candidateEmail(cv.getEmail())
                                 .appCvId(cv.getId())
+                                .masterCvId(cv.getParentCvId())
                                 .sourceType(cv.getSourceType() != null ? cv.getSourceType().name() : null);
 
                 if (analysis != null) {

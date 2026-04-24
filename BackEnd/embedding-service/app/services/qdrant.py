@@ -146,7 +146,63 @@ class QdrantService:
             )
             return True
         except Exception as e:
-            print(f"Error deleting: {e}")
+            print(f"Error deleting by filter: {e}")
+            return False
+
+    def update_applied_positions(self, collection_name: str, cv_id: int, position_id: int) -> bool:
+        """
+        Append a position_id to the applied_position_ids array for all chunks of a CV.
+        Used for live Phase 3 synchronization when a candidate finalizes an application.
+        """
+        try:
+            client = self._get_client()
+            
+            # 1. Scroll to find all points for this cvId
+            filter_condition = Filter(
+                must=[FieldCondition(key="cvId", match=MatchValue(value=cv_id))]
+            )
+            
+            offset = None
+            total_updated = 0
+            
+            while True:
+                results, offset = client.scroll(
+                    collection_name=collection_name,
+                    scroll_filter=filter_condition,
+                    with_payload=True,
+                    with_vectors=False,
+                    offset=offset,
+                    limit=100
+                )
+                
+                if not results:
+                    break
+                
+                for point in results:
+                    payload = point.payload or {}
+                    applied_ids = payload.get("applied_position_ids", [])
+                    
+                    if not isinstance(applied_ids, list):
+                        applied_ids = []
+                    
+                    if position_id not in applied_ids:
+                        applied_ids.append(position_id)
+                        
+                        # Overwrite specific key in payload
+                        client.set_payload(
+                            collection_name=collection_name,
+                            payload={"applied_position_ids": applied_ids},
+                            points=[point.id]
+                        )
+                        total_updated += 1
+                
+                if offset is None:
+                    break
+            
+            print(f"Updated applied_position_ids for CV {cv_id}: added {position_id} to {total_updated} chunks")
+            return True
+        except Exception as e:
+            print(f"Error updating applied positions for CV {cv_id}: {e}")
             return False
     
     def get_collection_info(self, collection_name: str) -> dict | None:

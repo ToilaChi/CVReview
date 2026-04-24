@@ -53,13 +53,19 @@ public class JDChunkingService {
             return Collections.emptyList();
         }
 
+        // Phase 4: Concatenate level, language, and name for better context in Qdrant/LLM
+        String formattedName = (level != null ? level + " " : "") 
+                             + (language != null ? language + " " : "") 
+                             + (positionName != null ? positionName : "");
+        formattedName = formattedName.trim();
+
         try {
             String normalized = normalize(jdMarkdown);
             List<RawSection> sections = extractSections(normalized);
 
             if (sections.isEmpty()) {
                 log.info("[JDChunking] No headers found for position {}, treating as single chunk", positionId);
-                return List.of(buildPayload(positionId, positionName, language, level, "FULL_TEXT", 0, normalized));
+                return List.of(buildPayload(positionId, formattedName, language, level, "FULL_TEXT", 0, normalized));
             }
 
             List<JDChunkPayload> result = new ArrayList<>();
@@ -70,7 +76,7 @@ public class JDChunkingService {
 
                 if (tokens <= config.getMaxTokens()) {
                     result.add(buildPayload(
-                            positionId, positionName, language, level,
+                            positionId, formattedName, language, level,
                             section.name, globalIndex++, section.text
                     ));
                 } else {
@@ -78,7 +84,7 @@ public class JDChunkingService {
                     log.debug("[JDChunking] Section '{}' exceeds maxTokens ({} tokens), splitting by paragraph",
                             section.name, tokens);
                     List<JDChunkPayload> sub = splitByParagraph(
-                            positionId, positionName, language, level, section.name, section.text, globalIndex
+                            positionId, formattedName, language, level, section.name, section.text, globalIndex
                     );
                     result.addAll(sub);
                     globalIndex += sub.size();

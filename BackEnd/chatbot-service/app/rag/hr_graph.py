@@ -73,21 +73,21 @@ class HRChatState(TypedDict):
     # Tầng 1 hard-rule flags
     is_cv_count_query: bool
 
-    # Resolved at runtime
-    candidate_ids: Optional[List[str]]       # CANDIDATE_MODE: candidateIds for Qdrant filter
-    # sql_metadata: keyed by appCvId (int) → full record dict
-    # Works for both modes: HR CVs have no candidateId but always have appCvId (=cvId in Qdrant)
+    # Phase 3: candidate_ids is REMOVED from Qdrant query path.
+    # Qdrant filters by applied_position_ids directly (see retriever.py).
+    # sql_metadata is still fetched for name/email/score display only.
     sql_metadata: List[Dict[str, Any]]
     cv_id_to_meta: Dict[int, Dict[str, Any]]  # fast lookup: cvId → metadata record
 
     # Email confirmation flow state
-    pending_emails: Optional[List[Dict[str, Any]]]  # list of email args waiting for HR confirmation
+    pending_emails: Optional[List[Dict[str, Any]]]  # email args pending HR confirmation
 
     # Session memory
     conversation_history: List[Dict[str, Any]]
 
     # RAG context
     cv_context: List[Dict[str, Any]]
+    jd_context: List[Dict[str, Any]]
     retrieval_stats: Dict[str, Any]
 
     # LLM pipeline
@@ -157,19 +157,19 @@ async def load_hr_session_history_node(state: HRChatState) -> HRChatState:
 
 async def load_candidate_scope_node(state: HRChatState) -> HRChatState:
     """
-    Fetch sql_metadata for the current position for BOTH modes.
+    Fetch SQL application metadata for name/email/score display (both modes).
+
+    Phase 3 change: candidate_ids is NO LONGER resolved here for Qdrant.
+    Qdrant now filters Candidate CVs via the `applied_position_ids` array
+    stored on each Master CV payload — see retriever.retrieve_for_hr_mode_candidate.
 
     HR_MODE:
-      - Fetches all CVs for the position (sourceType=HR from DB, but we load all and filter by mode).
-      - candidateIds = None (Qdrant filter uses positionId + sourceType=HR).
-      - Builds cv_id_to_meta keyed by appCvId so _format_cv_context can map cvId → name.
+      - Loads HR-uploaded CV records; cv_id_to_meta keyed by appCvId.
+      - Qdrant filter: positionId + sourceType=HR.
 
     CANDIDATE_MODE:
-      - Fetches all Candidate-applied CVs for the position.
-      - candidateIds = list of candidateIds for Qdrant MatchAny filter.
-      - Builds cv_id_to_meta keyed by appCvId for same name-mapping.
-
-    In both cases appCvId == cvId stored in Qdrant payload, so the lookup always works.
+      - Loads Candidate-applied CV records for metadata display only.
+      - Qdrant filter: applied_position_ids contains position_id + sourceType=CANDIDATE.
     """
     try:
         applications = await recruitment_api.get_applications(
@@ -178,30 +178,24 @@ async def load_candidate_scope_node(state: HRChatState) -> HRChatState:
         target_source = "HR" if state["mode"] == "HR_MODE" else "CANDIDATE"
         filtered_apps = [app for app in applications if app.get("sourceType") == target_source]
 
-        # Build fast cvId → metadata lookup (works regardless of mode)
-        state["cv_id_to_meta"] = {
-            app["appCvId"]: app
-            for app in filtered_apps
-            if app.get("appCvId") is not None
-        }
-
-        if state["mode"] == "CANDIDATE_MODE":
-            # For Qdrant filter: use candidateIds of CANDIDATE-type CVs only
-            state["candidate_ids"] = [
-                app["candidateId"]
-                for app in filtered_apps
-                if app.get("candidateId")
-            ]
-            print(f"[HR Graph] CANDIDATE_MODE: {len(state['candidate_ids'])} candidate(s) in scope.")
-        else:
-            state["candidate_ids"] = None
-            print(f"[HR Graph] HR_MODE: {len(filtered_apps)} CV(s) loaded from SQL.")
+        # Fast cvId → metadata lookup so _format_cv_context can inject name/email
+        # Phase 3 fix: CANDIDATE mode uses masterCvId (which Qdrant returns), HR mode uses appCvId.
+        state["cv_id_to_meta"] = {}
+        for app in filtered_apps:
+            if target_source == "CANDIDATE" and app.get("masterCvId") is not None:
+                state["cv_id_to_meta"][app["masterCvId"]] = app
+            elif app.get("appCvId") is not None:
+                state["cv_id_to_meta"][app["appCvId"]] = app
 
         state["sql_metadata"] = filtered_apps
 
+        print(
+            f"[HR Graph] {state['mode']}: {len(filtered_apps)} SQL record(s) loaded "
+            f"(for metadata display — Qdrant filter is position-based)."
+        )
+
     except Exception as e:
         print(f"[HR Graph] Could not load candidate scope: {e}")
-        state["candidate_ids"] = []
         state["sql_metadata"] = []
         state["cv_id_to_meta"] = {}
 
@@ -216,9 +210,9 @@ async def retrieve_hr_context_node(state: HRChatState) -> HRChatState:
     """
     Branch on mode:
       HR_MODE       → filter positionId + sourceType=HR
-      CANDIDATE_MODE → filter candidateId IN [list] + sourceType=CANDIDATE
+      CANDIDATE_MODE → filter applied_position_ids contains position_id + sourceType=CANDIDATE
 
-    Skip Qdrant retrieval for Tầng 1 CV count queries — data comes from SQL endpoint.
+    Skips Qdrant retrieval for Tầng 1 CV count queries (data comes from SQL).
     """
     if state.get("is_cv_count_query"):
         state["cv_context"] = []
@@ -230,19 +224,17 @@ async def retrieve_hr_context_node(state: HRChatState) -> HRChatState:
     if state["mode"] == "HR_MODE":
         result = await retriever.retrieve_for_hr_mode_hr(
             query=query,
-            position_id=state["position_id"]
+            position_id=state["position_id"],
         )
     else:
-        candidate_ids = state.get("candidate_ids") or []
-        if candidate_ids:
-            result = await retriever.retrieve_for_hr_mode_candidate(
-                query=query,
-                candidate_ids=candidate_ids
-            )
-        else:
-            result = {"cv_context": [], "jd_context": [], "retrieval_stats": {"note": "no_applications"}}
+        # Phase 3: pass position_id directly — retriever handles the Qdrant filter
+        result = await retriever.retrieve_for_hr_mode_candidate(
+            query=query,
+            position_id=state["position_id"],
+        )
 
     state["cv_context"] = result.get("cv_context", [])
+    state["jd_context"] = result.get("jd_context", [])
     state["retrieval_stats"] = result.get("retrieval_stats", {})
 
     return state
@@ -324,6 +316,36 @@ def _format_cv_context(
     return f"[{total} unique candidate(s)]\n\n" + "\n\n".join(parts)
 
 
+def _format_jd_context(jd_context: List[Dict[str, Any]]) -> str:
+    """Format retrieved JD chunks for the LLM prompt (Small-to-Big)."""
+    if not jd_context:
+        return "No Job Description data found for this position."
+
+    # Extract unique position info (all chunks in a search usually belong to 1 position)
+    pos_info = {}
+    for chunk in jd_context:
+        payload = chunk.get("payload", {})
+        pid = payload.get("positionId")
+        if pid and pid not in pos_info:
+            pos_info[pid] = {
+                "name": payload.get("positionName", "Unknown"),
+                "chunks": []
+            }
+        if pid:
+            section = payload.get("sectionName", "General")
+            text = payload.get("chunkText", "").strip()
+            if text:
+                pos_info[pid]["chunks"].append(f"[{section}]\n{text}")
+
+    parts = []
+    for pid, info in pos_info.items():
+        header = f"--- Job Description: {info['name']} (ID: {pid}) ---"
+        body = "\n\n".join(info["chunks"])
+        parts.append(f"{header}\n{body}")
+
+    return "\n\n".join(parts)
+
+
 def _format_sql_metadata(sql_metadata: List[Dict[str, Any]], mode: str) -> str:
     """
     Format application score rows from SQL as a compact reference table.
@@ -383,14 +405,24 @@ def build_hr_prompts_node(state: HRChatState) -> HRChatState:
     mode_label   = "HR Mode (sourced CVs)" if state["mode"] == "HR_MODE" else "Candidate Mode (inbound applications)"
     history_text = _format_history(state.get("conversation_history", []))
     cv_text      = _format_cv_context(state.get("cv_context", []), state.get("cv_id_to_meta", {}))
+    jd_text      = _format_jd_context(state.get("jd_context", []))
     sql_text     = _format_sql_metadata(state.get("sql_metadata", []), state["mode"])
+
+    # Phase 4: Try to extract position name from JD context for system prompt injection
+    position_name = "Unknown Position"
+    if state.get("jd_context"):
+        for chunk in state["jd_context"]:
+            name = chunk.get("payload", {}).get("positionName")
+            if name:
+                position_name = name
+                break
 
     # If there is a pending email confirmation, inject it prominently
     pending_email = state.get("pending_email")
     pending_note  = ""
     if pending_email:
         pending_note = (
-            f"\n\n⚠️ PENDING EMAIL CONFIRMATION:\n"
+            f"\n\nPENDING EMAIL CONFIRMATION:\n"
             f"HR requested to send email to: {pending_email.get('candidate_name')} "
             f"({pending_email.get('candidate_email')})\n"
             f"Position: {pending_email.get('position_name')}\n"
@@ -399,7 +431,7 @@ def build_hr_prompts_node(state: HRChatState) -> HRChatState:
         )
 
     system_prompt = f"""You are a Senior HR Talent Acquisition Specialist assisting with recruitment decisions.
-Current mode: {mode_label} | Position ID: {state['position_id']}
+Current mode: {mode_label} | Position: {position_name} (ID: {state['position_id']})
 
 Guidelines:
 - Respond concisely and professionally — as an experienced recruiter, not a chatbot.
@@ -413,6 +445,9 @@ Guidelines:
 
     user_prompt = f"""## Conversation History:
 {history_text if history_text else "(New session)"}
+
+## Job Description Context:
+{jd_text}
 
 ## CV Data Retrieved from System:
 {cv_text}
@@ -628,15 +663,14 @@ def format_hr_response_node(state: HRChatState) -> HRChatState:
     """Package the final answer and metadata for the API layer."""
     state["final_answer"] = state["llm_response"]
     state["metadata"] = {
-        "mode":                state["mode"],
-        "position_id":         state["position_id"],
-        "is_cv_count_query":   state.get("is_cv_count_query", False),
-        "cv_chunks_used":      len(state.get("cv_context", [])),
-        "candidate_ids_count": len(state.get("candidate_ids") or []),
-        "sql_records_count":   len(state.get("sql_metadata", [])),
-        "function_calls":      state.get("function_calls"),
-        "retrieval_stats":     state.get("retrieval_stats", {}),
-        "pending_emails":       state.get("pending_emails"),
+        "mode":              state["mode"],
+        "position_id":       state["position_id"],
+        "is_cv_count_query": state.get("is_cv_count_query", False),
+        "cv_chunks_used":    len(state.get("cv_context", [])),
+        "sql_records_count": len(state.get("sql_metadata", [])),
+        "function_calls":    state.get("function_calls"),
+        "retrieval_stats":   state.get("retrieval_stats", {}),
+        "pending_emails":    state.get("pending_emails"),
     }
     return state
 
@@ -691,7 +725,6 @@ class HRChatbot:
             "position_id":          position_id,
             "mode":                 mode,
             "is_cv_count_query":    False,
-            "candidate_ids":        None,
             "sql_metadata":         [],
             "cv_id_to_meta":        {},
             "pending_emails":       None,

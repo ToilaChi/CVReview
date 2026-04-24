@@ -123,19 +123,33 @@ async def embed_cv_from_event(event: dict):
             point_id_str = f"cv_{cv_id}_chunk_{chunk_index}_v{version}"
             point_id = int(hashlib.md5(point_id_str.encode()).hexdigest(), 16) % (2**63)
             
+            source_type = chunk.get("sourceType", "")
+            position_id_val = chunk.get("positionId")
+
+            # For Candidate-applied CVs, seed applied_position_ids with the current
+            # position so Qdrant can filter by membership (Phase 3 architecture).
+            # HR-uploaded CVs use the positionId field for direct HR_MODE filter instead.
+            if source_type == "CANDIDATE" and position_id_val is not None:
+                applied_position_ids = [position_id_val]
+            else:
+                applied_position_ids = []
+
             payload = {
                 # Core identifiers
                 "cvId": cv_id,
                 "candidateId": chunk.get("candidateId"),
                 "hrId": chunk.get("hrId"),
-                "positionId": chunk.get("positionId"),
+                "positionId": position_id_val,
                 "position": chunk.get("position", ""),
-                
+
+                # Phase 3: position membership array for Candidate Mode Qdrant filter
+                "applied_position_ids": applied_position_ids,
+
                 # Chunk info
                 "section": chunk.get("section", ""),
                 "chunkIndex": chunk_index,
                 "chunkText": chunk.get("chunkText", ""),
-                
+
                 # Metadata
                 "skills": chunk.get("skills", []),
                 "experienceYears": chunk.get("experienceYears"),
@@ -144,17 +158,17 @@ async def embed_cv_from_event(event: dict):
                 "companies": chunk.get("companies", []),
                 "degrees": chunk.get("degrees", []),
                 "dateRanges": chunk.get("dateRanges", []),
-                
+
                 # Version tracking
                 "version": version,
                 "is_latest": True,
                 "createdAt": chunk.get("createdAt", datetime.now().isoformat()),
-                
+
                 # Stats
                 "words": chunk.get("words", 0),
                 "tokensEstimate": chunk.get("tokensEstimate", 0),
                 "cvStatus": chunk.get("cvStatus", "PARSED"),
-                "sourceType": chunk.get("sourceType", "")
+                "sourceType": source_type,
             }
             
             points.append(PointStruct(

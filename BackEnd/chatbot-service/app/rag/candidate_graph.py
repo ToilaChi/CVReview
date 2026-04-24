@@ -432,14 +432,13 @@ async def llm_reasoning_node(state: ChatState) -> ChatState:
     tool_map = {t.name: t for t in CANDIDATE_TOOLS}
     messages.append(response)
 
-    did_finalize_app = False
+    finalized_positions = []
 
     for call in response.tool_calls:
         tool_name = call["name"]
         tool_args = call["args"]
 
         if tool_name == "finalize_application":
-            did_finalize_app = True
             pos_id = tool_args.get("position_id")
 
             # Resolve position label from ref_map (built in Node 0)
@@ -462,6 +461,10 @@ async def llm_reasoning_node(state: ChatState) -> ChatState:
                 })
                 state["function_calls"].append({"name": tool_name, "arguments": tool_args, "result": tool_res})
                 messages.append(ToolMessage(content=str(tool_res), tool_call_id=call["id"]))
+                
+                # If tool result contains "success", track the name
+                if "thành công" in str(tool_res).lower() or "success" in str(tool_res).lower():
+                    finalized_positions.append(applied_position_name)
             except Exception as e:
                 messages.append(ToolMessage(content=f"Application error: {str(e)}", tool_call_id=call["id"]))
 
@@ -484,9 +487,10 @@ async def llm_reasoning_node(state: ChatState) -> ChatState:
                 messages.append(ToolMessage(content=f"Status check error: {str(e)}", tool_call_id=call["id"]))
 
     # Short-circuit: skip second LLM pass if finalize_application was successful
-    if did_finalize_app:
+    if finalized_positions:
+        pos_list_str = ", ".join(f"**{name}**" for name in finalized_positions)
         state["llm_response"] = (
-            f"I have successfully submitted your application for the **{applied_position_name}** position. "
+            f"I have successfully submitted your application for the following position(s): {pos_list_str}. "
             "Please wait for our HR response!"
         )
         return state

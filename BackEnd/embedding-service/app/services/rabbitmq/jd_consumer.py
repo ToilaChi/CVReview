@@ -132,8 +132,6 @@ async def _embed_jd_chunks(event: dict) -> None:
             # Parent identifiers — used for Small-to-Big lookup by chatbot-service
             "positionId":   position_id,
             "positionName": position_name,
-            "language":     language,
-            "level":        level,
 
             # Chunk metadata
             "sectionName":    chunk.get("sectionName", ""),
