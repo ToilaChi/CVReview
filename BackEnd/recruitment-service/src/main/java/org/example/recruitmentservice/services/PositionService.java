@@ -429,6 +429,8 @@ public class PositionService {
                 .jdPath(position.getJdPath())
                 .driveFileUrl(position.getDriveFileUrl())
                 .totalCVs(totalCVs)
+                .isActive(position.isActive())
+                .openedAt(position.getOpenedAt())
                 .createdAt(position.getCreatedAt())
                 .build();
     }

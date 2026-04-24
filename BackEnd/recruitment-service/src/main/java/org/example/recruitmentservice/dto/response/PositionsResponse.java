@@ -22,6 +22,8 @@ public class PositionsResponse {
     private String jdPath;
     private String driveFileUrl;
     private String jdText;
+    private Boolean isActive;
+    private LocalDateTime openedAt;
     private Integer totalCVs;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
@@ -35,5 +37,7 @@ public class PositionsResponse {
         this.driveFileUrl = positions.getDriveFileUrl();
         this.createdAt = positions.getCreatedAt();
         this.updatedAt = positions.getUpdatedAt();
+        this.isActive = positions.isActive();
+        this.openedAt = positions.getOpenedAt();
     }
 }
