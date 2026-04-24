@@ -1,6 +1,6 @@
 # CV Review System
-## 1. Objective
-The system allows HR to upload CV and JD, uses LLM (OpenAI/Gemini) to analyze CV, compare with JD, return match score, feedback, and structured extraction (skills, email, name, experience).
+## 1. Introduction
+The CV Review System is an advanced, AI-powered recruitment platform designed to streamline the hiring process for both HR professionals and candidates. By leveraging Large Language Models (LLMs) and Retrieval-Augmented Generation (RAG), the system automates CV screening, provides intelligent ranking, and offers a context-aware chatbot for seamless interaction.
 ## 2. Scope of work
 The project will be composed of the following microservices:
 
@@ -8,6 +8,15 @@ The project will be composed of the following microservices:
 - Auth-service: user register/login, JWT issuance, refresh tokens, role management, logout.
 - Recruitment-service: Manage recruitment positions (position/JD) and candidate profiles (CV)
 - AI-service: Analyze CV content with AI/LLM, save evaluation results and feedback to the system.
+- Embedding-service: Store and search CV embeddings
+- Chatbot-service: Chatbot service with RAG (OpenAI/Gemini, ChromaDB, LangChain)
+
+Core AI Capabilities:
+
+- AI-Powered CV Analysis & Scoring: Automatically compares CVs against Job Descriptions (JDs) to provide match scores, skill gap analysis, and structured extraction (skills, experience, contact info).
+- Hybrid RAG Chatbot: Built with LangGraph and Qdrant, the chatbot supports specialized modes for HR (candidate screening) and Candidates (career guidance and job matching).
+- Small-to-Big Retrieval: Uses a sophisticated chunking strategy to ensure the LLM (Gemini 2.5 Flash) has precise context from long documents.
+- Automated Workflow: Orchestrates PDF parsing (via LlamaParse), embedding generation, and email notifications for the recruitment lifecycle.
 ## 3. API endpoints
 User:
 | email           | name   | phone       | role |
@@ -73,6 +82,7 @@ User:
             "data": null,
             "timestamp": "2025-12-03T14:59:00.3273034"
         }
+    ```
 - **Refresh Token For All**
 - **Name:** `/refresh-token` 
   - Endpoint: /auth/refresh-token
@@ -156,6 +166,76 @@ User:
             "timestamp": "2025-10-02T17:15:29.8681381"  
         }
     ``` 
+- **Logout For All**
+- **Name:** `/logout` 
+  - Endpoint: /auth/logout
+  - Method: POST
+  - Description: Logout user and invalidate refresh token.
+  - Header:
+    | Key            | Value                     | Required |
+    |----------------|---------------------------|----------|
+    | X-User-Id      | <userId>                  | Yes      |
+  - Request body:
+    ```json
+    {
+	    "refreshToken": "eyJhbGciOiJIUzI..."
+    }
+    ```
+  - Response:
+   - Success: 
+     ```json
+        {
+            "statusCode": 200,
+            "message": "Logout successfully",
+            "data": null
+        }
+      ```
+- **Register HR Account For Admin**
+- **Name:** `/admin/hr-accounts` 
+  - Endpoint: /auth/admin/hr-accounts
+  - Method: POST
+  - Description: Admin creates a new HR account.
+  - Request body:
+    ```json
+    {
+        "name": "HR Manager",
+        "email": "hr@example.com",
+        "phone": "0912345678",
+        "password": "password123"
+    }
+    ```
+  - Response:
+   - Success: 
+     ```json
+        {
+            "statusCode": 200,
+            "message": "HR account created successfully",
+            "data": {
+                "id": "uuid",
+                "name": "HR Manager",
+                "email": "hr@example.com",
+                "role": "HR"
+            }
+        }
+      ```
+- **Get User Stats For Admin**
+- **Name:** `/admin/stats/users` 
+  - Endpoint: /auth/admin/stats/users
+  - Method: GET
+  - Description: Get total users count by role.
+  - Response:
+   - Success: 
+     ```json
+        {
+            "statusCode": 200,
+            "message": "User statistics retrieved successfully",
+            "data": {
+                "totalUsers": 100,
+                "totalHr": 10,
+                "totalCandidate": 90
+            }
+        }
+      ```
 2. **Recruitment service**
 - **Create Position For HR**
   - **Name:** `/positions` 
@@ -341,6 +421,23 @@ User:
             "data": null,
             "timestamp": "2025-10-02T17:15:29.8681381"  
         }
+    ```
+- **Get JD Text For All**
+- **Name:** `/jd/{positionId}/text` 
+  - Endpoint: /positions/jd/{positionId}/text
+  - Method: GET
+  - Description: Get full job description text for a specific position.
+  - Response:
+    - Success: 
+    ```json
+    {
+        "statusCode": 200,
+        "data": {
+            "id": 5,
+            "name": "Developer",
+            "jobDescription": "Full JD text content..."
+        }
+    }
     ```
 - **Update Position For HR**
   - **Name:** `/positions` 
@@ -1115,7 +1212,101 @@ User:
             "timestamp": "2025-10-13T13:59:43.5713966"
         }
     ``` 
-## 4. Authentication & Authorization Errors
+- **SSE Stream Progress For All**
+- **Name:** `/tracking` 
+  - Endpoint: /tracking/{batchId}/stream
+  - Method: GET
+  - Description: Real-time progress updates via Server-Sent Events.
+  - Header:
+    | Key            | Value                     | Required |
+    |----------------|---------------------------|----------|
+    | Authorization  | Bearer <accessToken> | Yes      |
+
+- **Admin Analytics - CV Traffic**
+- **Name:** `/admin/analytics/cv-traffic` 
+  - Endpoint: /admin/analytics/cv-traffic
+  - Method: GET
+  - Description: Get CV traffic statistics for the last N days.
+  - Query Params: `days` (Default: 30)
+  - Response:
+    ```json
+    {
+        "statusCode": 200,
+        "data": {
+            "totalCv": 150,
+            "successCv": 120,
+            "failedCv": 10,
+            "processingCv": 20,
+            "days": 30
+        }
+    }
+    ```
+- **Admin Analytics - Processing Time**
+- **Name:** `/admin/analytics/processing-time` 
+  - Endpoint: /admin/analytics/processing-time
+  - Method: GET
+  - Description: Get average processing time by batch size.
+- **Trigger GC For Admin**
+- **Name:** `/admin/analytics/trigger-gc` 
+  - Endpoint: /admin/analytics/trigger-gc
+  - Method: POST
+  - Description: Manually trigger garbage collection for failed CV files.
+
+#### **Chatbot Public Endpoints**
+- **Get Sessions For All**
+  - Endpoint: /api/chatbot/sessions
+  - Method: GET
+  - Description: Get chat sessions for the current user.
+- **Get Session History For All**
+  - Endpoint: /api/chatbot/sessions/{sessionId}
+  - Method: GET
+  - Description: Get full chat history for a session.
+
+#### **Chatbot Internal Endpoints (Internal Service Only)**
+- **Create Session**
+  - Endpoint: /internal/chatbot/session
+  - Method: POST
+- **Save Message**
+  - Endpoint: /internal/chatbot/message
+  - Method: POST
+- **Notify Interview**
+  - Endpoint: /internal/chatbot/notify/interview
+  - Method: POST
+
+#### **Chunking Endpoints**
+- **Chunk CV**
+  - Endpoint: /chunking
+  - Method: POST
+- **Chunk JD**
+  - Endpoint: /chunking/jd
+  - Method: POST
+
+3. **Chatbot service (FastAPI - Port 8085)**
+- **Candidate Session**
+  - Endpoint: /chatbot/candidate/session
+  - Method: POST
+- **Candidate Chat**
+  - Endpoint: /chatbot/candidate/chat
+  - Method: POST
+- **HR Session**
+  - Endpoint: /chatbot/hr/session
+  - Method: POST
+- **HR Chat**
+  - Endpoint: /chatbot/hr/chat
+  - Method: POST
+
+4. **Embedding service (FastAPI - Port 8084)**
+- **Delete CV Embeddings**
+  - Endpoint: /cv/{cv_id}
+  - Method: DELETE
+- **Delete JD Embeddings**
+  - Endpoint: /jd/{position_id}
+  - Method: DELETE
+- **Collection Info**
+  - Endpoint: /collections/info
+  - Method: GET
+
+## 5. Authentication & Authorization Errors
 | httpStatus | code | identifier              | message                                                     |
 | ---------- | ---- | ----------------------- | ----------------------------------------------------------- |
 | 401        | 1001 | UNAUTHORIZED            | Unauthorized                                                |
