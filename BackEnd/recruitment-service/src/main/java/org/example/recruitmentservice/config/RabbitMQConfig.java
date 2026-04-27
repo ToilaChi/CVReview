@@ -146,78 +146,78 @@ public class RabbitMQConfig {
 
 
     /* ============================================================
-     * 4. AI ANALYSIS FLOW
-     *    Recruitment-service consumes, AI-service owns exchange
+     * 4. EXTRACTION FLOW (Two-Stage Pipeline — Stage 1)
+     *    recruitment-service publishes here after parsing.
+     *    ExtractCVListener consumes, calls Gemini, then publishes to cv.embed.queue.
      * ============================================================ */
-    public static final String AI_EXCHANGE = "cv.analysis.exchange";
-    public static final String AI_EXCHANGE_DLX = "cv.analysis.exchange.dlx";
-
-    public static final String CV_ANALYZE_QUEUE = "cv.analyze.queue";
-    public static final String CV_ANALYZE_ROUTING_KEY = "cv.analyze";
-
-    public static final String CV_ANALYSIS_RESULT_QUEUE = "cv.analysis.result.queue";
-    public static final String CV_ANALYSIS_RESULT_DLQ = "cv.analysis.result.queue.dlq";
-    public static final String CV_ANALYSIS_RESULT_ROUTING_KEY = "cv.analysis.result";
-    public static final String CV_ANALYSIS_RESULT_DLQ_ROUTING_KEY = "cv.analysis.result.dlq";
-
-    public static final String CV_ANALYSIS_FAILED_QUEUE = "cv.analysis.failed.queue";
-    public static final String CV_ANALYSIS_FAILED_ROUTING_KEY = "cv.analysis.failed";
-
-    // Exchanges (AI-service owns but recruitment declares to consume)
-    @Bean
-    public DirectExchange aiExchange() {
-        return new DirectExchange(AI_EXCHANGE);
-    }
+    public static final String CV_EXTRACT_QUEUE = "cv.extract.queue";
+    public static final String CV_EXTRACT_DLQ = "cv.extract.queue.dlq";
+    public static final String CV_EXTRACT_EXCHANGE = "cv.extract.exchange.dlx";
+    public static final String CV_EXTRACT_DLQ_ROUTING_KEY = "cv.extract.dlq";
 
     @Bean
-    public DirectExchange aiDeadLetterExchange() {
-        return new DirectExchange(AI_EXCHANGE_DLX);
-    }
-
-    // Result queue
-    @Bean
-    public Queue cvAnalysisResultQueue() {
-        return QueueBuilder.durable(CV_ANALYSIS_RESULT_QUEUE)
-                .withArgument("x-dead-letter-exchange", AI_EXCHANGE_DLX)
-                .withArgument("x-dead-letter-routing-key", CV_ANALYSIS_RESULT_DLQ_ROUTING_KEY)
+    public Queue cvExtractQueue() {
+        return QueueBuilder.durable(CV_EXTRACT_QUEUE)
+                .withArgument("x-dead-letter-exchange", CV_EXTRACT_EXCHANGE)
+                .withArgument("x-dead-letter-routing-key", CV_EXTRACT_DLQ_ROUTING_KEY)
                 .build();
     }
 
     @Bean
-    public Queue cvAnalysisResultDlqQueue() {
-        return QueueBuilder.durable(CV_ANALYSIS_RESULT_DLQ).build();
+    public Queue cvExtractDlqQueue() {
+        return QueueBuilder.durable(CV_EXTRACT_DLQ).build();
     }
 
     @Bean
-    public Binding cvAnalysisResultBinding(Queue cvAnalysisResultQueue, DirectExchange aiExchange) {
-        return BindingBuilder.bind(cvAnalysisResultQueue)
-                .to(aiExchange)
-                .with(CV_ANALYSIS_RESULT_ROUTING_KEY);
+    public DirectExchange cvExtractExchange() {
+        return new DirectExchange(CV_EXTRACT_EXCHANGE);
     }
 
     @Bean
-    public Binding cvAnalysisResultDlqBinding(Queue cvAnalysisResultDlqQueue, DirectExchange aiDeadLetterExchange) {
-        return BindingBuilder.bind(cvAnalysisResultDlqQueue)
-                .to(aiDeadLetterExchange)
-                .with(CV_ANALYSIS_RESULT_DLQ_ROUTING_KEY);
+    public Binding cvExtractDlqBinding(Queue cvExtractDlqQueue, DirectExchange cvExtractExchange) {
+        return BindingBuilder.bind(cvExtractDlqQueue)
+                .to(cvExtractExchange)
+                .with(CV_EXTRACT_DLQ_ROUTING_KEY);
     }
 
-    // Failed queue
+    /* ============================================================
+     * 5. EMBED REPLY FLOW (Two-Stage Pipeline — Stage 2 reply)
+     *    embedding-service publishes here after Qdrant upsert.
+     *    EmbedReplyListener consumes to update DB status.
+     * ============================================================ */
+    public static final String CV_EMBED_REPLY_QUEUE = "cv.embed.reply.queue";
+    public static final String CV_EMBED_REPLY_DLQ = "cv.embed.reply.queue.dlq";
+    public static final String CV_EMBED_REPLY_EXCHANGE = "cv.embed.reply.exchange.dlx";
+    public static final String CV_EMBED_REPLY_DLQ_ROUTING_KEY = "cv.embed.reply.dlq";
+
     @Bean
-    public Queue cvAnalysisFailedQueue() {
-        return QueueBuilder.durable(CV_ANALYSIS_FAILED_QUEUE).build();
+    public Queue cvEmbedReplyQueue() {
+        return QueueBuilder.durable(CV_EMBED_REPLY_QUEUE)
+                .withArgument("x-dead-letter-exchange", CV_EMBED_REPLY_EXCHANGE)
+                .withArgument("x-dead-letter-routing-key", CV_EMBED_REPLY_DLQ_ROUTING_KEY)
+                .build();
     }
 
     @Bean
-    public Binding cvAnalysisFailedBinding(Queue cvAnalysisFailedQueue, DirectExchange aiExchange) {
-        return BindingBuilder.bind(cvAnalysisFailedQueue)
-                .to(aiExchange)
-                .with(CV_ANALYSIS_FAILED_ROUTING_KEY);
+    public Queue cvEmbedReplyDlqQueue() {
+        return QueueBuilder.durable(CV_EMBED_REPLY_DLQ).build();
+    }
+
+    @Bean
+    public DirectExchange cvEmbedReplyExchange() {
+        return new DirectExchange(CV_EMBED_REPLY_EXCHANGE);
+    }
+
+    @Bean
+    public Binding cvEmbedReplyDlqBinding(Queue cvEmbedReplyDlqQueue, DirectExchange cvEmbedReplyExchange) {
+        return BindingBuilder.bind(cvEmbedReplyDlqQueue)
+                .to(cvEmbedReplyExchange)
+                .with(CV_EMBED_REPLY_DLQ_ROUTING_KEY);
     }
 
 
     /* ============================================================
-     * 5. COMMON SETTINGS
+     * 6. COMMON SETTINGS
      * ============================================================ */
 
     @Bean
@@ -254,10 +254,8 @@ public class RabbitMQConfig {
      * Mỗi CV parse mất 10-60s (polling LlamaParse API) nên cần nhiều thread song song.
      * - concurrency=5 / max=10: xử lý 5-10 CVs đồng thời.
      * - prefetchCount=1: mỗi thread chỉ nhận 1 message, tránh tồn đọng.
-     * - KHÔNG dùng RetryTemplate: logic retry/error được xử lý thủ công bên trong
-     *   LlamaParseClient (throw exception -> RabbitMQ sẽ route sang DLQ theo x-dead-letter).
-     * - KHÔNG transaction: vì operation chính là HTTP call ra ngoài (LlamaParse API),
-     *   không có DB hoặc Rabbit operation cần rollback trong cùng 1 transaction boundary.
+     * - KHÔNG dùng RetryTemplate: logic retry được xử lý thủ công bên trong LlamaParseClient.
+     * - KHÔNG transaction: operation chính là HTTP call ra ngoài (LlamaParse API).
      */
     @Bean
     public SimpleRabbitListenerContainerFactory cvParsingContainerFactory(
@@ -269,6 +267,28 @@ public class RabbitMQConfig {
         factory.setMessageConverter(messageConverter);
         factory.setConcurrentConsumers(5);
         factory.setMaxConcurrentConsumers(10);
+        factory.setPrefetchCount(1);
+        factory.setDefaultRequeueRejected(false);
+        return factory;
+    }
+
+    /**
+     * Factory chuyên dụng cho ExtractCVListener (cv.extract.queue).
+     * Gemini API có rate limit, nên giới hạn concurrency thấp.
+     * - concurrency=1 / max=2: xử lý tuần tự để tránh bị throttle.
+     * - prefetchCount=1: mỗi thread chỉ nhận 1 message.
+     * - KHÔNG RetryTemplate: exception throw ra sẽ để RabbitMQ route sang DLQ.
+     */
+    @Bean
+    public SimpleRabbitListenerContainerFactory cvExtractionContainerFactory(
+            ConnectionFactory connectionFactory,
+            MessageConverter messageConverter) {
+
+        SimpleRabbitListenerContainerFactory factory = new SimpleRabbitListenerContainerFactory();
+        factory.setConnectionFactory(connectionFactory);
+        factory.setMessageConverter(messageConverter);
+        factory.setConcurrentConsumers(1);
+        factory.setMaxConcurrentConsumers(2);
         factory.setPrefetchCount(1);
         factory.setDefaultRequeueRejected(false);
         return factory;

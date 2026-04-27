@@ -5,15 +5,12 @@ import lombok.extern.slf4j.Slf4j;
 import org.example.commonlibrary.dto.response.ErrorCode;
 import org.example.commonlibrary.exception.CustomException;
 import org.example.recruitmentservice.config.RabbitMQConfig;
-import org.example.recruitmentservice.dto.request.CVChunkedEvent;
 import org.example.recruitmentservice.dto.request.CVUploadEvent;
-import org.example.recruitmentservice.dto.request.ChunkPayload;
 import org.example.recruitmentservice.models.enums.CVStatus;
 import org.example.recruitmentservice.models.entity.CandidateCV;
 import org.example.recruitmentservice.repository.CandidateCVRepository;
 import org.example.recruitmentservice.services.ProcessingBatchService;
 import org.example.recruitmentservice.services.StorageService;
-import org.example.recruitmentservice.services.chunking.ChunkingService;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Value;
@@ -25,12 +22,9 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.RestTemplate;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
-import org.springframework.transaction.support.TransactionSynchronization;
 
 import java.io.File;
 import java.time.LocalDateTime;
-import java.util.List;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -47,7 +41,6 @@ public class LlamaParseClient {
     private final CandidateCVRepository candidateCVRepository;
     private final StorageService storageService;
     private final ProcessingBatchService processingBatchService;
-    private final ChunkingService chunkingService;
     private final RabbitTemplate rabbitTemplate;
 
     /**
@@ -118,34 +111,21 @@ public class LlamaParseClient {
             String extractedName = extractName(parsedText);
             String extractedEmail = extractEmail(parsedText);
 
-            // Load CV kèm Position bằng JOIN FETCH - Position luôn được init, không có Lazy
-            // proxy
-            CandidateCV cvForChunking = candidateCVRepository.findByIdWithPosition(cvId)
-                    .orElseThrow(() -> new CustomException(ErrorCode.CV_NOT_FOUND));
-
-            // Chunking (CPU-bound, ngoài transaction)
-            log.info("Starting chunking for CV: {}", cvId);
-            List<ChunkPayload> chunks = chunkingService.chunk(cvForChunking, parsedText);
-
-            if (chunks == null || chunks.isEmpty()) {
-                log.warn("No chunks generated for CV {}", cvId);
-                throw new CustomException(ErrorCode.CV_CHUNKING_FAILED);
-            }
-
-            log.info("Generated {} chunks for CV: {}", chunks.size(), cvId);
-
-            // [Transaction 2] Lưu kết quả parse - re-fetch trong session rìi của nó
+            // [Transaction 2] Persist parse result — status becomes EXTRACTED.
             saveParsedCvResult(cvId, parsedText, extractedName, extractedEmail);
 
             // Update batch
             processingBatchService.incrementProcessed(event.getBatchId(), true);
 
-            log.info("CV parsed successfully - ID: {} | Name: {} | Email: {} | Source: {} | Position: {}",
-                    cvId, extractedName, extractedEmail, cvForChunking.getSourceType(),
-                    (cvForChunking.getPosition() != null ? cvForChunking.getPosition().getId() : "N/A"));
+            log.info("CV parsed successfully - ID: {} | Name: {} | Email: {}",
+                    cvId, extractedName, extractedEmail);
 
-            // publish event (sau khi Transaction 2 đã commit)
-            publishCVChunkedEvent(cvForChunking, chunks);
+            // Trigger Stage 1 of the extraction pipeline (Gemini metadata call).
+            // Re-use CVUploadEvent as the lightweight trigger — ExtractCVListener will
+            // load the CV text from the DB and call GeminiExtractionService.
+            CVUploadEvent extractTrigger = new CVUploadEvent(cvId, event.getFileId(),
+                    event.getPositionId(), event.getBatchId());
+            rabbitTemplate.convertAndSend(RabbitMQConfig.CV_EXTRACT_QUEUE, extractTrigger);
 
         } catch (Exception e) {
             log.error("CV parse failed for cvId {}: {}", cvId, e.getMessage(), e);
@@ -159,13 +139,12 @@ public class LlamaParseClient {
         }
     }
 
-    /** [T1] Re-fetch CV và đổi status sang PARSING trong 1 transaction. */
-
+    /** [T1] Re-fetch CV và đổi status sang EXTRACTING trong 1 transaction. */
     @Transactional
     public void markCvAsParsing(int cvId) {
         CandidateCV cv = candidateCVRepository.findById(cvId)
                 .orElseThrow(() -> new CustomException(ErrorCode.CV_NOT_FOUND));
-        cv.setCvStatus(CVStatus.PARSING);
+        cv.setCvStatus(CVStatus.EXTRACTING);
         candidateCVRepository.save(cv);
     }
 
@@ -179,7 +158,7 @@ public class LlamaParseClient {
             cv.setName(name);
         if (email != null)
             cv.setEmail(email);
-        cv.setCvStatus(CVStatus.PARSED);
+        cv.setCvStatus(CVStatus.EXTRACTED);
         cv.setParsedAt(LocalDateTime.now());
         cv.setUpdatedAt(LocalDateTime.now());
         cv.setErrorMessage(null);
@@ -192,8 +171,6 @@ public class LlamaParseClient {
     /**
      * Upload JD file — forces LlamaParse to produce structured Markdown with
      * consistent headers.
-     * Mirrors the CV parsing config so that JDChunkingService can reliably split on
-     * ## sections.
      */
     private String uploadFileForJD(String absolutePath) {
         File file = new File(absolutePath);
@@ -393,52 +370,6 @@ public class LlamaParseClient {
         throw new RuntimeException("LlamaParse parse timeout after " + MAX_POLLS + " polls for job: " + jobId);
     }
 
-    private void publishCVChunkedEvent(CandidateCV cv, List<ChunkPayload> chunks) {
-        // Calculate total tokens
-        int totalTokens = chunks.stream()
-                .mapToInt(ChunkPayload::getTokensEstimate)
-                .sum();
-
-        // Prepare event
-        CVChunkedEvent event = new CVChunkedEvent(
-                cv.getId(),
-                cv.getCandidateId(),
-                cv.getHrId(),
-                cv.getPosition() != null ? cv.getPosition().getName() : null,
-                chunks,
-                chunks.size(),
-                totalTokens);
-
-        if (TransactionSynchronizationManager.isSynchronizationActive()) {
-            TransactionSynchronizationManager.registerSynchronization(
-                    new TransactionSynchronization() {
-                        @Override
-                        public void afterCommit() {
-                            try {
-                                rabbitTemplate.convertAndSend(
-                                        RabbitMQConfig.CV_CHUNKED_EXCHANGE,
-                                        RabbitMQConfig.CV_CHUNKED_ROUTING_KEY,
-                                        event);
-                                log.info("Published CV chunked event for CV: {} with {} chunks",
-                                        cv.getId(), chunks.size());
-                            } catch (Exception e) {
-                                log.error("Failed to publish CV chunked event: {}", e.getMessage(), e);
-                            }
-                        }
-                    });
-        } else {
-            // Fallback if no transaction (shouldn't happen with @Transactional)
-            try {
-                rabbitTemplate.convertAndSend(
-                        RabbitMQConfig.CV_CHUNKED_EXCHANGE,
-                        RabbitMQConfig.CV_CHUNKED_ROUTING_KEY,
-                        event);
-                log.info("Published CV chunked event (no tx) for CV: {}", cv.getId());
-            } catch (Exception e) {
-                log.error("Failed to publish CV chunked event (no tx): {}", e.getMessage(), e);
-            }
-        }
-    }
 
     /**
      * Post-processing sanitizer applied to all LlamaParse output — the "last line

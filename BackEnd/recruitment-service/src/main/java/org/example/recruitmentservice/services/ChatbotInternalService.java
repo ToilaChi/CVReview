@@ -120,12 +120,15 @@ public class ChatbotInternalService {
 
                 List<CandidateApplicationStatusResponse.ApplicationRecord> records = applications.stream()
                                 .map(cv -> {
+                                        org.example.recruitmentservice.models.enums.MatchStatus matchStatus =
+                                                cvAnalysisRepository.findByCandidateCV_Id(cv.getId())
+                                                        .map(a -> a.getOverallStatus())
+                                                        .orElse(null);
                                         Integer score = cvAnalysisRepository.findByCandidateCV_Id(cv.getId())
-                                                        .map(a -> a.getScore())
+                                                        .map(a -> a.getTechnicalScore())
                                                         .orElse(null);
                                         String posName = cv.getPosition() != null ? cv.getPosition().getName() : null;
-                                        String status = score != null ? (score >= 70 ? "Pass" : "Reviewing")
-                                                        : "Pending scoring";
+                                        String status = matchStatus != null ? matchStatus.name() : "PENDING";
                                         return CandidateApplicationStatusResponse.ApplicationRecord.builder()
                                                         .positionId(cv.getPosition() != null ? cv.getPosition().getId()
                                                                         : null)
@@ -180,7 +183,7 @@ public class ChatbotInternalService {
                                 .sourceType(cv.getSourceType() != null ? cv.getSourceType().name() : null);
 
                 if (analysis != null) {
-                        builder.score(analysis.getScore())
+                        builder.score(analysis.getTechnicalScore())
                                .feedback(analysis.getFeedback())
                                .skillMatch(analysis.getSkillMatch())
                                .skillMiss(analysis.getSkillMiss());

@@ -192,7 +192,7 @@ public class UploadCVService {
             cv.setDriveFileUrl(driveFileInfo.getWebViewLink());
             // cvPath để null (deprecated)
 
-            cv.setCvStatus(CVStatus.UPLOADED);
+            cv.setCvStatus(CVStatus.PENDING);
             cv.setUpdatedAt(LocalDateTime.now());
             cv.setBatchId(batchId);
             cv.setSourceType(sourceType);

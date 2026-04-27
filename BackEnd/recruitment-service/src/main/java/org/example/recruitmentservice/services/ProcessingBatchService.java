@@ -50,14 +50,9 @@ public class ProcessingBatchService {
         ProcessingBatch batch = batchRepository.findByBatchId(batchId)
                 .orElseThrow(() -> new CustomException(ErrorCode.BATCH_NOT_FOUND));
 
-        // Fetch actual counts directly from database instead of cumulative increment
-        long actualSuccess;
-        if (batch.getType() == BatchType.SCORING) {
-            actualSuccess = candidateCVRepository.countByBatchIdAndCvStatus(batchId, CVStatus.SCORED);
-        } else {
-            actualSuccess = candidateCVRepository.countByBatchIdAndCvStatus(batchId, CVStatus.PARSED);
-        }
-
+        // Both UPLOAD and SCORING batch types now track success by EMBEDDED status
+        // since the two-stage pipeline converges at the Qdrant upsert step.
+        long actualSuccess = candidateCVRepository.countByBatchIdAndCvStatus(batchId, CVStatus.EMBEDDED);
         long actualFailed = candidateCVRepository.countByBatchIdAndCvStatus(batchId, CVStatus.FAILED);
 
         batch.setSuccessCv((int) actualSuccess);

@@ -69,7 +69,7 @@ export default function ChatWorkspace() {
     } catch {
       setMessages((prev) => [
         ...prev,
-        { role: 'ASSISTANT', content: '⚠️ Xảy ra lỗi khi kết nối chatbot. Vui lòng thử lại.', createdAt: new Date().toISOString() },
+        { role: 'ASSISTANT', content: 'Xảy ra lỗi khi kết nối chatbot. Vui lòng thử lại.', createdAt: new Date().toISOString() },
       ]);
     } finally {
       setSending(false);
@@ -156,7 +156,7 @@ export default function ChatWorkspace() {
               aria-label="Gửi tin nhắn"
             >
               <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+                <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
               </svg>
             </button>
           </div>

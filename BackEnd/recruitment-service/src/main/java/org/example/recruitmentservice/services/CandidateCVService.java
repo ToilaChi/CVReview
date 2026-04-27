@@ -63,7 +63,7 @@ public class CandidateCVService {
                 .batchId(cv.getBatchId())
                 .filePath(cv.getCvPath())
                 .driveFileUrl(cv.getDriveFileUrl())
-                .score(cvAnalysis != null ? cvAnalysis.getScore() : null)
+                .score(cvAnalysis != null ? cvAnalysis.getTechnicalScore() : null)
                 .feedback(cvAnalysis != null ? cvAnalysis.getFeedback() : null)
                 .skillMatch(cvAnalysis != null ? cvAnalysis.getSkillMatch() : null)
                 .skillMiss(cvAnalysis != null ? cvAnalysis.getSkillMiss() : null)
@@ -87,7 +87,7 @@ public class CandidateCVService {
                 .orElseThrow(() -> new CustomException(ErrorCode.POSITION_NOT_FOUND));
 
         if (statuses == null || statuses.isEmpty()) {
-            statuses = List.of(CVStatus.PARSED, CVStatus.SCORED, CVStatus.FAILED);
+            statuses = List.of(CVStatus.EXTRACTED, CVStatus.EMBEDDED, CVStatus.FAILED);
         }
 
         Pageable pageable = PageRequest.of(page, size, Sort.by("updatedAt").descending());
@@ -165,7 +165,7 @@ public class CandidateCVService {
             cv.setDriveFileId(driveFileInfo.getFileId());
             cv.setDriveFileUrl(driveFileInfo.getWebViewLink());
 
-            cv.setCvStatus(CVStatus.UPLOADED);
+            cv.setCvStatus(CVStatus.PENDING);
             cv.setName(null);
             cv.setEmail(null);
             cv.setCvContent(null);

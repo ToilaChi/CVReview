@@ -32,7 +32,7 @@ public class AdminAnalyticsController {
             LocalDateTime dateSince = LocalDateTime.now().minusDays(days);
 
             long totalCv = candidateCVRepository.countTotalCVsAfterDate(dateSince);
-            long successCv = candidateCVRepository.countByCvStatusAndDateAfter(CVStatus.SCORED, dateSince);
+            long successCv = candidateCVRepository.countByCvStatusAndDateAfter(CVStatus.EMBEDDED, dateSince);
             long failedCv = candidateCVRepository.countByCvStatusAndDateAfter(CVStatus.FAILED, dateSince);
 
             long processingCv = totalCv - successCv - failedCv;
