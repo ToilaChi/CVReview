@@ -6,6 +6,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
+import org.example.recruitmentservice.models.enums.MatchStatus;
 
 @Entity
 @Data
@@ -28,7 +29,12 @@ public class CVAnalysis {
     @Column
     private String positionName;
 
-    private Integer score;
+    private Integer technicalScore;
+    
+    private Integer experienceScore;
+
+    @Enumerated(EnumType.STRING)
+    private MatchStatus overallStatus;
 
     @Column(columnDefinition = "TEXT")
     private String feedback;
@@ -38,6 +44,9 @@ public class CVAnalysis {
 
     @Column(columnDefinition = "TEXT")
     private String skillMiss;
+
+    @Column(columnDefinition = "TEXT")
+    private String learningPath;
 
     private LocalDateTime analyzedAt;
 
