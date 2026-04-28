@@ -12,6 +12,7 @@ import java.time.LocalDateTime;
 @AllArgsConstructor
 @NoArgsConstructor
 @Table(name = "candidate_cv")
+@org.hibernate.annotations.DynamicUpdate
 public class CandidateCV {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

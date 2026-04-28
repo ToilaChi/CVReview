@@ -30,7 +30,7 @@ public class CVAnalysis {
     private String positionName;
 
     private Integer technicalScore;
-    
+
     private Integer experienceScore;
 
     @Enumerated(EnumType.STRING)

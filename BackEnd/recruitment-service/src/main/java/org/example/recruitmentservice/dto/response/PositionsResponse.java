@@ -24,6 +24,8 @@ public class PositionsResponse {
     private String jdText;
     private Boolean isActive;
     private LocalDateTime openedAt;
+    private org.example.recruitmentservice.models.enums.JDStatus status;
+    private String batchId;
     private Integer totalCVs;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
@@ -39,5 +41,7 @@ public class PositionsResponse {
         this.updatedAt = positions.getUpdatedAt();
         this.isActive = positions.isActive();
         this.openedAt = positions.getOpenedAt();
+        this.status = positions.getStatus();
+        this.batchId = positions.getBatchId();
     }
 }

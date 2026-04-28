@@ -19,6 +19,8 @@ import org.example.recruitmentservice.models.entity.Positions;
 import org.example.recruitmentservice.repository.CandidateCVRepository;
 import org.example.recruitmentservice.repository.PositionRepository;
 import org.example.recruitmentservice.services.chunking.JDChunkingService;
+import org.example.recruitmentservice.models.enums.JDStatus;
+import org.example.recruitmentservice.models.enums.BatchType;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.*;
@@ -30,9 +32,12 @@ import org.springframework.web.client.RestTemplate;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -47,6 +52,7 @@ public class PositionService {
     private final RabbitTemplate rabbitTemplate;
     private final RestTemplate restTemplate;
     private final JDChunkingService jdChunkingService;
+    private final ProcessingBatchService processingBatchService;
 
     @Value("${EMBEDDING_SERVICE_URL}")
     private String embeddingServiceUrl;
@@ -72,7 +78,7 @@ public class PositionService {
             throw new CustomException(ErrorCode.DUPLICATE_POSITION);
         }
 
-        // Upload file to Google Drive
+        // Upload file to Google Drive (Synchronous)
         DriveFileInfo driveFileInfo = storageService.uploadJD(
                 positionsRequest.getFile(),
                 positionsRequest.getName(),
@@ -80,64 +86,78 @@ public class PositionService {
                 positionsRequest.getLevel()
         );
 
-        // Parse file by LlamaParse
-        String jdText;
-        String tempFilePath = null;
-        try {
-            // Download từ Drive về temp
-            tempFilePath = storageService.downloadFileToTemp(driveFileInfo.getFileId());
-            jdText = llamaParseClient.parseJD(tempFilePath);
-        } catch (Exception e) {
-            // Nếu parse fail, xóa file trên Drive
-            storageService.deleteFile(driveFileInfo.getFileId());
-            System.err.println("Parse error details: " + e.getMessage());
-            e.printStackTrace();
-            throw new CustomException(ErrorCode.FILE_PARSE_FAILED);
-        } finally {
-            // Cleanup temp file
-            if (tempFilePath != null) {
-                storageService.deleteTempFile(tempFilePath);
-            }
-        }
+        String batchId = "JD_" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss")) + "_" + UUID.randomUUID().toString().substring(0, 4);
+        processingBatchService.createBatch(batchId, null, 1, BatchType.JD_UPLOAD);
 
-        // Save to DB
+        // Save to DB initially as PENDING
         Positions position = new Positions();
         position.setHrId(hrId);
         position.setName(positionsRequest.getName());
         position.setLanguage(positionsRequest.getLanguage());
         position.setLevel(positionsRequest.getLevel());
-        position.setJobDescription(jdText);
-
-        // Lưu Drive info
+        position.setJobDescription("Processing..."); // Placeholder
         position.setDriveFileId(driveFileInfo.getFileId());
         position.setDriveFileUrl(driveFileInfo.getWebViewLink());
-        // jdPath để null (deprecated)
-
+        position.setBatchId(batchId);
+        position.setStatus(JDStatus.PENDING);
         position.setCreatedAt(LocalDateTime.now());
         position.setUpdatedAt(LocalDateTime.now());
 
         Positions positionSaved = positionRepository.save(position);
 
-        // Chunk & publish after transaction commits to guarantee positionId is persisted
-        List<JDChunkPayload> chunks = jdChunkingService.chunk(
-                positionSaved.getId(), positionSaved.getName(),
-                positionSaved.getLanguage(), positionSaved.getLevel(), jdText
-        );
-        if (chunks.isEmpty()) {
-            log.warn("[Position] JD chunking produced no chunks for position {}, skipping embed event",
-                    positionSaved.getId());
-        } else {
-            if (TransactionSynchronizationManager.isSynchronizationActive()) {
-                TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-                    @Override
-                    public void afterCommit() {
-                        publishJDChunkedEvent(positionSaved, chunks);
+        // Async Processing
+        CompletableFuture.runAsync(() -> {
+            String tempFilePath = null;
+            try {
+                // Update to PARSING
+                Positions p = positionRepository.findById(positionSaved.getId());
+                if (p != null) {
+                    p.setStatus(JDStatus.PARSING);
+                    p.setUpdatedAt(LocalDateTime.now());
+                    positionRepository.save(p);
+                }
+
+                tempFilePath = storageService.downloadFileToTemp(driveFileInfo.getFileId());
+                String jdText = llamaParseClient.parseJD(tempFilePath);
+
+                p = positionRepository.findById(positionSaved.getId());
+                if (p != null) {
+                    p.setStatus(JDStatus.EMBEDDING);
+                    p.setJobDescription(jdText);
+                    p.setUpdatedAt(LocalDateTime.now());
+                    positionRepository.save(p);
+
+                    // Chunk & Publish
+                    List<JDChunkPayload> chunks = jdChunkingService.chunk(
+                            p.getId(), p.getName(),
+                            p.getLanguage(), p.getLevel(), jdText
+                    );
+                    if (chunks.isEmpty()) {
+                        log.warn("[Position] JD chunking produced no chunks for position {}, failing", p.getId());
+                        p.setStatus(JDStatus.FAILED);
+                        p.setErrorMessage("No chunks produced from JD text");
+                        positionRepository.save(p);
+                        processingBatchService.incrementProcessed(batchId, false);
+                    } else {
+                        publishJDChunkedEvent(p, chunks);
                     }
-                });
-            } else {
-                publishJDChunkedEvent(positionSaved, chunks);
+                }
+            } catch (Exception e) {
+                log.error("JD Parse/Chunk error details: " + e.getMessage(), e);
+                Positions p = positionRepository.findById(positionSaved.getId());
+                if (p != null) {
+                    p.setStatus(JDStatus.FAILED);
+                    p.setErrorMessage("Parsing failed: " + e.getMessage());
+                    p.setUpdatedAt(LocalDateTime.now());
+                    positionRepository.save(p);
+                }
+                processingBatchService.incrementProcessed(batchId, false);
+            } finally {
+                if (tempFilePath != null) {
+                    storageService.deleteTempFile(tempFilePath);
+                }
             }
-        }
+        });
 
         PositionsResponse response = PositionsResponse.builder()
                 .id(positionSaved.getId())
@@ -146,6 +166,8 @@ public class PositionService {
                 .language(positionSaved.getLanguage())
                 .level(positionSaved.getLevel())
                 .driveFileUrl(positionSaved.getDriveFileUrl())
+                .status(positionSaved.getStatus())
+                .batchId(positionSaved.getBatchId())
                 .createdAt(positionSaved.getCreatedAt())
                 .updatedAt(positionSaved.getUpdatedAt())
                 .build();
@@ -451,7 +473,8 @@ public class PositionService {
                     position.getLevel(),
                     chunks,
                     chunks.size(),
-                    totalTokens
+                    totalTokens,
+                    position.getBatchId()
             );
             rabbitTemplate.convertAndSend(
                     RabbitMQConfig.JD_CHUNKED_EXCHANGE,

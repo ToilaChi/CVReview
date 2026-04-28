@@ -22,6 +22,9 @@ import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.stream.Collectors;
+import org.example.recruitmentservice.repository.PositionRepository;
+import org.example.recruitmentservice.models.enums.JDStatus;
+import org.example.recruitmentservice.models.entity.Positions;
 
 @Slf4j
 @Service
@@ -29,6 +32,7 @@ import java.util.stream.Collectors;
 public class ProcessingBatchService {
     private final ProcessingBatchRepository batchRepository;
     private final CandidateCVRepository candidateCVRepository;
+    private final PositionRepository positionRepository;
     private final SseEmitterRegistry sseEmitterRegistry;
 
     public ProcessingBatch createBatch(String batchId, Integer positionId, int totalCv, BatchType type) {
@@ -50,10 +54,16 @@ public class ProcessingBatchService {
         ProcessingBatch batch = batchRepository.findByBatchId(batchId)
                 .orElseThrow(() -> new CustomException(ErrorCode.BATCH_NOT_FOUND));
 
-        // Both UPLOAD and SCORING batch types now track success by EMBEDDED status
-        // since the two-stage pipeline converges at the Qdrant upsert step.
-        long actualSuccess = candidateCVRepository.countByBatchIdAndCvStatus(batchId, CVStatus.EMBEDDED);
-        long actualFailed = candidateCVRepository.countByBatchIdAndCvStatus(batchId, CVStatus.FAILED);
+        long actualSuccess = 0;
+        long actualFailed = 0;
+
+        if (batch.getType() == BatchType.JD_UPLOAD) {
+            actualSuccess = positionRepository.countByBatchIdAndStatus(batchId, JDStatus.EMBEDDED);
+            actualFailed = positionRepository.countByBatchIdAndStatus(batchId, JDStatus.FAILED);
+        } else {
+            actualSuccess = candidateCVRepository.countByBatchIdAndCvStatus(batchId, CVStatus.EMBEDDED);
+            actualFailed = candidateCVRepository.countByBatchIdAndCvStatus(batchId, CVStatus.FAILED);
+        }
 
         batch.setSuccessCv((int) actualSuccess);
         batch.setFailedCv((int) actualFailed);
@@ -95,11 +105,18 @@ public class ProcessingBatchService {
      * push.
      */
     private BatchStatusResponse buildStatusSnapshot(ProcessingBatch batch, String batchId) {
-        List<Integer> failedCvIds = candidateCVRepository
-                .findByBatchIdAndCvStatus(batchId, CVStatus.FAILED)
-                .stream()
-                .map(CandidateCV::getId)
-                .collect(Collectors.toList());
+        List<Integer> failedIds;
+        if (batch.getType() == BatchType.JD_UPLOAD) {
+            failedIds = positionRepository.findByBatchIdAndStatus(batchId, JDStatus.FAILED)
+                    .stream()
+                    .map(Positions::getId)
+                    .collect(Collectors.toList());
+        } else {
+            failedIds = candidateCVRepository.findByBatchIdAndCvStatus(batchId, CVStatus.FAILED)
+                    .stream()
+                    .map(CandidateCV::getId)
+                    .collect(Collectors.toList());
+        }
 
         return BatchStatusResponse.builder()
                 .batchId(batch.getBatchId())
@@ -107,7 +124,7 @@ public class ProcessingBatchService {
                 .totalCv(batch.getTotalCv())
                 .successCv(batch.getSuccessCv())
                 .failedCv(batch.getFailedCv())
-                .failedCvIds(failedCvIds)
+                .failedCvIds(failedIds)
                 .progress(BigDecimal.valueOf(batch.getProgress())
                         .setScale(2, RoundingMode.HALF_UP)
                         .doubleValue())

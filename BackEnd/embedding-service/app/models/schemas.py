@@ -3,9 +3,9 @@ from typing import List, Optional
 from datetime import datetime
 
 
-# ===== CV Models =====
+# ===== Phase 3 CV Models (Reverted to use Java Chunking) =====
 class CVChunk(BaseModel):
-    """Single chunk from CV"""
+    """Single chunk from CV (matches Java ChunkPayload)"""
     candidateId: Optional[str] = None
     hrId: Optional[str] = None
     positionId: Optional[int] = None
@@ -15,39 +15,39 @@ class CVChunk(BaseModel):
     chunkText: str
     words: int
     tokensEstimate: int
-    email: str
+    email: Optional[str] = None
     cvId: int
-    cvStatus: str
-    sourceType: str
-    createdAt: str
-    skills: List[str]
-    experienceYears: Optional[int] = None
-    seniorityLevel: str
+    cvStatus: Optional[str] = None
+    sourceType: Optional[str] = None
+    createdAt: Optional[str] = None
+    
+    # Metadata fields populated by Java
+    skills: List[str] = []
+    experienceYears: Optional[int] = 0
+    seniorityLevel: str = "Unknown"
     companies: List[str] = []
     degrees: List[str] = []
     dateRanges: List[str] = []
 
-
-class CVEmbeddingRequest(BaseModel):
-    """Request to embed CV chunks"""
+class CVChunkedEvent(BaseModel):
+    """Payload received from cv.embed.queue"""
     cvId: int
-    candidateName: str
-    totalWords: int
+    candidateId: Optional[str] = None
+    hrId: Optional[str] = None
+    position: Optional[str] = None
     chunks: List[CVChunk]
     totalChunks: int
-    position: str
-    candidateId: Optional[str] = None
     totalTokens: int
 
-
-class CVEmbeddingResponse(BaseModel):
-    """Response after embedding CV"""
+class EmbedReplyEvent(BaseModel):
+    """Reply payload sent to cv.embed.reply.queue"""
     cvId: int
-    totalChunks: int
-    embeddedChunks: int
-    version: int
-    message: str
-    processingTime: float
+    batchId: Optional[str] = None
+    success: bool
+    errorMessage: Optional[str] = None
+    technicalScore: Optional[int] = None
+    experienceScore: Optional[int] = None
+    overallStatus: Optional[str] = None
 
 
 # ===== JD Models =====

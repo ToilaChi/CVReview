@@ -17,4 +17,5 @@ public class CVChunkedEvent {
     private List<ChunkPayload> chunks;
     private Integer totalChunks;
     private Integer totalTokens;
+    private String batchId;
 }

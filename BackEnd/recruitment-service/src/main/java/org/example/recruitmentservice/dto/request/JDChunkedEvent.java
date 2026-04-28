@@ -22,4 +22,5 @@ public class JDChunkedEvent {
     private List<JDChunkPayload> chunks;
     private Integer totalChunks;
     private Integer totalTokens;
+    private String batchId;
 }

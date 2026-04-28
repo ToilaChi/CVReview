@@ -34,4 +34,7 @@ public interface PositionRepository extends JpaRepository<Positions, Integer> {
      */
     @Query("SELECT p FROM Positions p WHERE p.isActive = true ORDER BY p.openedAt DESC")
     List<Positions> findAllActive();
+
+    long countByBatchIdAndStatus(String batchId, org.example.recruitmentservice.models.enums.JDStatus status);
+    List<Positions> findByBatchIdAndStatus(String batchId, org.example.recruitmentservice.models.enums.JDStatus status);
 }

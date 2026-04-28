@@ -1,6 +1,7 @@
 package org.example.recruitmentservice.models.enums;
 
 public enum BatchType {
-    UPLOAD,
-    SCORING
+    CV_UPLOAD,
+    SCORING,
+    JD_UPLOAD
 }

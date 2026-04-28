@@ -64,7 +64,7 @@ public class UploadCVService {
                 batchId,
                 positionId,
                 files.size(),
-                BatchType.UPLOAD);
+                BatchType.CV_UPLOAD);
 
         AtomicInteger successCounter = new AtomicInteger();
         List<CompletableFuture<Void>> futures = files.stream()
@@ -124,7 +124,7 @@ public class UploadCVService {
                 batchId,
                 null,
                 1,
-                BatchType.UPLOAD);
+                BatchType.CV_UPLOAD);
 
         try {
             CandidateCV cv = uploadSingleCV(file, null, batchId, SourceType.CANDIDATE, candidateId);

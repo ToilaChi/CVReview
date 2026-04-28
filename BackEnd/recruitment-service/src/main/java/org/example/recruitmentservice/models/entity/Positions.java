@@ -13,6 +13,7 @@ import java.util.List;
 @NoArgsConstructor
 @Table(name = "positions")
 @Builder
+@org.hibernate.annotations.DynamicUpdate
 public class Positions {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -45,22 +46,13 @@ public class Positions {
     @Column
     private String driveFileUrl;
 
-    /**
-     * TRUE khi position đang trong đợt tuyển dụng — dùng để filter scope Candidate
-     * chatbot.
-     */
     @Column(nullable = false)
     @Builder.Default
     private boolean isActive = true;
 
-    /**
-     * Thời điểm mở đợt tuyển dụng. Cùng với name/language/level tạo thành
-     * Recruitment Period label.
-     */
     @Column
     private LocalDateTime openedAt;
 
-    /** Thời điểm đóng đợt tuyển dụng. NULL nghĩa là đang mở. */
     @Column
     private LocalDateTime closedAt;
 
@@ -69,4 +61,16 @@ public class Positions {
 
     @Column(nullable = false)
     private LocalDateTime updatedAt;
+
+    @Column
+    @Enumerated(EnumType.STRING)
+    @Builder.Default
+    private org.example.recruitmentservice.models.enums.JDStatus status = org.example.recruitmentservice.models.enums.JDStatus.PENDING;
+
+    @Lob
+    @Column(columnDefinition = "TEXT")
+    private String errorMessage;
+
+    @Column
+    private String batchId;
 }

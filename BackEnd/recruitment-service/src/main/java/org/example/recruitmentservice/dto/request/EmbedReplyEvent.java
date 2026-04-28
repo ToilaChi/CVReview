@@ -10,7 +10,8 @@ import java.io.Serializable;
 
 /**
  * Reply event từ embedding-service sau khi upsert Qdrant hoàn tất.
- * Được publish vào cv.embed.reply.queue để EmbedReplyListener cập nhật trạng thái DB.
+ * Được publish vào cv.embed.reply.queue để EmbedReplyListener cập nhật trạng
+ * thái DB.
  */
 @Data
 @Builder
@@ -20,14 +21,9 @@ public class EmbedReplyEvent implements Serializable {
 
     private Integer cvId;
     private String batchId;
-
-    /** true = upsert thành công, false = thất bại. */
     private boolean success;
-
-    /** Mô tả lỗi nếu success = false. */
     private String errorMessage;
 
-    /** Các score do embedding-service hoặc chatbot tính toán (optional, có thể null). */
     private Integer technicalScore;
     private Integer experienceScore;
     private MatchStatus overallStatus;

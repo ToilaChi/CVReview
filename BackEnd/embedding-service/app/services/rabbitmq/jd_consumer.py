@@ -26,6 +26,8 @@ JD_CHUNKED_EXCHANGE        = "jd.chunked.exchange"
 JD_CHUNKED_ROUTING_KEY     = "jd.chunked"
 JD_CHUNKED_DLQ_ROUTING_KEY = "jd.chunked.dlq"
 
+JD_EMBED_REPLY_QUEUE       = "jd.embed.reply.queue"
+
 
 # ------------------------------------------------------------
 # Validation
@@ -211,11 +213,27 @@ async def _process_jd_message(message: aio_pika.IncomingMessage) -> None:
         await _embed_jd_chunks(event)
         await message.ack()
         print(f"[JD] Acked message for position {event['positionId']}\n")
+        
+        # Publish success reply to Java
+        await _publish_reply(
+            position_id=event['positionId'],
+            batch_id=event.get('batchId'),
+            success=True
+        )
 
     except Exception as e:
         print(f"[JD] Processing error (attempt {retry_count + 1}/{max_retries}): {e}")
         import traceback
         traceback.print_exc()
+
+        # Publish failure reply to Java on max retries
+        if retry_count >= max_retries - 1:
+            await _publish_reply(
+                position_id=event.get('positionId', 0),
+                batch_id=event.get('batchId'),
+                success=False,
+                error_msg=str(e)
+            )
 
         if retry_count < max_retries:
             print(f"[JD] Nacking for retry (count={retry_count + 1})...")
@@ -224,6 +242,32 @@ async def _process_jd_message(message: aio_pika.IncomingMessage) -> None:
 
         # Always nack without requeue — DLX on the queue handles retry routing
         await message.nack(requeue=False)
+
+async def _publish_reply(position_id: int, batch_id: str, success: bool, error_msg: str = None) -> None:
+    """Publish the final result (success/failure) back to Java via jd.embed.reply.queue."""
+    try:
+        connection = await aio_pika.connect_robust(
+            host=settings.RABBITMQ_HOST,
+            port=settings.RABBITMQ_PORT,
+            login=settings.RABBITMQ_USER,
+            password=settings.RABBITMQ_PASSWORD,
+        )
+        async with connection:
+            channel = await connection.channel()
+            reply_event = {
+                "cvId": position_id, # Reusing cvId as positionId for the generic EmbedReplyEvent payload
+                "success": success,
+                "errorMessage": error_msg,
+                "batchId": batch_id
+            }
+            await channel.default_exchange.publish(
+                aio_pika.Message(body=json.dumps(reply_event).encode()),
+                routing_key=JD_EMBED_REPLY_QUEUE
+            )
+            status_str = "SUCCESS" if success else "FAILED"
+            print(f"[JD] Published reply to {JD_EMBED_REPLY_QUEUE} -> posId={position_id}, batchId={batch_id}, status={status_str}")
+    except Exception as e:
+        print(f"[JD] FATAL: Could not publish reply for posId={position_id}: {e}")
 
 
 # ------------------------------------------------------------

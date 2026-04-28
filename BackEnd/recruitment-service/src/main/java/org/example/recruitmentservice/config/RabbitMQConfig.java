@@ -103,45 +103,52 @@ public class RabbitMQConfig {
                 .with(JD_CHUNKED_DLQ_ROUTING_KEY);
     }
 
-    /* ============================================================
-     * 3. CV CHUNKED FLOW
-     * ============================================================ */
-    public static final String CV_CHUNKED_QUEUE = "cv.chunked.queue";
-    public static final String CV_CHUNKED_DLQ = "cv.chunked.queue.dlq";
-    public static final String CV_CHUNKED_EXCHANGE = "cv.chunked.exchange";
-    public static final String CV_CHUNKED_ROUTING_KEY = "cv.chunked";
-    public static final String CV_CHUNKED_DLQ_ROUTING_KEY = "cv.chunked.dlq";
+    public static final String JD_EMBED_REPLY_QUEUE = "jd.embed.reply.queue";
 
     @Bean
-    public Queue cvChunkedQueue() {
-        return QueueBuilder.durable(CV_CHUNKED_QUEUE)
-                .withArgument("x-dead-letter-exchange", CV_CHUNKED_EXCHANGE)
-                .withArgument("x-dead-letter-routing-key", CV_CHUNKED_DLQ_ROUTING_KEY)
+    public Queue jdEmbedReplyQueue() {
+        return QueueBuilder.durable(JD_EMBED_REPLY_QUEUE).build();
+    }
+
+    /* ============================================================
+     * 3. CV EMBED FLOW (Two-Stage Pipeline — Stage 2 input)
+     * ============================================================ */
+    public static final String CV_EMBED_QUEUE = "cv.embed.queue";
+    public static final String CV_EMBED_DLQ = "cv.embed.queue.dlq";
+    public static final String CV_EMBED_EXCHANGE = "cv.embed.exchange";
+    public static final String CV_EMBED_ROUTING_KEY = "cv.embed";
+    public static final String CV_EMBED_DLQ_ROUTING_KEY = "cv.embed.dlq";
+
+    @Bean
+    public Queue cvEmbedQueue() {
+        return QueueBuilder.durable(CV_EMBED_QUEUE)
+                .withArgument("x-dead-letter-exchange", CV_EMBED_EXCHANGE)
+                .withArgument("x-dead-letter-routing-key", CV_EMBED_DLQ_ROUTING_KEY)
                 .build();
     }
 
     @Bean
-    public Queue cvChunkedDlq() {
-        return QueueBuilder.durable(CV_CHUNKED_DLQ).build();
+    public Queue cvEmbedDlq() {
+        return QueueBuilder.durable(CV_EMBED_DLQ).build();
     }
 
     @Bean
-    public DirectExchange cvChunkedExchange() {
-        return new DirectExchange(CV_CHUNKED_EXCHANGE);
+    public DirectExchange cvEmbedExchange() {
+        return new DirectExchange(CV_EMBED_EXCHANGE);
     }
 
     @Bean
-    public Binding cvChunkedBinding(Queue cvChunkedQueue, DirectExchange cvChunkedExchange) {
-        return BindingBuilder.bind(cvChunkedQueue)
-                .to(cvChunkedExchange)
-                .with(CV_CHUNKED_ROUTING_KEY);
+    public Binding cvEmbedBinding(Queue cvEmbedQueue, DirectExchange cvEmbedExchange) {
+        return BindingBuilder.bind(cvEmbedQueue)
+                .to(cvEmbedExchange)
+                .with(CV_EMBED_ROUTING_KEY);
     }
 
     @Bean
-    public Binding cvChunkedDlqBinding(Queue cvChunkedDlq, DirectExchange cvChunkedExchange) {
-        return BindingBuilder.bind(cvChunkedDlq)
-                .to(cvChunkedExchange)
-                .with(CV_CHUNKED_DLQ_ROUTING_KEY);
+    public Binding cvEmbedDlqBinding(Queue cvEmbedDlq, DirectExchange cvEmbedExchange) {
+        return BindingBuilder.bind(cvEmbedDlq)
+                .to(cvEmbedExchange)
+                .with(CV_EMBED_DLQ_ROUTING_KEY);
     }
 
 

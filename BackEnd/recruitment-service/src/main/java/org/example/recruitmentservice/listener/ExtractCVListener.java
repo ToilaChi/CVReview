@@ -5,13 +5,13 @@ import lombok.extern.slf4j.Slf4j;
 import org.example.commonlibrary.dto.response.ErrorCode;
 import org.example.commonlibrary.exception.CustomException;
 import org.example.recruitmentservice.config.RabbitMQConfig;
-import org.example.recruitmentservice.dto.request.CVExtractedEvent;
+import org.example.recruitmentservice.dto.request.CVChunkedEvent;
 import org.example.recruitmentservice.dto.request.CVUploadEvent;
+import org.example.recruitmentservice.dto.request.ChunkPayload;
 import org.example.recruitmentservice.models.entity.CandidateCV;
 import org.example.recruitmentservice.models.enums.CVStatus;
 import org.example.recruitmentservice.repository.CandidateCVRepository;
-import org.example.recruitmentservice.services.metadata.GeminiExtractionService;
-import org.example.recruitmentservice.services.metadata.model.CVMetadata;
+import org.example.recruitmentservice.services.chunking.ChunkingService;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.messaging.handler.annotation.Payload;
@@ -19,23 +19,15 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
-/**
- * Stage 1 của Two-Stage Pipeline.
- *
- * Nhận CV đã parse (status=EXTRACTED), gọi Gemini để extract metadata JSON,
- * sau đó publish CVExtractedEvent sang cv.embed.queue để embedding-service xử lý.
- *
- * Dùng containerFactory riêng (cvExtractionContainerFactory) với concurrency thấp
- * để tránh bị throttle bởi Gemini API rate limit.
- */
 @Slf4j
 @Component
 @RequiredArgsConstructor
 public class ExtractCVListener {
 
     private final CandidateCVRepository candidateCVRepository;
-    private final GeminiExtractionService geminiExtractionService;
+    private final ChunkingService chunkingService;
     private final RabbitTemplate rabbitTemplate;
 
     @RabbitListener(queues = RabbitMQConfig.CV_EXTRACT_QUEUE, containerFactory = "cvExtractionContainerFactory")
@@ -54,8 +46,8 @@ public class ExtractCVListener {
         }
 
         if (cv.getCvContent() == null || cv.getCvContent().isBlank()) {
-            log.error("[EXTRACT] CV {} has no parsed content, cannot extract metadata", cvId);
-            markAsFailed(cv, "CV content is empty — cannot extract metadata.");
+            log.error("[EXTRACT] CV {} has no parsed content, cannot chunk", cvId);
+            markAsFailed(cv, "CV content is empty — cannot chunk and extract metadata.");
             throw new RuntimeException("CV content missing for cvId=" + cvId);
         }
 
@@ -64,25 +56,34 @@ public class ExtractCVListener {
             cv.setUpdatedAt(LocalDateTime.now());
             candidateCVRepository.save(cv);
 
-            CVMetadata metadata = geminiExtractionService.extractMetadata(cv.getCvContent());
+            List<ChunkPayload> chunks = chunkingService.chunk(cv, cv.getCvContent());
+            if (chunks == null || chunks.isEmpty()) {
+                markAsFailed(cv, "Chunking service returned empty chunks.");
+                throw new RuntimeException("Chunking failed for cvId=" + cvId);
+            }
 
-            CVExtractedEvent extractedEvent = CVExtractedEvent.builder()
-                    .cvId(cvId)
-                    .cvText(cv.getCvContent())
-                    .metadata(metadata)
-                    .positionId(event.getPositionId())
-                    .batchId(event.getBatchId())
-                    .build();
+            int totalTokens = chunks.stream().mapToInt(ChunkPayload::getTokensEstimate).sum();
 
-            rabbitTemplate.convertAndSend(RabbitMQConfig.CV_CHUNKED_QUEUE, extractedEvent);
-            log.info("[EXTRACT] Published CVExtractedEvent for cvId={} to cv.embed.queue", cvId);
+            CVChunkedEvent chunkedEvent = new CVChunkedEvent(
+                    cvId,
+                    cv.getCandidateId(),
+                    cv.getHrId(),
+                    cv.getPosition() != null ? cv.getPosition().getName() : null,
+                    chunks,
+                    chunks.size(),
+                    totalTokens,
+                    event.getBatchId()
+            );
+
+            rabbitTemplate.convertAndSend(RabbitMQConfig.CV_EMBED_QUEUE, chunkedEvent);
+            log.info("[EXTRACT] Published CVChunkedEvent for cvId={} to cv.embed.queue with {} chunks", cvId, chunks.size());
 
         } catch (CustomException e) {
             throw e;
         } catch (Exception e) {
-            log.error("[EXTRACT] Metadata extraction failed for cvId={}: {}", cvId, e.getMessage(), e);
+            log.error("[EXTRACT] Extraction/Chunking failed for cvId={}: {}", cvId, e.getMessage(), e);
             // Re-throw để RabbitMQ route sang cv.extract.queue.dlq
-            throw new RuntimeException("Metadata extraction failed for cvId=" + cvId, e);
+            throw new RuntimeException("Extraction/Chunking failed for cvId=" + cvId, e);
         }
     }
 
