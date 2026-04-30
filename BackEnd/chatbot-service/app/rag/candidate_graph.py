@@ -458,8 +458,18 @@ async def llm_reasoning_node(state: ChatState) -> ChatState:
                 continue
 
             try:
+                # ISSUE-10: Normalize list→str for skill fields to prevent
+                # LLM serializing List[str] as Python repr in API payload.
+                normalized_args = {**tool_args}
+                for skill_field in ("skill_match", "skill_miss"):
+                    val = normalized_args.get(skill_field)
+                    if isinstance(val, list):
+                        normalized_args[skill_field] = ", ".join(val)
+                    elif val is None:
+                        normalized_args[skill_field] = ""
+
                 tool_res = await tool_map["finalize_application"].ainvoke({
-                    **tool_args,
+                    **normalized_args,
                     "candidate_id": state["candidate_id"],
                     "session_id":   state["session_id"],
                 })

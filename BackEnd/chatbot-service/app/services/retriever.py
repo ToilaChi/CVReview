@@ -15,6 +15,13 @@ _RERANK_FETCH_MULTIPLIER = 3
 _RERANK_FETCH_MIN = 30
 
 
+def get_chunk_text(payload: dict) -> str:
+    """Safely read chunk text from a Qdrant payload.
+    Handles both CV chunks ('chunkText') and JD chunks ('jdText' fallback to 'chunkText').
+    """
+    return (payload.get("jdText") or payload.get("chunkText") or "").strip()
+
+
 def _rerank_fetch_limit(top_n: int) -> int:
     """Calculate how many chunks to pull from Qdrant before reranking."""
     return max(top_n * _RERANK_FETCH_MULTIPLIER, _RERANK_FETCH_MIN)
@@ -372,7 +379,7 @@ class CareerCounselorRetriever:
         if jd_chunks_for_vector:
             # Concatenate JD chunk texts to build a rich ranking signal
             jd_text_for_search = " ".join(
-                c.get("payload", {}).get("text", "") for c in jd_chunks_for_vector
+                get_chunk_text(c.get("payload", {})) for c in jd_chunks_for_vector
             ).strip()
             ranking_vector = self.embedding_service.embed_text(jd_text_for_search, is_query=True)
             print(f"[HR Mode] Using JD-driven vector for CV ranking ({len(jd_chunks_for_vector)} JD chunks)")

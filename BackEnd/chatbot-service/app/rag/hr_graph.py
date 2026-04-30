@@ -17,8 +17,9 @@ from typing import TypedDict, Literal, Optional, List, Dict, Any
 from langgraph.graph import StateGraph, END
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import SystemMessage, HumanMessage, ToolMessage
+from qdrant_client.models import Filter, FieldCondition, MatchValue, MatchAny
 
-from app.services.retriever import retriever
+from app.services.retriever import retriever, get_chunk_text
 from app.services.recruitment_api import recruitment_api
 from app.rag.hr_tools import HR_TOOLS
 from app.config import get_settings
@@ -92,6 +93,11 @@ class HRChatState(TypedDict):
     # Tầng 1 hard-rule flags
     is_cv_count_query: bool
 
+    # ISSUE-01: track the cvIds discussed in prior turns so follow-up queries
+    # (COMPARE / DETAIL) can pin-fetch them without re-running full reranking.
+    active_cv_ids: List[int]
+    hr_query_intent: str  # RANK | COMPARE | DETAIL | GENERAL
+
     # Phase 3: candidate_ids is REMOVED from Qdrant query path.
     # Qdrant filters by applied_position_ids directly (see retriever.py).
     # sql_metadata is still fetched for name/email/score display only.
@@ -137,6 +143,85 @@ def _build_llm(temperature: float = 0.3) -> ChatGoogleGenerativeAI:
 
 
 # ---------------------------------------------------------------------------
+# ISSUE-01 helpers: intent detection + pinned-CV fetch
+# ---------------------------------------------------------------------------
+
+_COMPARE_PATTERN = re.compile(
+    r"\b(so sánh|compare|đối chiếu|khác nhau|điểm khác|versus|vs\.?)\b",
+    re.IGNORECASE,
+)
+_DETAIL_PATTERN = re.compile(
+    r"\b(chi tiết|detail|thông tin về|tell me about|nói về|profile của|hồ sơ của)\b",
+    re.IGNORECASE,
+)
+_RANK_PATTERN = re.compile(
+    r"\b(top|rank|xếp hạng|tốt nhất|phù hợp nhất|liệt kê|danh sách|tìm)\b",
+    re.IGNORECASE,
+)
+
+
+def detect_hr_query_intent(query: str, has_active_cv_ids: bool) -> str:
+    """
+    Classify HR query into one of four intents.
+
+    COMPARE / DETAIL are only meaningful when there are already active_cv_ids
+    from a previous turn. Without them we fall through to RANK so a fresh
+    retrieval is triggered.
+    """
+    if has_active_cv_ids and _COMPARE_PATTERN.search(query):
+        return "COMPARE"
+    if has_active_cv_ids and _DETAIL_PATTERN.search(query):
+        return "DETAIL"
+    if _RANK_PATTERN.search(query):
+        return "RANK"
+    return "GENERAL"
+
+
+async def _fetch_pinned_cv_context(
+    cv_ids: List[int],
+    qdrant_svc,
+    cv_collection: str,
+) -> List[Dict[str, Any]]:
+    """
+    Directly fetch all chunks for the given cvIds from Qdrant.
+    Bypasses reranking — used when HR wants to compare/detail previously
+    surfaced candidates so we guarantee the same set of CVs is returned.
+    Returns chunks sorted by cvId then score descending.
+    Keeps at most 6 chunks per cvId to avoid inflating the prompt.
+    """
+    MAX_CHUNKS_PER_CV = 6
+
+    results = qdrant_svc.search_similar(
+        collection_name=cv_collection,
+        query_vector=[0.0] * 1024,  # dummy vector — filter is what matters here
+        limit=len(cv_ids) * MAX_CHUNKS_PER_CV,
+        score_threshold=0.0,
+        filters=Filter(must=[
+            FieldCondition(key="cvId", match=MatchAny(any=cv_ids)),
+            FieldCondition(key="is_latest", match=MatchValue(value=True)),
+        ]),
+    )
+
+    # Group and cap per cvId
+    grouped: Dict[int, List[Dict[str, Any]]] = {}
+    for chunk in results:
+        cv_id = chunk.get("payload", {}).get("cvId")
+        if cv_id is not None:
+            grouped.setdefault(cv_id, []).append(chunk)
+
+    pinned: List[Dict[str, Any]] = []
+    for cv_id in cv_ids:  # preserve original ordering
+        chunks = sorted(
+            grouped.get(cv_id, []),
+            key=lambda c: c.get("score", 0.0),
+            reverse=True,
+        )[:MAX_CHUNKS_PER_CV]
+        pinned.extend(chunks)
+
+    return pinned
+
+
+# ---------------------------------------------------------------------------
 # Node 1 — Load session history
 # ---------------------------------------------------------------------------
 
@@ -148,16 +233,23 @@ async def load_hr_session_history_node(state: HRChatState) -> HRChatState:
             limit=settings.MAX_HISTORY_TURNS
         )
         state["conversation_history"] = history
-        
+
+        # Restore session cache from the most recent ASSISTANT turn
         for turn in reversed(history):
             if turn.get("role") == "ASSISTANT":
                 func_data_str = turn.get("functionCall")
                 if func_data_str:
                     try:
                         func_data = json.loads(func_data_str)
-                        if isinstance(func_data, dict) and "pending_emails" in func_data:
+                        if not isinstance(func_data, dict):
+                            break
+                        if "pending_emails" in func_data:
                             state["pending_emails"] = func_data["pending_emails"]
                             print(f"[Cache Hit] Restored {len(state['pending_emails'])} pending_email(s)")
+                        # ISSUE-01: restore active_cv_ids so follow-up COMPARE/DETAIL can pin-fetch
+                        if "active_cv_ids" in func_data:
+                            state["active_cv_ids"] = func_data["active_cv_ids"]
+                            print(f"[Cache Hit] Restored active_cv_ids: {state['active_cv_ids']}")
                     except json.JSONDecodeError:
                         pass
                 break
@@ -169,6 +261,13 @@ async def load_hr_session_history_node(state: HRChatState) -> HRChatState:
     state["is_cv_count_query"] = _is_cv_count_query(state["query"])
     if state["is_cv_count_query"]:
         print("[Tầng 1] CV count query detected — will route to get_cv_summary tool.")
+
+    # ISSUE-01: Classify HR query intent before retrieval so retrieve_hr_context_node can route
+    state["hr_query_intent"] = detect_hr_query_intent(
+        state["query"],
+        has_active_cv_ids=bool(state.get("active_cv_ids")),
+    )
+    print(f"[HR Intent] {state['hr_query_intent']} | active_cv_ids={state.get('active_cv_ids', [])}")
 
     return state
 
@@ -230,21 +329,44 @@ async def load_candidate_scope_node(state: HRChatState) -> HRChatState:
 
 async def retrieve_hr_context_node(state: HRChatState) -> HRChatState:
     """
-    Branch on mode:
-      HR_MODE       → filter positionId + sourceType=HR
-      CANDIDATE_MODE → filter applied_position_ids contains position_id + sourceType=CANDIDATE
+    Branch on mode and hr_query_intent (ISSUE-01):
+
+      COMPARE / DETAIL  → _fetch_pinned_cv_context (bypass reranking, jd_context=[])
+      RANK / GENERAL    → full retriever pipeline (HR or Candidate mode)
 
     Skips Qdrant retrieval for Tầng 1 CV count queries (data comes from SQL).
     Dynamic top_n is parsed from the HR query so responses like 'top 5' or 'top 10' are honoured.
     """
     if state.get("is_cv_count_query"):
         state["cv_context"] = []
+        state["jd_context"] = []
         state["retrieval_stats"] = {"note": "skipped_for_cv_count_query"}
         return state
 
-    query = state["query"]
+    query           = state["query"]
+    hr_query_intent = state.get("hr_query_intent", "RANK")
+    active_cv_ids   = state.get("active_cv_ids") or []
+
+    # ISSUE-01: Pin-fetch for COMPARE/DETAIL turns — guarantees same CV set is returned.
+    # ISSUE-02: No JD context injected for these intents (not needed, saves tokens).
+    if hr_query_intent in ("COMPARE", "DETAIL") and active_cv_ids:
+        print(f"[HR Retrieve] intent={hr_query_intent} — fetching pinned {len(active_cv_ids)} CV(s)")
+        cv_chunks = await _fetch_pinned_cv_context(
+            cv_ids=active_cv_ids,
+            qdrant_svc=retriever.qdrant_service,
+            cv_collection=retriever.cv_collection,
+        )
+        state["cv_context"]      = cv_chunks
+        state["jd_context"]      = []  # ISSUE-02: no JD needed for compare/detail
+        state["retrieval_stats"] = {
+            "strategy": "pinned_cv_fetch",
+            "cv_ids": active_cv_ids,
+            "chunks_fetched": len(cv_chunks),
+        }
+        return state
+
     top_n = _extract_top_n_from_query(query)
-    print(f"[HR Retrieve] mode={state['mode']}, top_n={top_n}")
+    print(f"[HR Retrieve] intent={hr_query_intent}, mode={state['mode']}, top_n={top_n}")
 
     if state["mode"] == "HR_MODE":
         result = await retriever.retrieve_for_hr_mode_hr(
@@ -259,9 +381,18 @@ async def retrieve_hr_context_node(state: HRChatState) -> HRChatState:
             top_n=top_n,
         )
 
-    state["cv_context"] = result.get("cv_context", [])
-    state["jd_context"] = result.get("jd_context", [])
+    state["cv_context"]      = result.get("cv_context", [])
+    state["jd_context"]      = result.get("jd_context", [])
     state["retrieval_stats"] = result.get("retrieval_stats", {})
+
+    # ISSUE-01: Persist active_cv_ids from this RANK/GENERAL turn for follow-up
+    new_active_ids = list({
+        chunk.get("payload", {}).get("cvId")
+        for chunk in state["cv_context"]
+        if chunk.get("payload", {}).get("cvId") is not None
+    })
+    state["active_cv_ids"] = new_active_ids
+    print(f"[HR Retrieve] Stored active_cv_ids={new_active_ids}")
 
     return state
 
@@ -473,12 +604,18 @@ Guidelines:
     user_prompt = f"""## Conversation History:
 {history_text if history_text else "(New session)"}
 
-## Job Description Context:
-{jd_text}
-
 ## CV Data Retrieved from System:
 {cv_text}
 """
+    # ISSUE-02: Only inject JD block when data is actually present — prevents
+    # "No Job Description data found" noise on COMPARE/DETAIL turns.
+    if state.get("jd_context"):
+        user_prompt = (
+            f"## Conversation History:\n{history_text if history_text else '(New session)'}\n\n"
+            f"## Job Description Context:\n{jd_text}\n\n"
+            f"## CV Data Retrieved from System:\n{cv_text}\n"
+        )
+
     if sql_text:
         user_prompt += f"\n## Application Records from Database:\n{sql_text}\n"
 
@@ -693,7 +830,7 @@ async def hr_scoring_node(state: HRChatState) -> HRChatState:
 
     # Build JD text for the scoring prompt
     jd_text = "\n\n".join(
-        c.get("payload", {}).get("text", "") for c in jd_context
+        get_chunk_text(c.get("payload", {})) for c in jd_context
     ).strip() or "(JD not available)"
 
     llm = _build_llm(temperature=0.1)  # low temp for deterministic scoring
@@ -711,7 +848,7 @@ async def hr_scoring_node(state: HRChatState) -> HRChatState:
             if c.get("payload", {}).get("cvId") == cv_id
         ]
         cv_text = "\n\n".join(
-            f"[{c.get('payload',{}).get('section','?')}]\n{c.get('payload',{}).get('text','')}"
+            f"[{c.get('payload',{}).get('section','?')}]\n{get_chunk_text(c.get('payload', {}))}"
             for c in cv_chunks
         ).strip() or "(CV content not available)"
 
@@ -733,6 +870,8 @@ Evaluate this candidate and respond with ONLY a JSON object (no markdown) in thi
   "skillMiss": "<comma-separated missing skills or 'None'>",
   "learningPath": "<recommended path if POTENTIAL/POOR_FIT, else null>"
 }}"""
+
+        print("HR scoring_prompt: ", scoring_prompt)
 
         try:
             response = await llm.ainvoke([HumanMessage(content=scoring_prompt)])
@@ -805,13 +944,28 @@ async def save_hr_turn_node(state: HRChatState) -> HRChatState:
             role="USER",
             content=state["query"],
         )
-        raw_calls = state.get("function_calls")
+        raw_calls      = state.get("function_calls")
         pending_emails = state.get("pending_emails")
-        
+        active_cv_ids  = state.get("active_cv_ids") or []
+
         if raw_calls:
-            function_call_payload: Optional[str] = json.dumps(raw_calls, ensure_ascii=False)
+            # ISSUE-01: embed active_cv_ids into the function_call payload so it
+            # survives session reload and can be restored on the next turn.
+            payload_dict = (
+                raw_calls if isinstance(raw_calls, dict)
+                else {"calls": raw_calls}
+            )
+            payload_dict["active_cv_ids"] = active_cv_ids
+            function_call_payload: Optional[str] = json.dumps(payload_dict, ensure_ascii=False)
         elif pending_emails:
-            function_call_payload: Optional[str] = json.dumps({"pending_emails": pending_emails}, ensure_ascii=False)
+            cache: dict = {"pending_emails": pending_emails}
+            if active_cv_ids:
+                cache["active_cv_ids"] = active_cv_ids
+            function_call_payload = json.dumps(cache, ensure_ascii=False)
+        elif active_cv_ids:
+            function_call_payload = json.dumps(
+                {"active_cv_ids": active_cv_ids}, ensure_ascii=False
+            )
         else:
             function_call_payload = None
 
@@ -915,7 +1069,10 @@ class HRChatbot:
             "pending_emails":              None,
             "pending_scoring_candidates":  None,
             "conversation_history":        [],
+            "active_cv_ids":               [],        # ISSUE-01
+            "hr_query_intent":             "RANK",    # ISSUE-01
             "cv_context":                  [],
+            "jd_context":                  [],
             "retrieval_stats":             {},
             "system_prompt":               "",
             "user_prompt":                 "",
