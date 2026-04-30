@@ -6,6 +6,10 @@ import org.example.recruitmentservice.dto.response.ApplicationSummaryResponse;
 import org.example.recruitmentservice.dto.response.CandidateApplicationStatusResponse;
 import org.example.recruitmentservice.dto.response.CvStatisticsResponse;
 import org.example.recruitmentservice.dto.response.PositionDetailsResponse;
+import org.example.commonlibrary.dto.response.ErrorCode;
+import org.example.commonlibrary.exception.CustomException;
+import org.example.recruitmentservice.dto.request.EvaluateApplicationRequest;
+import org.example.recruitmentservice.models.entity.CVAnalysis;
 import org.example.recruitmentservice.models.entity.CandidateCV;
 import org.example.recruitmentservice.models.entity.Positions;
 import org.example.recruitmentservice.repository.CVAnalysisRepository;
@@ -68,13 +72,14 @@ public class ChatbotInternalService {
          */
         public List<ApplicationSummaryResponse> getApplicationsByPosition(int positionId) {
                 List<CandidateCV> cvs = candidateCVRepository.findApplicationsByPositionId(positionId);
-                if (cvs.isEmpty()) return List.of();
-                
+                if (cvs.isEmpty())
+                        return List.of();
+
                 List<Integer> cvIds = cvs.stream().map(CandidateCV::getId).collect(Collectors.toList());
-                java.util.Map<Integer, org.example.recruitmentservice.models.entity.CVAnalysis> analysisMap = 
-                        cvAnalysisRepository.findByCandidateCV_IdIn(cvIds).stream()
-                        .collect(Collectors.toMap(a -> a.getCandidateCV().getId(), a -> a));
-                        
+                java.util.Map<Integer, org.example.recruitmentservice.models.entity.CVAnalysis> analysisMap = cvAnalysisRepository
+                                .findByCandidateCV_IdIn(cvIds).stream()
+                                .collect(Collectors.toMap(a -> a.getCandidateCV().getId(), a -> a));
+
                 return cvs.stream()
                                 .map(cv -> toApplicationSummaryResponse(cv, analysisMap.get(cv.getId())))
                                 .collect(Collectors.toList());
@@ -88,10 +93,13 @@ public class ChatbotInternalService {
          * @param passThreshold ngưỡng điểm pass (mặc định 75)
          */
         public CvStatisticsResponse getCvStatistics(int positionId, int passThreshold, String mode) {
-                org.example.recruitmentservice.models.enums.SourceType sourceType = "HR_MODE".equals(mode) ? org.example.recruitmentservice.models.enums.SourceType.HR : org.example.recruitmentservice.models.enums.SourceType.CANDIDATE;
+                org.example.recruitmentservice.models.enums.SourceType sourceType = "HR_MODE".equals(mode)
+                                ? org.example.recruitmentservice.models.enums.SourceType.HR
+                                : org.example.recruitmentservice.models.enums.SourceType.CANDIDATE;
                 long total = candidateCVRepository.countByPositionIdAndSourceType(positionId, sourceType);
                 long scored = cvAnalysisRepository.countScoredByPositionIdAndSourceType(positionId, sourceType);
-                long passed = cvAnalysisRepository.countPassedByPositionIdAndSourceType(positionId, sourceType, passThreshold);
+                long passed = cvAnalysisRepository.countPassedByPositionIdAndSourceType(positionId, sourceType,
+                                passThreshold);
                 return CvStatisticsResponse.builder()
                                 .positionId(positionId)
                                 .total(total)
@@ -120,8 +128,8 @@ public class ChatbotInternalService {
 
                 List<CandidateApplicationStatusResponse.ApplicationRecord> records = applications.stream()
                                 .map(cv -> {
-                                        org.example.recruitmentservice.models.enums.MatchStatus matchStatus =
-                                                cvAnalysisRepository.findByCandidateCV_Id(cv.getId())
+                                        org.example.recruitmentservice.models.enums.MatchStatus matchStatus = cvAnalysisRepository
+                                                        .findByCandidateCV_Id(cv.getId())
                                                         .map(a -> a.getOverallStatus())
                                                         .orElse(null);
                                         Integer score = cvAnalysisRepository.findByCandidateCV_Id(cv.getId())
@@ -143,6 +151,65 @@ public class ChatbotInternalService {
                                 .candidateId(candidateId)
                                 .applications(records)
                                 .build();
+        }
+
+        /**
+         * Cập nhật trạng thái RecruitmentStage của Application CV khi gửi email.
+         */
+        public void updateRecruitmentStage(Integer appCvId, String emailType) {
+                if (appCvId == null || emailType == null)
+                        return;
+
+                candidateCVRepository.findById(appCvId).ifPresent(cv -> {
+                        org.example.recruitmentservice.models.enums.RecruitmentStage newStage = null;
+                        switch (emailType.toUpperCase()) {
+                                case "INTERVIEW_INVITE":
+                                        newStage = org.example.recruitmentservice.models.enums.RecruitmentStage.INTERVIEW_INVITED;
+                                        break;
+                                case "OFFER_LETTER":
+                                        newStage = org.example.recruitmentservice.models.enums.RecruitmentStage.OFFER_SENT;
+                                        break;
+                                case "REJECTION":
+                                        newStage = org.example.recruitmentservice.models.enums.RecruitmentStage.REJECTED;
+                                        break;
+                        }
+                        if (newStage != null) {
+                                cv.setRecruitmentStage(newStage);
+                                candidateCVRepository.save(cv);
+                        }
+                });
+        }
+
+        /**
+         * Lưu điểm đánh giá (CVAnalysis) từ LLM cho một Application CV đã tồn tại.
+         */
+        public void evaluateApplication(EvaluateApplicationRequest request) {
+                if (request.getAppCvId() == null)
+                        return;
+
+                CandidateCV cv = candidateCVRepository.findById(request.getAppCvId())
+                                .orElseThrow(() -> new CustomException(ErrorCode.CV_NOT_FOUND));
+
+                // Nếu CV đã có điểm thì cập nhật, chưa có thì tạo mới
+                CVAnalysis analysis = cvAnalysisRepository.findByCandidateCV_Id(cv.getId()).orElse(new CVAnalysis());
+
+                analysis.setCandidateCV(cv);
+                analysis.setPositionId(request.getPositionId());
+                if (cv.getPosition() != null) {
+                        analysis.setPositionName(cv.getPosition().getName());
+                }
+
+                analysis.setTechnicalScore(request.getTechnicalScore());
+                analysis.setExperienceScore(request.getExperienceScore());
+                analysis.setOverallStatus(request.getOverallStatus());
+                analysis.setFeedback(request.getFeedback());
+                analysis.setSkillMatch(request.getSkillMatch());
+                analysis.setSkillMiss(request.getSkillMiss());
+                analysis.setLearningPath(request.getLearningPath());
+                analysis.setAnalyzedAt(java.time.LocalDateTime.now());
+                analysis.setAnalysisMethod("LLM");
+
+                cvAnalysisRepository.save(analysis);
         }
 
         // -------------------------------------------------------
@@ -172,7 +239,8 @@ public class ChatbotInternalService {
                                 .build();
         }
 
-        private ApplicationSummaryResponse toApplicationSummaryResponse(CandidateCV cv, org.example.recruitmentservice.models.entity.CVAnalysis analysis) {
+        private ApplicationSummaryResponse toApplicationSummaryResponse(CandidateCV cv,
+                        org.example.recruitmentservice.models.entity.CVAnalysis analysis) {
                 ApplicationSummaryResponse.ApplicationSummaryResponseBuilder builder = ApplicationSummaryResponse
                                 .builder()
                                 .candidateId(cv.getCandidateId())
@@ -184,9 +252,9 @@ public class ChatbotInternalService {
 
                 if (analysis != null) {
                         builder.score(analysis.getTechnicalScore())
-                               .feedback(analysis.getFeedback())
-                               .skillMatch(analysis.getSkillMatch())
-                               .skillMiss(analysis.getSkillMiss());
+                                        .feedback(analysis.getFeedback())
+                                        .skillMatch(analysis.getSkillMatch())
+                                        .skillMiss(analysis.getSkillMiss());
                 }
 
                 return builder.build();

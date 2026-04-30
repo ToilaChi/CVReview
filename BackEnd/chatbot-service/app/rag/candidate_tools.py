@@ -5,57 +5,69 @@ from app.config import get_settings
 
 settings = get_settings()
 
+# MatchStatus values that allow finalize_application to proceed
+_APPLY_ALLOWED_STATUSES = {"EXCELLENT_MATCH", "GOOD_MATCH", "POTENTIAL"}
+
 
 @tool
 async def evaluate_cv_fit(position_ids: List[int]) -> str:
     """
-    Tính điểm phù hợp của CV với một hoặc nhiều JDs.
+    Tính điểm phù hợp đa chiều của CV với một hoặc nhiều JDs.
     Gọi khi user hỏi về độ phù hợp hoặc tìm việc.
 
     Args:
         position_ids: Danh sách positionId cần chấm điểm (tối đa 10)
     """
-    # Scoring is handled by the dedicated scoring_node — this tool marker
-    # allows the LLM to signal intent when the cache is cold.
+    # Scoring is handled by the dedicated scoring_node. This tool is a marker
+    # that signals intent when the scored_jobs cache is cold.
     return "Đang phân tích độ phù hợp của bạn với các vị trí. Vui lòng chờ..."
 
 
 @tool
 async def finalize_application(
     position_id: int,
-    score: int,
+    overall_status: str,
+    technical_score: int,
+    experience_score: int,
     feedback: str,
     skill_match: str,
     skill_miss: str,
+    learning_path: Optional[str],
     candidate_id: str,
     session_id: str,
 ) -> str:
     """
-    Nộp đơn ứng tuyển chính thức. CHỈ được gọi khi score >= 70.
+    Nộp đơn ứng tuyển chính thức. CHỈ được gọi khi overallStatus không phải POOR_FIT.
 
     Args:
-        position_id: ID của vị trí ứng tuyển
-        score: Điểm phù hợp (phải >= 70 từ evaluate_cv_fit)
-        feedback: Nhận xét chung từ quá trình đánh giá
-        skill_match: Các kỹ năng phù hợp với yêu cầu vị trí
-        skill_miss: Các kỹ năng còn thiếu so với yêu cầu vị trí
-        candidate_id: UUID của ứng viên (tự động inject từ session)
-        session_id: ID phiên hội thoại (tự động inject từ session)
+        position_id:      ID của vị trí ứng tuyển
+        overall_status:   MatchStatus (EXCELLENT_MATCH / GOOD_MATCH / POTENTIAL)
+        technical_score:  Điểm kỹ thuật (0-100)
+        experience_score: Điểm kinh nghiệm (0-100)
+        feedback:         Nhận xét chung từ quá trình đánh giá
+        skill_match:      Các kỹ năng phù hợp với yêu cầu vị trí
+        skill_miss:       Các kỹ năng còn thiếu so với yêu cầu vị trí
+        learning_path:    Lộ trình học tập (None cho EXCELLENT_MATCH / GOOD_MATCH)
+        candidate_id:     UUID của ứng viên (tự động inject từ session)
+        session_id:       ID phiên hội thoại (tự động inject từ session)
     """
-    if score < settings.SCORE_THRESHOLD:
+    if overall_status not in _APPLY_ALLOWED_STATUSES:
         return (
-            f"Không thể nộp đơn do điểm phù hợp ({score}) dưới mức tối thiểu "
-            f"là {settings.SCORE_THRESHOLD}. Vui lòng phân tích thêm các kỹ năng còn thiếu."
+            f"Không thể nộp đơn: trạng thái '{overall_status}' không đủ điều kiện. "
+            f"Cần đạt EXCELLENT_MATCH, GOOD_MATCH hoặc POTENTIAL để ứng tuyển."
         )
 
     try:
         res = await recruitment_api.finalize_application(
             candidate_id=candidate_id,
             position_id=position_id,
-            score=score,
+            technical_score=technical_score,
+            experience_score=experience_score,
+            overall_status=overall_status,
             feedback=feedback,
             skill_match=skill_match,
             skill_miss=skill_miss,
+            learning_path=learning_path,
             session_id=session_id,
         )
         return f"Nộp đơn thành công. Application CV ID: {res.get('applicationCvId')}"

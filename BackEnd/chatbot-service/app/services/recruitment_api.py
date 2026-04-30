@@ -86,15 +86,30 @@ class RecruitmentAPI:
             res = response.json()
             return res.get("data") or []
             
-    async def finalize_application(self, candidate_id: str, position_id: int, score: int, feedback: str, skill_match: str, skill_miss: str, session_id: str) -> Dict[str, Any]:
+    async def finalize_application(
+        self,
+        candidate_id: str,
+        position_id: int,
+        technical_score: int,
+        experience_score: int,
+        overall_status: str,
+        feedback: str,
+        skill_match: str,
+        skill_miss: str,
+        learning_path: Optional[str],
+        session_id: str
+    ) -> Dict[str, Any]:
         async with httpx.AsyncClient() as client:
             payload = {
                 "candidateId": candidate_id,
                 "positionId": position_id,
-                "score": score,
+                "technicalScore": technical_score,
+                "experienceScore": experience_score,
+                "overallStatus": overall_status,
                 "feedback": feedback,
                 "skillMatch": skill_match,
                 "skillMiss": skill_miss,
+                "learningPath": learning_path,
                 "sessionId": session_id
             }
             response = await client.post(f"{self.base_url}/internal/chatbot/finalize-application", json=payload, headers=self.headers)
@@ -119,8 +134,45 @@ class RecruitmentAPI:
                     return item
             return {}
 
+    async def evaluate_application(
+        self,
+        app_cv_id: int,
+        position_id: int,
+        technical_score: int,
+        experience_score: int,
+        overall_status: str,
+        feedback: str,
+        skill_match: str,
+        skill_miss: str,
+        learning_path: Optional[str],
+        session_id: str
+    ) -> Dict[str, Any]:
+        """Save CV scoring results directly to an existing Application CV."""
+        async with httpx.AsyncClient() as client:
+            payload = {
+                "appCvId": app_cv_id,
+                "positionId": position_id,
+                "technicalScore": technical_score,
+                "experienceScore": experience_score,
+                "overallStatus": overall_status,
+                "feedback": feedback,
+                "skillMatch": skill_match,
+                "skillMiss": skill_miss,
+                "learningPath": learning_path,
+                "sessionId": session_id
+            }
+            response = await client.post(
+                f"{self.base_url}/internal/chatbot/applications/evaluate",
+                json=payload,
+                headers=self.headers
+            )
+            response.raise_for_status()
+            res = response.json()
+            return res.get("data") or {}
+
     async def send_interview_email(
         self,
+        app_cv_id: int,
         candidate_id: str,
         candidate_email: str,
         candidate_name: str,
@@ -133,6 +185,7 @@ class RecruitmentAPI:
         """Trigger SMTP email via recruitment-service notification endpoint."""
         async with httpx.AsyncClient(timeout=15.0) as client:
             payload = {
+                "appCvId": app_cv_id,
                 "candidateId": candidate_id,
                 "candidateEmail": candidate_email,
                 "candidateName": candidate_name,

@@ -3,6 +3,7 @@ package org.example.recruitmentservice.models.entity;
 import jakarta.persistence.*;
 import lombok.*;
 import org.example.recruitmentservice.models.enums.CVStatus;
+import org.example.recruitmentservice.models.enums.RecruitmentStage;
 import org.example.recruitmentservice.models.enums.SourceType;
 
 import java.time.LocalDateTime;
@@ -69,6 +70,10 @@ public class CandidateCV {
     @Column
     @Enumerated(EnumType.STRING)
     private CVStatus cvStatus;
+
+    @Column
+    @Enumerated(EnumType.STRING)
+    private RecruitmentStage recruitmentStage = RecruitmentStage.APPLIED;
 
     @Column
     private LocalDateTime parsedAt;

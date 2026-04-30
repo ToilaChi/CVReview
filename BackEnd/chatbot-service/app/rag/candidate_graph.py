@@ -1,12 +1,13 @@
 """
 LangGraph workflow for the Candidate chatbot.
-Pipeline: Intent Classification → Parallel Retrieval → Scoring → Prompt Build → LLM → Persist → Response
+Pipeline: Intent Classification → Parallel Retrieval → Multi-Dimensional Scoring → Prompt Build → LLM → Persist → Response
 
-Performance optimizations:
-- Dual-mode JD retrieval: full JD text only on Turn 1 (no scoring cache),
-  section-based Qdrant chunks from Turn 2+ (scoring already cached).
-- Hard-rule Tầng 1 routing: apply-intent detected before scoring node to short-circuit.
-- Qdrant CV + JD queries run concurrently via asyncio.gather inside the retriever.
+Phase 4 changes:
+- scoring_node: Updated to produce multi-dimensional JSON (technicalScore, experienceScore,
+  overallStatus, skillMatch, skillMiss, feedback, learningPath).
+- llm_reasoning_node: finalize_application guardrail updated — blocks on POOR_FIT status,
+  allows EXCELLENT_MATCH / GOOD_MATCH / POTENTIAL.
+- candidate_tools.finalize_application updated to pass multi-score fields to Java.
 """
 
 import json
@@ -35,9 +36,12 @@ _APPLY_PATTERNS = re.compile(
     re.IGNORECASE,
 )
 
+# MatchStatus values that allow application submission
+_APPLY_ALLOWED_STATUSES = {"EXCELLENT_MATCH", "GOOD_MATCH", "POTENTIAL"}
+
 
 def _is_apply_intent(query: str) -> bool:
-    """Tầng 1: Hard-rule detect apply intent trước khi qua scoring node."""
+    """Tầng 1: Hard-rule detect apply intent before scoring node."""
     return bool(_APPLY_PATTERNS.search(query))
 
 
@@ -54,22 +58,20 @@ class ChatState(TypedDict):
     # Session
     conversation_history: List[Dict[str, Any]]
     active_position_ids: List[int]
-    # Map of {positionId -> "Name Language Level"} built in Node 0.
-    # Used by Node 4 for clean finalize confirmation without markdown artifacts.
     position_ref_map: Dict[int, str]
 
     # Processing
     intent: Literal["jd_search", "jd_analysis", "cv_analysis", "general"]
     intent_confidence: float
     domain: str
-    is_apply_intent: bool  # Tầng 1 hard-rule flag
+    is_apply_intent: bool
 
     # Retrieved context
     cv_context: List[Dict[str, Any]]
     jd_context: List[Dict[str, Any]]
     retrieval_stats: Dict[str, Any]
 
-    # Pre-screening scores (lightweight pass before main LLM call)
+    # Multi-dimensional pre-screening scores
     scored_jobs: Optional[List[Dict[str, Any]]]
 
     # LLM pipeline
@@ -114,8 +116,7 @@ async def load_session_history_node(state: ChatState) -> ChatState:
         try:
             history = await recruitment_api.get_history(state["session_id"], limit=settings.MAX_HISTORY_TURNS)
 
-            # --- Scoring Cache Extraction ---
-            # Look backwards for the most recent ASSISTANT message containing scored_jobs array
+            # Restore multi-dimensional scored_jobs from the most recent ASSISTANT turn
             for turn in reversed(history):
                 if turn.get("role") == "ASSISTANT":
                     func_data_str = turn.get("functionCall")
@@ -124,7 +125,7 @@ async def load_session_history_node(state: ChatState) -> ChatState:
                             func_data = json.loads(func_data_str)
                             if isinstance(func_data, dict) and "scored_jobs" in func_data:
                                 state["scored_jobs"] = func_data["scored_jobs"]
-                                print(f"[Cache Hitting] Restored {len(state['scored_jobs'])} scored jobs from history.")
+                                print(f"[Cache Hit] Restored {len(state['scored_jobs'])} scored jobs from history.")
                                 break
                         except json.JSONDecodeError:
                             continue
@@ -136,8 +137,7 @@ async def load_session_history_node(state: ChatState) -> ChatState:
 
     async def _get_active_positions():
         try:
-            positions = await recruitment_api.get_active_positions()
-            return positions
+            return await recruitment_api.get_active_positions()
         except Exception as e:
             print(f"[API Error] Could not load active positions: {e}")
             return []
@@ -146,7 +146,6 @@ async def load_session_history_node(state: ChatState) -> ChatState:
     state["conversation_history"] = history
     state["active_position_ids"] = [p["id"] for p in positions]
 
-    # Build reference map: {id -> "Name Language Level"} for clean UX in finalize step
     ref_map: Dict[int, str] = {}
     for p in positions:
         parts = [p.get("name", ""), p.get("language", ""), p.get("level", "")]
@@ -154,7 +153,6 @@ async def load_session_history_node(state: ChatState) -> ChatState:
         ref_map[p["id"]] = label
     state["position_ref_map"] = ref_map
 
-    # Tầng 1: Detect apply intent early — will short-circuit scoring node if cached
     state["is_apply_intent"] = _is_apply_intent(state["query"])
     if state["is_apply_intent"]:
         print("[Tầng 1] Apply intent detected via hard-rule — will skip scoring if cache hit.")
@@ -176,7 +174,6 @@ def classify_intent_node(state: ChatState) -> ChatState:
     state["intent_confidence"] = result["confidence"]
     state["domain"] = result["domain"]
 
-    # Apply intent always needs jd_search context (scored_jobs) to finalize
     if state.get("is_apply_intent") and state["intent"] not in ("jd_search",):
         state["intent"] = "jd_search"
         print("[Tầng 1] Intent overridden to jd_search for apply flow.")
@@ -185,24 +182,18 @@ def classify_intent_node(state: ChatState) -> ChatState:
 
 
 # ---------------------------------------------------------------------------
-# Node 2 — Retrieve context (Dual-mode JD retrieval)
+# Node 2 — Retrieve context (Dual-mode JD retrieval with Reranking)
 # ---------------------------------------------------------------------------
 
 async def retrieve_context_node(state: ChatState) -> ChatState:
     """
-    Node 2 — Dual-mode JD retrieval strategy based on scoring cache:
+    Node 2 — Dual-mode JD retrieval strategy based on scoring cache.
 
-    Mode A — No cache (Turn 1):
-      1. Qdrant returns lightweight JD chunk hits.
-      2. Extract unique positionIds.
-      3. Fetch FULL JdText per positionId via Java API (Small-to-Big).
-      4. Feed full text to scoring LLM for precise evaluation.
+    Reranker is integrated inside retriever — JD chunks are fetched in bulk
+    from Qdrant, reranked by Cross-Encoder, then grouped by positionId (Max Score).
 
-    Mode B — Cache exists (Turn 2+):
-      1. Qdrant returns section-based chunk hits (semantic search).
-      2. Use chunk hits directly — no Java API call.
-      3. LLM answers from relevant section chunks (benefits, process, etc.).
-      Benefit: Reduces latency + improves answer precision for follow-up questions.
+    Mode A — No cache (Turn 1): Fetch full JD text after reranking for scoring precision.
+    Mode B — Cache exists (Turn 2+): Use reranked section chunks directly.
     """
     intent = state["intent"]
     has_scoring_cache = bool(state.get("scored_jobs"))
@@ -218,10 +209,9 @@ async def retrieve_context_node(state: ChatState) -> ChatState:
 
     cv_context = result.get("cv_context", [])
     chunk_hits  = result.get("jd_context", [])
-    jd_context  = chunk_hits  # default: use raw chunks
+    jd_context  = chunk_hits
 
     if intent in ("jd_search", "jd_analysis") and chunk_hits:
-        # Collect unique positionIds from Qdrant chunk payloads
         seen: set = set()
         position_ids: List[int] = []
         for hit in chunk_hits:
@@ -231,8 +221,7 @@ async def retrieve_context_node(state: ChatState) -> ChatState:
                 position_ids.append(pid)
 
         if not has_scoring_cache and position_ids:
-            # Mode A: First call — fetch full JD text for scoring precision
-            print(f"[Retriever] Mode A (no cache): {len(chunk_hits)} chunks → fetching full JD for {len(position_ids)} positions")
+            print(f"[Retriever] Mode A (no cache): fetching full JD for {len(position_ids)} positions")
             try:
                 full_jd_list = await recruitment_api.get_position_details(position_ids)
                 jd_context = [
@@ -253,7 +242,6 @@ async def retrieve_context_node(state: ChatState) -> ChatState:
             except Exception as e:
                 print(f"[Retriever] Mode A: Full JD fetch failed, falling back to chunks: {e}")
         else:
-            # Mode B: Subsequent calls — use Qdrant section chunks directly
             jd_context = chunk_hits
             reason = "scoring cache hit" if has_scoring_cache else "no position IDs"
             print(f"[Retriever] Mode B ({reason}): using {len(jd_context)} section chunks")
@@ -273,30 +261,28 @@ async def retrieve_context_node(state: ChatState) -> ChatState:
 
 
 # ---------------------------------------------------------------------------
-# Node 2.5 — Deep CV-JD scoring (jd_search, Turn 1 only)
+# Node 2.5 — Deep CV-JD scoring with multi-dimensional schema
 # ---------------------------------------------------------------------------
 
 async def scoring_node(state: ChatState) -> ChatState:
     """
-    Node 2.5 — Deep CV-JD scoring using the dedicated Pro model (Tiered LLM Routing).
-    Runs only for jd_search intent on Turn 1. Skipped when:
-      - Intent is not jd_search
-      - No JD or CV context available
-      - scored_jobs cache already populated (Turn 2+)
-      - Apply intent with existing cache (Tầng 1 short-circuit)
+    Node 2.5 — Multi-dimensional CV-JD scoring using the dedicated Pro model.
 
-    Uses unified 3-category scoring formula aligned with LlmAnalysisService.java.
+    Runs only for jd_search intent on Turn 1. Produces:
+      technicalScore, experienceScore, overallStatus, skillMatch, skillMiss, feedback, learningPath.
+
+    overallStatus follows the MatchStatus enum:
+      EXCELLENT_MATCH (≥85 tech + ≥80 exp) | GOOD_MATCH (≥70 + ≥65) | POTENTIAL | POOR_FIT
     """
     if state["intent"] != "jd_search" or not state["jd_context"] or not state["cv_context"]:
         state["scored_jobs"] = state.get("scored_jobs")
         return state
 
-    # --- Cache Check (also covers Tầng 1 apply short-circuit) ---
     if state.get("scored_jobs"):
         print("[Scoring] Cache hit — bypassing LLM scoring call.")
         return state
 
-    print(f"[Scoring] Running deep scoring with model: {settings.SCORING_GEMINI_MODEL}...")
+    print(f"[Scoring] Running multi-dimensional scoring with model: {settings.SCORING_GEMINI_MODEL}...")
 
     cv_profile = build_cv_context(state["cv_context"])
 
@@ -312,32 +298,32 @@ async def scoring_node(state: ChatState) -> ChatState:
         jd_text  = payload.get("jdText", "")
         jds_block += f"\n[JD ID: {jd_id} | Title: {jd_title}]\n{jd_text}\n"
 
-    # Unified 3-category formula — aligned with LlmAnalysisService.java
-    # Using reduced strictness: -8 per missing skill (down from -10), relaxed Depth thresholds
     scoring_prompt = f"""You are a strict HR scoring system. Score each CV against the provided JDs.
 
-SCORING SYSTEM (Total 100 pts):
+SCORING SYSTEM:
 
-1. Core Requirement Fit (Max 60 pts):
-   - Start: 60 pts.
+1. Technical Score (0–100):
+   - Start: 100 pts.
    - Deduct 8 pts for each missing REQUIRED skill explicitly stated in JD.
-   - Deduct 12 pts if candidate has < 70%% of required tech stack overall.
+   - Deduct 12 pts if candidate has < 70% of required tech stack overall.
 
-2. Depth of Experience (Max 30 pts):
-   - 22-30 pts: Led architectural decisions, measurable business impact, system design ownership.
-   - 12-21 pts: Mid-level, implemented features with rationale, understands trade-offs.
-   - 0-11 pts:  Junior/basic CRUD projects only, no evidence of scale or architectural thinking.
+2. Experience Score (0–100):
+   - 85-100: Led architectural decisions, measurable business impact, system design ownership.
+   - 65-84:  Mid-level, implemented features with rationale, understands trade-offs.
+   - 40-64:  Junior/basic CRUD projects, limited scale or architectural thinking.
+   - 0-39:   No relevant professional experience.
 
-3. Professionalism & Gaps (Max 10 pts):
-   - Deduct 4 pts for missing required degree/certification if explicitly required.
-   - Deduct 3 pts for poor CV structure or inconsistent skill claims.
+3. Overall Status (derive from scores above):
+   - EXCELLENT_MATCH: technicalScore >= 85 AND experienceScore >= 80
+   - GOOD_MATCH:      technicalScore >= 70 AND experienceScore >= 65
+   - POTENTIAL:       technicalScore >= 55 OR experienceScore >= 55 (but not GOOD_MATCH)
+   - POOR_FIT:        All other cases
 
 RULES:
 - STRICT: If a skill is not explicitly stated in CV, assume candidate does NOT have it.
 - NO HALLUCINATION: Do not infer skills from project context alone.
-- HIERARCHICAL SKILL INFERENCE (Overqualified Candidates): Level Hierarchy is (Intern < Fresher < Junior < Mid-level < Senior < Principal). If a candidate demonstrates advanced skills (e.g., Microservices, React, System Design) or has a higher experience level but the JD requires lower-level basic skills (e.g., HTML/CSS, basic Java), DO NOT penalize for missing basic keywords. Assume basic proficiency. Score them highly. In the feedback, explicitly label them as "Overqualified" and state that their level exceeds the position's requirements.
-- Score 0 only if candidate clearly fails ALL minimum requirements.
-- Use the same logic consistently across all JDs.
+- HIERARCHICAL SKILL INFERENCE: If candidate is overqualified for a lower-level role, do NOT penalize. Score highly. Set feedback to "Overqualified".
+- learningPath: Provide ONLY for POTENTIAL or POOR_FIT. For POOR_FIT, this is MANDATORY. For EXCELLENT_MATCH or GOOD_MATCH, set to null.
 
 CV:
 {cv_profile}
@@ -349,19 +335,20 @@ Return EXACTLY this JSON array (no markdown, no preamble):
 [
   {{
     "positionId": <integer>,
-    "matchedCount": <number of skills matched>,
-    "missedCount": <number of required skills missing>,
-    "score": <final score 0-100>,
+    "technicalScore": <0-100>,
+    "experienceScore": <0-100>,
+    "overallStatus": "<EXCELLENT_MATCH|GOOD_MATCH|POTENTIAL|POOR_FIT>",
     "feedback": "<1 concise HR-tone sentence>",
     "skillMatch": ["<skill>", "<skill>"],
-    "skillMiss": ["<skill>", "<skill>"]
+    "skillMiss": ["<skill>", "<skill>"],
+    "learningPath": "<90-day roadmap string or null>"
   }}
 ]"""
 
     llm = ChatGoogleGenerativeAI(
         model=settings.SCORING_GEMINI_MODEL,
         temperature=0.0,
-        max_output_tokens=1024,
+        max_output_tokens=1500,
         google_api_key=settings.GEMINI_API_KEY,
     )
 
@@ -371,7 +358,7 @@ Return EXACTLY this JSON array (no markdown, no preamble):
         if raw.startswith("```"):
             raw = raw.split("\n", 1)[-1].rsplit("```", 1)[0].strip()
         state["scored_jobs"] = json.loads(raw)
-        print(f"[Scoring] Scored {len(state['scored_jobs'])} positions.")
+        print(f"[Scoring] Scored {len(state['scored_jobs'])} positions (multi-dimensional).")
     except Exception as e:
         print(f"[Scoring Error] JSON parse failed: {e} — proceeding without scores.")
         state["scored_jobs"] = None
@@ -384,7 +371,7 @@ Return EXACTLY this JSON array (no markdown, no preamble):
 # ---------------------------------------------------------------------------
 
 def build_prompts_node(state: ChatState) -> ChatState:
-    """Assemble the system + user prompts, including pre-screened scores for jd_search."""
+    """Assemble the system + user prompts, including multi-dimensional scores for jd_search."""
     system_prompt, user_prompt = get_prompt_for_intent(
         intent=state["intent"],
         query=state["query"],
@@ -426,7 +413,6 @@ async def llm_reasoning_node(state: ChatState) -> ChatState:
     if not response.tool_calls:
         return state
 
-    # --- Tool execution ---
     print("[LLM] Tool calls detected:", response.tool_calls)
     state["function_calls"] = []
     tool_map = {t.name: t for t in CANDIDATE_TOOLS}
@@ -440,18 +426,36 @@ async def llm_reasoning_node(state: ChatState) -> ChatState:
 
         if tool_name == "finalize_application":
             pos_id = tool_args.get("position_id")
-
-            # Resolve position label from ref_map (built in Node 0)
             ref_map = state.get("position_ref_map", {})
             applied_position_name = ref_map.get(pos_id, f"position #{pos_id}")
 
-            # Resolve position_id from scored_jobs cache if LLM passed wrong/None value
             if not pos_id and state.get("scored_jobs"):
-                best = max(state["scored_jobs"], key=lambda j: j.get("score", 0))
-                pos_id = best.get("positionId")
-                tool_args = {**tool_args, "position_id": pos_id}
-                applied_position_name = ref_map.get(pos_id, f"position #{pos_id}")
-                print(f"[Tầng 1] Resolved position_id={pos_id} from scored_jobs cache.")
+                # Resolve to the best-scoring allowed job
+                allowed = [j for j in state["scored_jobs"] if j.get("overallStatus") in _APPLY_ALLOWED_STATUSES]
+                if allowed:
+                    best = max(allowed, key=lambda j: j.get("technicalScore", 0) + j.get("experienceScore", 0))
+                    pos_id = best.get("positionId")
+                    tool_args = {**tool_args, "position_id": pos_id}
+                    applied_position_name = ref_map.get(pos_id, f"position #{pos_id}")
+                    print(f"[Tầng 1] Resolved position_id={pos_id} from scored_jobs cache.")
+
+            # Guardrail: block POOR_FIT applications
+            matched_job = next(
+                (j for j in (state.get("scored_jobs") or []) if j.get("positionId") == pos_id),
+                None,
+            )
+            if matched_job and matched_job.get("overallStatus") not in _APPLY_ALLOWED_STATUSES:
+                skill_miss = matched_job.get("skillMiss", [])
+                learning_path = matched_job.get("learningPath", "")
+                block_msg = (
+                    f"Không thể nộp đơn vào vị trí **{applied_position_name}** "
+                    f"(Trạng thái: **POOR_FIT**).\n\n"
+                    f"**Kỹ năng còn thiếu:** {', '.join(skill_miss) if skill_miss else 'N/A'}\n\n"
+                    f"**Lộ trình cải thiện:** {learning_path or 'Chưa có gợi ý cụ thể.'}"
+                )
+                messages.append(ToolMessage(content=block_msg, tool_call_id=call["id"]))
+                state["function_calls"].append({"name": tool_name, "arguments": tool_args, "result": block_msg})
+                continue
 
             try:
                 tool_res = await tool_map["finalize_application"].ainvoke({
@@ -461,8 +465,7 @@ async def llm_reasoning_node(state: ChatState) -> ChatState:
                 })
                 state["function_calls"].append({"name": tool_name, "arguments": tool_args, "result": tool_res})
                 messages.append(ToolMessage(content=str(tool_res), tool_call_id=call["id"]))
-                
-                # If tool result contains "success", track the name
+
                 if "thành công" in str(tool_res).lower() or "success" in str(tool_res).lower():
                     finalized_positions.append(applied_position_name)
             except Exception as e:
@@ -474,11 +477,7 @@ async def llm_reasoning_node(state: ChatState) -> ChatState:
             messages.append(ToolMessage(content=scored_summary, tool_call_id=call["id"]))
 
         elif tool_name == "check_application_status":
-            # Auto-inject candidate_id — user never needs to provide their own UUID
-            enriched_args = {
-                **tool_args,
-                "candidate_id": state["candidate_id"],
-            }
+            enriched_args = {**tool_args, "candidate_id": state["candidate_id"]}
             try:
                 tool_res = await tool_map["check_application_status"].ainvoke(enriched_args)
                 state["function_calls"].append({"name": tool_name, "arguments": enriched_args, "result": tool_res})
@@ -486,7 +485,6 @@ async def llm_reasoning_node(state: ChatState) -> ChatState:
             except Exception as e:
                 messages.append(ToolMessage(content=f"Status check error: {str(e)}", tool_call_id=call["id"]))
 
-    # Short-circuit: skip second LLM pass if finalize_application was successful
     if finalized_positions:
         pos_list_str = ", ".join(f"**{name}**" for name in finalized_positions)
         state["llm_response"] = (
@@ -495,7 +493,6 @@ async def llm_reasoning_node(state: ChatState) -> ChatState:
         )
         return state
 
-    # Second pass to synthesize tool results into natural language
     if state["function_calls"]:
         llm_no_tools = ChatGoogleGenerativeAI(
             model=settings.GEMINI_MODEL,

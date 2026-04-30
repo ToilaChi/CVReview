@@ -50,7 +50,9 @@ class Settings(BaseSettings):
     RECRUITMENT_SERVICE_URL: str = "http://localhost:8082"
     INTERNAL_SERVICE_SECRET: str = "chatbot-service"
     MAX_HISTORY_TURNS: int = 20
-    SCORE_THRESHOLD: int = 70
+
+    # Reranker — multilingual model to support both Vietnamese and English queries
+    RERANKER_MODEL_NAME: str = "BAAI/bge-reranker-v2-m3"
     
     class Config:
         env_file = ".env"

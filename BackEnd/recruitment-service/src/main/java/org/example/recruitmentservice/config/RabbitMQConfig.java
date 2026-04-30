@@ -20,9 +20,11 @@ import java.util.Map;
 @EnableRabbit
 public class RabbitMQConfig {
 
-    /* ============================================================
+    /*
+     * ============================================================
      * 1. UPLOAD FLOW (Recruitment-service OWN, consumes)
-     * ============================================================ */
+     * ============================================================
+     */
     public static final String CV_UPLOAD_QUEUE = "cv.upload.queue";
     public static final String CV_UPLOAD_DLQ = "cv.upload.queue.dlq";
     public static final String CV_UPLOAD_EXCHANGE = "cv.upload.exchange.dlx";
@@ -61,10 +63,12 @@ public class RabbitMQConfig {
                 .with(CV_UPLOAD_DLQ_ROUTING_KEY);
     }
 
-
-    /* ============================================================
-     * 2. JD CHUNKED FLOW (published by PositionService, consumed by embedding-service)
-     * ============================================================ */
+    /*
+     * ============================================================
+     * 2. JD CHUNKED FLOW (published by PositionService, consumed by
+     * embedding-service)
+     * ============================================================
+     */
     public static final String JD_CHUNKED_QUEUE = "jd.chunked.queue";
     public static final String JD_CHUNKED_DLQ = "jd.chunked.queue.dlq";
     public static final String JD_CHUNKED_EXCHANGE = "jd.chunked.exchange";
@@ -110,9 +114,11 @@ public class RabbitMQConfig {
         return QueueBuilder.durable(JD_EMBED_REPLY_QUEUE).build();
     }
 
-    /* ============================================================
+    /*
+     * ============================================================
      * 3. CV EMBED FLOW (Two-Stage Pipeline — Stage 2 input)
-     * ============================================================ */
+     * ============================================================
+     */
     public static final String CV_EMBED_QUEUE = "cv.embed.queue";
     public static final String CV_EMBED_DLQ = "cv.embed.queue.dlq";
     public static final String CV_EMBED_EXCHANGE = "cv.embed.exchange";
@@ -151,12 +157,13 @@ public class RabbitMQConfig {
                 .with(CV_EMBED_DLQ_ROUTING_KEY);
     }
 
-
-    /* ============================================================
+    /*
+     * ============================================================
      * 4. EXTRACTION FLOW (Two-Stage Pipeline — Stage 1)
-     *    recruitment-service publishes here after parsing.
-     *    ExtractCVListener consumes, calls Gemini, then publishes to cv.embed.queue.
-     * ============================================================ */
+     * recruitment-service publishes here after parsing.
+     * ExtractCVListener consumes, calls Gemini, then publishes to cv.embed.queue.
+     * ============================================================
+     */
     public static final String CV_EXTRACT_QUEUE = "cv.extract.queue";
     public static final String CV_EXTRACT_DLQ = "cv.extract.queue.dlq";
     public static final String CV_EXTRACT_EXCHANGE = "cv.extract.exchange.dlx";
@@ -187,11 +194,13 @@ public class RabbitMQConfig {
                 .with(CV_EXTRACT_DLQ_ROUTING_KEY);
     }
 
-    /* ============================================================
+    /*
+     * ============================================================
      * 5. EMBED REPLY FLOW (Two-Stage Pipeline — Stage 2 reply)
-     *    embedding-service publishes here after Qdrant upsert.
-     *    EmbedReplyListener consumes to update DB status.
-     * ============================================================ */
+     * embedding-service publishes here after Qdrant upsert.
+     * EmbedReplyListener consumes to update DB status.
+     * ============================================================
+     */
     public static final String CV_EMBED_REPLY_QUEUE = "cv.embed.reply.queue";
     public static final String CV_EMBED_REPLY_DLQ = "cv.embed.reply.queue.dlq";
     public static final String CV_EMBED_REPLY_EXCHANGE = "cv.embed.reply.exchange.dlx";
@@ -222,10 +231,11 @@ public class RabbitMQConfig {
                 .with(CV_EMBED_REPLY_DLQ_ROUTING_KEY);
     }
 
-
-    /* ============================================================
+    /*
+     * ============================================================
      * 6. COMMON SETTINGS
-     * ============================================================ */
+     * ============================================================
+     */
 
     @Bean
     public Jackson2JsonMessageConverter messageConverter() {
@@ -233,7 +243,8 @@ public class RabbitMQConfig {
     }
 
     /**
-     * Default factory – dùng cho các Queue xử lý nhanh (scoring result, JD parsed…).
+     * Default factory – dùng cho các Queue xử lý nhanh (scoring result, JD
+     * parsed…).
      * concurrency nhỏ, có RetryTemplate, có transaction.
      */
     @Bean
@@ -258,10 +269,12 @@ public class RabbitMQConfig {
 
     /**
      * Factory chuyên dụng cho CV Parsing Queue (cv.upload.queue).
-     * Mỗi CV parse mất 10-60s (polling LlamaParse API) nên cần nhiều thread song song.
+     * Mỗi CV parse mất 10-60s (polling LlamaParse API) nên cần nhiều thread song
+     * song.
      * - concurrency=5 / max=10: xử lý 5-10 CVs đồng thời.
      * - prefetchCount=1: mỗi thread chỉ nhận 1 message, tránh tồn đọng.
-     * - KHÔNG dùng RetryTemplate: logic retry được xử lý thủ công bên trong LlamaParseClient.
+     * - KHÔNG dùng RetryTemplate: logic retry được xử lý thủ công bên trong
+     * LlamaParseClient.
      * - KHÔNG transaction: operation chính là HTTP call ra ngoài (LlamaParse API).
      */
     @Bean
@@ -294,9 +307,9 @@ public class RabbitMQConfig {
         SimpleRabbitListenerContainerFactory factory = new SimpleRabbitListenerContainerFactory();
         factory.setConnectionFactory(connectionFactory);
         factory.setMessageConverter(messageConverter);
-        factory.setConcurrentConsumers(1);
-        factory.setMaxConcurrentConsumers(2);
-        factory.setPrefetchCount(1);
+        factory.setConcurrentConsumers(2);
+        factory.setMaxConcurrentConsumers(3);
+        factory.setPrefetchCount(2);
         factory.setDefaultRequeueRejected(false);
         return factory;
     }

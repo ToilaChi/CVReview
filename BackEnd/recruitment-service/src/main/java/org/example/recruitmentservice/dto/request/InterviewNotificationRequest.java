@@ -11,6 +11,7 @@ import lombok.NoArgsConstructor;
 @Getter
 @NoArgsConstructor
 public class InterviewNotificationRequest {
+    private Integer appCvId;
     private String candidateId;
     private String candidateEmail;
     private String candidateName;

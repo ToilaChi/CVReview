@@ -1,7 +1,7 @@
 """
 Prompt templates for the CVReview chatbot system.
 - All prompts in English with professional HR tone.
-- JD_SEARCH_PROMPT uses pre-screened scores from scoring_node — no second LLM call.
+- JD_SEARCH_PROMPT uses pre-screened multi-dimensional scores from scoring_node.
 - build_jd_context() applies NO truncation: Mode A (full JD) and Mode B (section chunks)
   are both passed verbatim so the LLM can extract the exact section it needs.
 - Three focused sub-templates cover the most common follow-up intents:
@@ -115,7 +115,7 @@ Respond using this structure:
 
 ## Candidate Fit Assessment
 
-**Match Score:** [X/10]
+**Overall Status:** [EXCELLENT_MATCH / GOOD_MATCH / POTENTIAL / POOR_FIT]
 
 **Strengths (CV → JD evidence):**
 - [CV evidence] → meets [JD requirement]
@@ -124,7 +124,7 @@ Respond using this structure:
 **Gaps:**
 • [Missing skill/exp from JD] • [Missing skill/exp] • [Missing skill/exp]
 
-**Verdict:** [Apply Now / Prepare First / Not Suitable]
+**Verdict:** [Apply Now ✓ / Prepare First ⚡ / Not Suitable ✗]
 
 **HR Reasoning:** [2 sentences max — direct, substantive, written as a hiring decision rationale]
 
@@ -139,7 +139,7 @@ Rules: Evidence-based only, no salary invention. Language: Same as the user's qu
 
 
 # ============================================================
-# JD SEARCH PROMPT — Inline scoring (eliminates separate scoring LLM call)
+# JD SEARCH PROMPT — Multi-dimensional scoring display
 # ============================================================
 
 JD_SEARCH_PROMPT = """You are a Senior HR Professional matching a candidate to open positions.
@@ -147,7 +147,7 @@ JD_SEARCH_PROMPT = """You are a Senior HR Professional matching a candidate to o
 Below you are given:
 1. The candidate's CV (retrieved sections)
 2. Available job positions with their JD text
-3. Pre-computed fit scores from an initial screening pass
+3. Pre-computed multi-dimensional fit scores from an initial screening pass
 
 Your task: Deliver a professional job-match advisory — the kind a senior recruiter gives in a face-to-face session.
 
@@ -169,16 +169,20 @@ CANDIDATE QUESTION:
 
 ## Top Matching Positions
 
-### [Rank]. [Position Title] — Fit Score: [score]/100
+### [Rank]. [Position Title] — Overall: [overallStatus] | Technical: [technicalScore]/100 | Experience: [experienceScore]/100
 
 **HR Assessment:** [2-3 sentences — frank evaluation of this candidate for this specific role. Mention the single strongest alignment and the most critical gap. No generic filler.]
 
-**Actionable Advice:** [1-2 sentences. Tell them exactly what to fix or what to do next for this role.]
+**Verdict:**
+- EXCELLENT_MATCH / GOOD_MATCH → ✅ **Apply Now** — You are a strong fit.
+- POTENTIAL → ⚡ **Prepare First** — You have potential but need to address [key gap].
+- POOR_FIT → ✗ **Not Suitable** — [Direct explanation of the main blocker].
 
-**Verdict:** [Apply Now ✓ / Prepare First ⚡ / Not Suitable ✗]
+**If POTENTIAL or POOR_FIT — Learning Path:**
+[Concrete 30-60 day roadmap to close the most critical skill gap. Real resources, realistic timeframes.]
 
 ---
-[Repeat for each position, ranked by score descending]
+[Repeat for each position, ranked by (technicalScore + experienceScore) descending]
 
 ## Overall Recommendation
 [1-2 sentences summarizing which position(s) to prioritize and the immediate next step.]
@@ -187,8 +191,8 @@ CANDIDATE QUESTION:
 Rules:
 - Scores come from pre-screened fit data — do not invent new scores
 - HR Assessment per position: max 3 sentences, be substantive not generic
-- Actionable Advice per position: max 2 sentences
-- If candidate is labeled "Overqualified" in the Initial Feedback, strongly suggest applying for higher-level roles instead of penalizing missing basic skills.
+- For POOR_FIT: ALWAYS display skillMiss and learningPath — never skip this
+- If candidate is labeled "Overqualified", strongly suggest applying for higher-level roles
 - If no positions available: state clearly and advise on next steps
 - Language: Same as the user's question (Vietnamese by default)
 """
@@ -299,7 +303,7 @@ CANDIDATE QUESTION:
 - [Interview prep / mock project / certification exam]
 
 ## Honest Assessment
-[2–3 sentences. Will these improvements realistically change the hiring outcome? What is the minimum viable improvement to reach score ≥70?]
+[2–3 sentences. Will these improvements realistically change the hiring outcome? What is the minimum viable improvement to reach GOOD_MATCH status?]
 
 ---
 Rules: Base all gaps on the provided CV vs JD data. Give real resource names (Udemy, LeetCode, official docs), realistic timeframes. No generic advice. Language: Same as the user's question (Vietnamese by default)."""
@@ -337,7 +341,7 @@ def build_cv_context(cv_chunks: list) -> str:
         payload = chunk.get("payload", {})
         section = payload.get("section", "Unknown")
         text    = payload.get("chunkText", "").strip()
-        score   = chunk.get("score", 0)
+        score   = chunk.get("reranker_score", chunk.get("score", 0))
 
         if not text:
             continue
@@ -367,13 +371,13 @@ def build_jd_context(jd_docs: list) -> str:
         position = payload.get("positionName") or payload.get("position", "Unknown Position")
         jd_id    = payload.get("positionId") or payload.get("jdId", "N/A")
         jd_text  = (payload.get("jdText") or payload.get("chunkText", "")).strip()
-        score    = doc.get("score", 0)
+        score    = doc.get("reranker_score", doc.get("score", 0))
 
         if not jd_text:
             continue
 
         context_parts.append(
-            f"[Position {i} | ID: {jd_id} | Title: {position} | Similarity: {score:.2f}]\n{jd_text}\n"
+            f"[Position {i} | ID: {jd_id} | Title: {position} | Relevance: {score:.2f}]\n{jd_text}\n"
         )
 
     return "\n".join(context_parts) if context_parts else "No relevant job positions found."
@@ -388,17 +392,21 @@ def build_combined_context(cv_chunks: list, jd_docs: list) -> str:
 
 
 def build_scored_jobs_context(scored_jobs: list) -> str:
-    """Serialize pre-screened fit scores into a readable block for the LLM."""
+    """Serialize pre-screened multi-dimensional fit scores into a readable block for the LLM."""
     if not scored_jobs:
         return "No pre-screened fit data available."
 
     lines = []
     for job in scored_jobs:
         lines.append(
-            f"Position ID {job.get('positionId')} — Score: {job.get('score')}/100\n"
+            f"Position ID {job.get('positionId')} — "
+            f"Technical: {job.get('technicalScore', 'N/A')}/100 | "
+            f"Experience: {job.get('experienceScore', 'N/A')}/100 | "
+            f"Status: {job.get('overallStatus', 'N/A')}\n"
             f"  Skills Matched: {job.get('skillMatch', 'N/A')}\n"
             f"  Skills Missing: {job.get('skillMiss', 'N/A')}\n"
-            f"  Initial Feedback: {job.get('feedback', 'N/A')}"
+            f"  Feedback: {job.get('feedback', 'N/A')}\n"
+            f"  Learning Path: {job.get('learningPath', 'N/A')}"
         )
     return "\n\n".join(lines)
 

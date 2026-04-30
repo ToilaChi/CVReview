@@ -4,14 +4,10 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import org.example.recruitmentservice.models.enums.MatchStatus;
 
-/**
- * Payload finalize_application từ chatbot-service.
- * Chứa kết quả đánh giá đa chiều từ LLM scoring node.
- */
 @Getter
 @NoArgsConstructor
-public class FinalizeApplicationRequest {
-    private String candidateId;
+public class EvaluateApplicationRequest {
+    private Integer appCvId;
     private Integer positionId;
     private Integer technicalScore;
     private Integer experienceScore;

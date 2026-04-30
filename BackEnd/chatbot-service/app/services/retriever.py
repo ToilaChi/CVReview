@@ -2,9 +2,22 @@ from typing import List, Dict, Any, Optional, Literal
 from qdrant_client.models import Filter, FieldCondition, MatchValue, MatchAny
 from app.services.embedding import embedding_service
 from app.services.qdrant import qdrant_service
+from app.services.reranker import reranker
 from app.config import get_settings
 
 settings = get_settings()
+
+# ---------------------------------------------------------------------------
+# Retrieval fetch multiplier: fetch (N * RERANK_FETCH_MULTIPLIER) chunks from
+# Qdrant so the Cross-Encoder has a representative pool to rerank.
+# ---------------------------------------------------------------------------
+_RERANK_FETCH_MULTIPLIER = 3
+_RERANK_FETCH_MIN = 30
+
+
+def _rerank_fetch_limit(top_n: int) -> int:
+    """Calculate how many chunks to pull from Qdrant before reranking."""
+    return max(top_n * _RERANK_FETCH_MULTIPLIER, _RERANK_FETCH_MIN)
 
 
 def get_adaptive_threshold(intent: str, has_specific_filter: bool) -> float:
@@ -32,7 +45,7 @@ def get_adaptive_top_k(intent: str, query_length: int) -> tuple[int, int]:
     Calculate adaptive top_k based on intent and query word count.
 
     Returns:
-        (cv_top_k, jd_top_k)
+        (cv_top_k, jd_top_k) — number of *unique IDs* to return after reranking.
     """
     base_config = {
         "cv_analysis": (8, 0),
@@ -42,7 +55,7 @@ def get_adaptive_top_k(intent: str, query_length: int) -> tuple[int, int]:
     }
     cv_k, jd_k = base_config.get(intent, (5, 3))
 
-    # Boost for complex queries (>15 words)
+    # Boost for complex queries (> 15 words)
     if query_length > 15:
         cv_k = min(cv_k + 2, 10)
         jd_k = min(jd_k + 1, 7)
@@ -52,15 +65,16 @@ def get_adaptive_top_k(intent: str, query_length: int) -> tuple[int, int]:
 
 class CareerCounselorRetriever:
     """
-    Retrieval layer for both Candidate Chatbot and HR Chatbot.
+    Two-Stage retrieval layer: Qdrant Vector Search → Local Cross-Encoder Reranking.
 
-    TIER 1 IMPROVEMENTS:
-    - Adaptive top_k based on intent and query length.
-    - Adaptive threshold based on filter specificity.
-    - Retrieval quality monitoring.
+    Phase 4 changes:
+    - All public HR methods support dynamic top_n parsed from user query.
+    - Reranking is applied at chunk level; results are grouped by cvId/positionId
+      using Max Score before being trimmed to Top-N.
+    - Candidate Chatbot uses the same rerank pattern but groups by positionId.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.embedding_service = embedding_service
         self.qdrant_service = qdrant_service
         self.cv_collection = settings.CV_COLLECTION_NAME
@@ -75,7 +89,7 @@ class CareerCounselorRetriever:
         jd_id: Optional[int] = None,
         top_k: Optional[int] = None,
         score_threshold: Optional[float] = None,
-        active_jd_ids: Optional[List[int]] = None
+        active_jd_ids: Optional[List[int]] = None,
     ) -> Dict[str, Any]:
         """Candidate Chatbot: intent-based retrieval with adaptive parameters."""
         query_vector = self.embedding_service.embed_text(query, is_query=True)
@@ -91,6 +105,7 @@ class CareerCounselorRetriever:
 
         if intent == "jd_search":
             return await self._retrieve_jd_search_with_cv(
+                query=query,
                 query_vector=query_vector,
                 candidate_id=candidate_id,
                 cv_id=cv_id,
@@ -112,6 +127,7 @@ class CareerCounselorRetriever:
                 )
             else:
                 return await self._retrieve_jd_search_with_cv(
+                    query=query,
                     query_vector=query_vector,
                     candidate_id=candidate_id,
                     cv_id=cv_id,
@@ -135,6 +151,7 @@ class CareerCounselorRetriever:
 
     async def _retrieve_jd_search_with_cv(
         self,
+        query: str,
         query_vector: List[float],
         candidate_id: Optional[str] = None,
         cv_id: Optional[int] = None,
@@ -144,10 +161,10 @@ class CareerCounselorRetriever:
         active_jd_ids: Optional[List[int]] = None,
     ) -> Dict[str, Any]:
         """
-        Retrieve CV context (Candidate Chatbot) and JD context sequentially.
+        Candidate Chatbot — retrieve CV context and reranked JD context.
 
-        Note: synchronous QdrantClient is not thread-safe for concurrent calls
-        via run_in_executor — executed sequentially on purpose.
+        JD reranking: Qdrant returns Top (jd_top_k * 3) JD chunks → Cross-Encoder
+        scores each chunk → Group by positionId (Max Score) → Top jd_top_k positions.
         """
         has_cv_filter = cv_id is not None or candidate_id is not None
         if score_threshold is None:
@@ -158,39 +175,44 @@ class CareerCounselorRetriever:
 
         print(f"[Retrieval] CV threshold: {cv_threshold:.2f}, JD threshold: {jd_threshold:.2f}")
 
-        # --- CV filter ---
+        # --- CV filter (no reranking needed — already scoped to 1 candidate) ---
         cv_must = [FieldCondition(key="is_latest", match=MatchValue(value=True))]
         if cv_id:
             cv_must.append(FieldCondition(key="cvId", match=MatchValue(value=cv_id)))
         elif candidate_id:
             cv_must.append(FieldCondition(key="candidateId", match=MatchValue(value=candidate_id)))
-        cv_filters = Filter(must=cv_must)
-
         cv_results = self.qdrant_service.search_similar(
             collection_name=self.cv_collection,
             query_vector=query_vector,
             limit=cv_top_k,
             score_threshold=cv_threshold,
-            filters=cv_filters,
+            filters=Filter(must=cv_must),
         )
 
-        # --- JD filter ---
+        # --- JD filter: over-fetch then rerank → group by positionId ---
+        jd_fetch_limit = _rerank_fetch_limit(jd_top_k)
         jd_must = []
         if active_jd_ids is not None:
             jd_must.append(FieldCondition(key="positionId", match=MatchAny(any=active_jd_ids)))
-        jd_filters = Filter(must=jd_must) if jd_must else None
+        jd_filter = Filter(must=jd_must) if jd_must else None
 
-        jd_results = self.qdrant_service.search_similar(
+        jd_chunks = self.qdrant_service.search_similar(
             collection_name=self.jd_collection,
             query_vector=query_vector,
-            limit=jd_top_k,
+            limit=jd_fetch_limit,
             score_threshold=jd_threshold,
-            filters=jd_filters,
+            filters=jd_filter,
+        )
+
+        jd_results = reranker.rerank_and_group(
+            query=query,
+            chunks=jd_chunks,
+            id_field="positionId",
+            top_n=jd_top_k,
         )
 
         cv_quality = self._assess_retrieval_quality(cv_results, "jd_search")
         jd_quality = self._assess_retrieval_quality(jd_results, "jd_search")
-
         print(f"[Quality] CV: {cv_quality['quality']} (max={cv_quality['max_score']:.2f})")
         print(f"[Quality] JD: {jd_quality['quality']} (max={jd_quality['max_score']:.2f})")
 
@@ -200,14 +222,12 @@ class CareerCounselorRetriever:
             "retrieval_stats": {
                 "cv_chunks_retrieved": len(cv_results),
                 "jd_positions_retrieved": len(jd_results),
+                "jd_chunks_fetched": len(jd_chunks),
                 "cv_score_range": self._get_score_range(cv_results),
                 "jd_score_range": self._get_score_range(jd_results),
                 "cv_quality": cv_quality,
                 "jd_quality": jd_quality,
-                "thresholds_used": {
-                    "cv_threshold": cv_threshold,
-                    "jd_threshold": jd_threshold,
-                },
+                "thresholds_used": {"cv_threshold": cv_threshold, "jd_threshold": jd_threshold},
             },
         }
 
@@ -220,42 +240,32 @@ class CareerCounselorRetriever:
         jd_top_k: int = 2,
         score_threshold: Optional[float] = None,
     ) -> Dict[str, Any]:
-        """Retrieve specific CV chunks and JD chunks for a CV-JD analysis turn."""
+        """Retrieve specific CV chunks and JD chunks for a CV-JD analysis turn (no reranking needed — IDs are explicit)."""
         if not cv_id or not jd_id:
             print(f"[Warning] cv_jd_match called without cv_id or jd_id")
-            return {
-                "cv_context": [],
-                "jd_context": [],
-                "retrieval_stats": {"error": "Missing cv_id or jd_id"},
-            }
+            return {"cv_context": [], "jd_context": [], "retrieval_stats": {"error": "Missing cv_id or jd_id"}}
 
         threshold = score_threshold if score_threshold is not None else get_adaptive_threshold("jd_analysis", True)
         print(f"[Retrieval] Using threshold: {threshold:.2f} (specific CV+JD match)")
 
-        cv_filters = Filter(
-            must=[
-                FieldCondition(key="cvId", match=MatchValue(value=cv_id)),
-                FieldCondition(key="is_latest", match=MatchValue(value=True)),
-            ]
-        )
         cv_results = self.qdrant_service.search_similar(
             collection_name=self.cv_collection,
             query_vector=query_vector,
             limit=cv_top_k,
             score_threshold=threshold,
-            filters=cv_filters,
+            filters=Filter(must=[
+                FieldCondition(key="cvId", match=MatchValue(value=cv_id)),
+                FieldCondition(key="is_latest", match=MatchValue(value=True)),
+            ]),
         )
 
-        # JD chunks are replaced atomically by positionId — no is_latest field
-        jd_filters = Filter(
-            must=[FieldCondition(key="positionId", match=MatchValue(value=jd_id))]
-        )
+        # JD chunks replaced atomically by positionId — no is_latest needed
         jd_results = self.qdrant_service.search_similar(
             collection_name=self.jd_collection,
             query_vector=query_vector,
             limit=jd_top_k,
-            score_threshold=0.0,  # Always retrieve when filter is already specific
-            filters=jd_filters,
+            score_threshold=0.0,
+            filters=Filter(must=[FieldCondition(key="positionId", match=MatchValue(value=jd_id))]),
         )
 
         cv_quality = self._assess_retrieval_quality(cv_results, "jd_analysis")
@@ -283,10 +293,9 @@ class CareerCounselorRetriever:
         cv_top_k: int = 8,
         score_threshold: Optional[float] = None,
     ) -> Dict[str, Any]:
-        """Retrieve CV chunks for a pure CV analysis turn (no JD needed)."""
+        """Retrieve CV chunks for a pure CV analysis turn (no JD needed, no reranking — 1 candidate scope)."""
         has_filter = cv_id is not None or candidate_id is not None
         threshold = score_threshold if score_threshold is not None else get_adaptive_threshold("cv_analysis", has_filter)
-
         print(f"[Retrieval] CV analysis threshold: {threshold:.2f}")
 
         must_conditions = [FieldCondition(key="is_latest", match=MatchValue(value=True))]
@@ -295,13 +304,12 @@ class CareerCounselorRetriever:
         elif candidate_id:
             must_conditions.append(FieldCondition(key="candidateId", match=MatchValue(value=candidate_id)))
 
-        cv_filters = Filter(must=must_conditions)
         cv_results = self.qdrant_service.search_similar(
             collection_name=self.cv_collection,
             query_vector=query_vector,
             limit=cv_top_k,
             score_threshold=threshold,
-            filters=cv_filters,
+            filters=Filter(must=must_conditions),
         )
 
         cv_quality = self._assess_retrieval_quality(cv_results, "cv_analysis")
@@ -320,145 +328,167 @@ class CareerCounselorRetriever:
         }
 
     # ---------------------------------------------------------------------------
-    # HR Chatbot: HR Mode
+    # HR Chatbot — HR Mode
     # ---------------------------------------------------------------------------
 
     async def retrieve_for_hr_mode_hr(
         self,
         query: str,
         position_id: int,
-        top_k: int = 10,
-        score_threshold: float = 0.35,
+        top_n: int = 10,
+        score_threshold: float = 0.30,
     ) -> Dict[str, Any]:
         """
         HR Chatbot — HR Mode.
-        Retrieve CVs uploaded by HR for a specific position.
-        Filter: positionId + sourceType=HR + is_latest=True
-        """
-        query_vector = self.embedding_service.embed_text(query, is_query=True)
 
-        cv_filters = Filter(
-            must=[
+        Qdrant filter: positionId + sourceType=HR + is_latest=True.
+        Over-fetches (top_n * multiplier) chunks then reranks at chunk level,
+        grouping by cvId (Max Score) to select the most relevant Top-N CVs.
+
+        Key design: CVs are ranked against the **Job Description** vector — NOT the
+        HR's raw query string. This guarantees that skills aligned with the JD
+        receive the highest scores rather than ranking by accidental textual
+        similarity to conversational phrases like "tìm top 2 ứng viên".
+
+        Args:
+            query: HR's original question — used only for Reranker cross-encoding.
+            top_n: Number of unique CVs to return. Parsed dynamically from HR's query
+                   by the calling node (e.g. 'top 10' → top_n=10).
+        """
+        fetch_limit = _rerank_fetch_limit(top_n)
+        print(f"[HR Mode] position_id={position_id}, top_n={top_n}, fetch_limit={fetch_limit}")
+
+        # Step 1: Fetch JD chunks for this position to use as the ranking signal.
+        # We embed the JD text so that CV chunks are ranked by skill-match, not by
+        # how similar they are to the HR's conversational query.
+        jd_chunks_for_vector = self.qdrant_service.search_similar(
+            collection_name=self.jd_collection,
+            query_vector=self.embedding_service.embed_text(query, is_query=True),
+            limit=5,
+            score_threshold=0.0,
+            filters=Filter(must=[FieldCondition(key="positionId", match=MatchValue(value=position_id))]),
+        )
+
+        if jd_chunks_for_vector:
+            # Concatenate JD chunk texts to build a rich ranking signal
+            jd_text_for_search = " ".join(
+                c.get("payload", {}).get("text", "") for c in jd_chunks_for_vector
+            ).strip()
+            ranking_vector = self.embedding_service.embed_text(jd_text_for_search, is_query=True)
+            print(f"[HR Mode] Using JD-driven vector for CV ranking ({len(jd_chunks_for_vector)} JD chunks)")
+        else:
+            # Fallback: use HR query if no JD is indexed yet
+            ranking_vector = self.embedding_service.embed_text(query, is_query=True)
+            print("[HR Mode] No JD chunks found — falling back to query vector for CV ranking")
+
+        # Step 2: Fetch CV chunks using the JD vector
+        cv_chunks = self.qdrant_service.search_similar(
+            collection_name=self.cv_collection,
+            query_vector=ranking_vector,
+            limit=fetch_limit,
+            score_threshold=score_threshold,
+            filters=Filter(must=[
                 FieldCondition(key="positionId", match=MatchValue(value=position_id)),
                 FieldCondition(key="sourceType", match=MatchValue(value="HR")),
                 FieldCondition(key="is_latest", match=MatchValue(value=True)),
-            ]
+            ]),
         )
 
-        cv_results = self.qdrant_service.search_similar(
-            collection_name=self.cv_collection,
-            query_vector=query_vector,
-            limit=top_k,
-            score_threshold=score_threshold,
-            filters=cv_filters,
+        # Step 3: Rerank with HR's actual query for conversational relevance
+        cv_results = reranker.rerank_and_group(
+            query=query,
+            chunks=cv_chunks,
+            id_field="cvId",
+            top_n=top_n,
         )
 
-        # Phase 4: Also retrieve JD context for HR mode to provide position name/reqs
-        jd_filters = Filter(
-            must=[FieldCondition(key="positionId", match=MatchValue(value=position_id))]
-        )
-        jd_results = self.qdrant_service.search_similar(
-            collection_name=self.jd_collection,
-            query_vector=query_vector,
-            limit=3,
-            score_threshold=0.0,
-            filters=jd_filters,
-        )
+        # JD context for the LLM prompt: always use query-based vector here
+        jd_results = jd_chunks_for_vector[:3] if jd_chunks_for_vector else []
 
         return {
             "cv_context": cv_results,
             "jd_context": jd_results,
             "retrieval_stats": {
-                "cv_chunks_retrieved": len(cv_results),
+                "cv_chunks_fetched": len(cv_chunks),
+                "cv_unique_ids_returned": len(cv_results),
                 "jd_chunks_retrieved": len(jd_results),
                 "cv_score_range": self._get_score_range(cv_results),
                 "threshold_used": score_threshold,
                 "position_id": position_id,
                 "source_type": "HR",
+                "ranking_strategy": "jd_driven",
+                "top_n_requested": top_n,
             },
         }
 
     # ---------------------------------------------------------------------------
-    # HR Chatbot: Candidate Mode  (Phase 3 — applied_position_ids architecture)
+    # HR Chatbot — Candidate Mode
     # ---------------------------------------------------------------------------
 
     async def retrieve_for_hr_mode_candidate(
         self,
         query: str,
         position_id: int,
-        top_k: int = 10,
+        top_n: int = 10,
         score_threshold: Optional[float] = None,
         active_jd_ids: Optional[List[int]] = None,
     ) -> Dict[str, Any]:
         """
-        HR Chatbot — Candidate Mode (Phase 3).
+        HR Chatbot — Candidate Mode.
 
-        Instead of passing potentially hundreds of candidate_ids via MatchAny
-        (slow, bloated payload), we query directly using:
-            applied_position_ids contains position_id
-            sourceType = CANDIDATE
-            is_latest = True
+        Qdrant filter: applied_position_ids contains position_id + sourceType=CANDIDATE + is_latest=True.
+        Over-fetches chunks then reranks at chunk level, grouping by cvId (Max Score)
+        to select the most relevant Top-N applied candidates.
 
-        This requires Master CV payloads in Qdrant to carry the
-        `applied_position_ids` array (populated by cv_consumer.py and kept
-        up-to-date by the sync script after each new application).
-
-        JD context is also retrieved so the LLM can cross-reference job
-        requirements against candidate profiles.
+        Args:
+            top_n: Number of unique candidate CVs to return. Parsed dynamically from HR's query.
         """
         query_vector = self.embedding_service.embed_text(query, is_query=True)
         threshold = score_threshold if score_threshold is not None else get_adaptive_threshold("hr_candidate", True)
+        fetch_limit = _rerank_fetch_limit(top_n)
 
-        print(f"[Retrieval] CANDIDATE_MODE — position_id={position_id}, threshold={threshold:.2f}")
+        print(f"[Candidate Mode] position_id={position_id}, top_n={top_n}, fetch_limit={fetch_limit}, threshold={threshold:.2f}")
 
-        # --- CV filter: query by applied_position_ids membership ---
-        cv_filters = Filter(
-            must=[
-                FieldCondition(
-                    key="applied_position_ids",
-                    match=MatchAny(any=[position_id]),
-                ),
-                FieldCondition(key="sourceType", match=MatchValue(value="CANDIDATE")),
-                FieldCondition(key="is_latest", match=MatchValue(value=True)),
-            ]
-        )
-
-        cv_results = self.qdrant_service.search_similar(
+        cv_chunks = self.qdrant_service.search_similar(
             collection_name=self.cv_collection,
             query_vector=query_vector,
-            limit=top_k,
+            limit=fetch_limit,
             score_threshold=threshold,
-            filters=cv_filters,
+            filters=Filter(must=[
+                FieldCondition(key="applied_position_ids", match=MatchAny(any=[position_id])),
+                FieldCondition(key="sourceType", match=MatchValue(value="CANDIDATE")),
+                FieldCondition(key="is_latest", match=MatchValue(value=True)),
+            ]),
         )
 
-        print(f"[Retrieval] CANDIDATE_MODE CV chunks found: {len(cv_results)}")
+        cv_results = reranker.rerank_and_group(
+            query=query,
+            chunks=cv_chunks,
+            id_field="cvId",
+            top_n=top_n,
+        )
 
-        # --- JD filter: retrieve relevant JD chunks for this position ---
-        jd_results = []
+        print(f"[Candidate Mode] CV unique IDs after reranking: {len(cv_results)}")
+
         jd_ids_to_search = active_jd_ids if active_jd_ids else [position_id]
-        jd_filters = Filter(
-            must=[
-                FieldCondition(
-                    key="positionId",
-                    match=MatchAny(any=jd_ids_to_search),
-                )
-            ]
-        )
         jd_results = self.qdrant_service.search_similar(
             collection_name=self.jd_collection,
             query_vector=query_vector,
             limit=3,
-            score_threshold=0.0,  # Always retrieve JD when filter is already specific
-            filters=jd_filters,
+            score_threshold=0.0,
+            filters=Filter(must=[
+                FieldCondition(key="positionId", match=MatchAny(any=jd_ids_to_search))
+            ]),
         )
 
-        print(f"[Retrieval] CANDIDATE_MODE JD chunks found: {len(jd_results)}")
+        print(f"[Candidate Mode] JD chunks found: {len(jd_results)}")
 
         return {
             "cv_context": cv_results,
             "jd_context": jd_results,
             "retrieval_stats": {
-                "cv_chunks_retrieved": len(cv_results),
+                "cv_chunks_fetched": len(cv_chunks),
+                "cv_unique_ids_returned": len(cv_results),
                 "jd_chunks_retrieved": len(jd_results),
                 "cv_score_range": self._get_score_range(cv_results),
                 "jd_score_range": self._get_score_range(jd_results),
@@ -466,6 +496,7 @@ class CareerCounselorRetriever:
                 "position_id": position_id,
                 "source_type": "CANDIDATE",
                 "filter_strategy": "applied_position_ids",
+                "top_n_requested": top_n,
             },
         }
 
@@ -489,7 +520,6 @@ class CareerCounselorRetriever:
                 FieldCondition(key="seniorityLevel", match=MatchValue(value=seniority_level))
             )
 
-        filters = Filter(must=must_conditions)
         generic_query = " ".join(required_skills)
         query_vector = self.embedding_service.embed_text(generic_query, is_query=True)
         threshold = get_adaptive_threshold("cv_analysis", True)
@@ -499,7 +529,7 @@ class CareerCounselorRetriever:
             query_vector=query_vector,
             limit=top_k,
             score_threshold=threshold,
-            filters=filters,
+            filters=Filter(must=must_conditions),
         )
 
         return {
@@ -516,15 +546,11 @@ class CareerCounselorRetriever:
         """Extract min/max similarity scores from a result list."""
         if not results:
             return {"min": 0.0, "max": 0.0}
-        scores = [r["score"] for r in results]
+        scores = [r.get("reranker_score", r.get("score", 0.0)) for r in results]
         return {"min": min(scores), "max": max(scores)}
 
     def _assess_retrieval_quality(self, results: List[Dict], intent: str) -> Dict[str, Any]:
-        """
-        Classify retrieval quality as GOOD / ACCEPTABLE / POOR.
-
-        Thresholds are intent-specific to avoid false positives on broad searches.
-        """
+        """Classify retrieval quality as GOOD / ACCEPTABLE / POOR."""
         if not results:
             return {
                 "quality": "POOR",
@@ -534,13 +560,13 @@ class CareerCounselorRetriever:
                 "recommendation": "No results — consider relaxing filters or rewriting query",
             }
 
-        scores = [r["score"] for r in results]
+        scores = [r.get("reranker_score", r.get("score", 0.0)) for r in results]
         max_score = max(scores)
         avg_score = sum(scores) / len(scores)
 
         thresholds = {
             "cv_analysis": {"good": 0.60, "acceptable": 0.40},
-            "jd_search": {"good": 0.70, "acceptable": 0.50},
+            "jd_search":   {"good": 0.70, "acceptable": 0.50},
             "jd_analysis": {"good": 0.60, "acceptable": 0.40},
         }
         t = thresholds.get(intent, {"good": 0.60, "acceptable": 0.40})

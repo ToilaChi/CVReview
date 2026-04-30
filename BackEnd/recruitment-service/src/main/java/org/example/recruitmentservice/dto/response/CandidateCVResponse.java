@@ -3,6 +3,7 @@ package org.example.recruitmentservice.dto.response;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.*;
 import org.example.recruitmentservice.models.enums.CVStatus;
+import org.example.recruitmentservice.models.enums.MatchStatus;
 
 import java.time.LocalDateTime;
 
@@ -22,10 +23,13 @@ public class CandidateCVResponse {
     private String fileName;
     private String filePath;
     private String driveFileUrl;
-    private Integer score;
+    private Integer technicalScore;
+    private Integer experienceScore;
+    private MatchStatus overallStatus;
     private String feedback;
     private String skillMatch;
     private String skillMiss;
+    private String learningPath;
     private CVStatus status;
     private String errorMessage;
     private LocalDateTime failedAt;
@@ -36,4 +40,3 @@ public class CandidateCVResponse {
     private LocalDateTime parsedAt;
     private LocalDateTime scoredAt;
 }
-

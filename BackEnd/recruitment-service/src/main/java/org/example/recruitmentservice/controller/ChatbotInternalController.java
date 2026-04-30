@@ -154,6 +154,19 @@ public class ChatbotInternalController {
     }
 
     /**
+     * POST /internal/chatbot/applications/evaluate
+     * Lưu kết quả chấm điểm (từ Python LLM) vào Database cho một Application CV có sẵn.
+     */
+    @PostMapping("/applications/evaluate")
+    public ApiResponse<Void> evaluateApplication(
+            @RequestBody org.example.recruitmentservice.dto.request.EvaluateApplicationRequest request,
+            HttpServletRequest httpRequest) {
+        validateInternalRequest(httpRequest);
+        chatbotInternalService.evaluateApplication(request);
+        return new ApiResponse<>(ErrorCode.SUCCESS.getCode(), "Application evaluated successfully");
+    }
+
+    /**
      * GET /internal/chatbot/candidate/application-status?candidateId=X[&positionId=Y]
      * Trạng thái ứng tuyển của candidate — check_application_status tool dùng để trả lời
      * câu hỏi "Tôi đã apply chưa?" mà không cần điều hướng UI.
@@ -180,7 +193,13 @@ public class ChatbotInternalController {
             @RequestBody InterviewNotificationRequest request,
             HttpServletRequest httpRequest) {
         validateInternalRequest(httpRequest);
+        
+        // 1. Update recruitment stage in DB (Option B: Java-driven tracking)
+        chatbotInternalService.updateRecruitmentStage(request.getAppCvId(), request.getEmailType());
+        
+        // 2. Send email via SMTP
         notificationService.sendInterviewNotification(request);
+        
         return new ApiResponse<>(ErrorCode.SUCCESS.getCode(), "Email sent successfully");
     }
 

@@ -75,6 +75,7 @@ async def get_cv_summary(position_id: int, mode: str) -> str:
 
 @tool
 async def send_interview_email(
+    app_cv_id: int,
     candidate_id: str,
     candidate_email: str,
     candidate_name: str,
@@ -92,6 +93,7 @@ async def send_interview_email(
     hr_graph sẽ intercept và yêu cầu HR xác nhận trước khi thực thi.
 
     Args:
+        app_cv_id:       ID của Application CV (tự động resolve từ sql_metadata)
         candidate_id:    UUID của ứng viên (tự động resolve từ sql_metadata)
         candidate_email: Địa chỉ email của ứng viên (tự động resolve)
         candidate_name:  Tên ứng viên (tự động resolve)
@@ -107,6 +109,7 @@ async def send_interview_email(
 
     try:
         await recruitment_api.send_interview_email(
+            app_cv_id=app_cv_id,
             candidate_id=candidate_id,
             candidate_email=candidate_email,
             candidate_name=candidate_name,
@@ -194,12 +197,29 @@ async def search_candidates_by_criteria(
         for i, app in enumerate(results, 1):
             name  = app.get("candidateName", "N/A")
             score = app.get("score", "Chưa chấm")
-            lines.append(f"{i}. **{name}** — Điểm: {score}/100")
+            stage = app.get("recruitmentStage", "APPLIED")
+            lines.append(f"{i}. **{name}** — Điểm: {score}/100 — Trạng thái: {stage}")
 
         return "\n".join(lines)
     except Exception as e:
         return f"Lỗi khi tìm kiếm ứng viên: {str(e)}"
 
+@tool
+async def evaluate_candidates(
+    candidate_names: list[str],
+    position_id: int
+) -> str:
+    """
+    Kích hoạt việc chấm điểm CV của một hoặc nhiều ứng viên.
+    Gọi khi HR yêu cầu "hãy đánh giá ứng viên này", "chấm điểm các CV này".
+    Lưu ý: Tool này KHÔNG được gọi trực tiếp bởi LLM mà sẽ được Graph intercept để chạy node chấm điểm `hr_scoring_node`.
+
+    Args:
+        candidate_names: Danh sách tên (hoặc ID) ứng viên cần chấm.
+        position_id: ID vị trí (auto-injected).
+    """
+    # Graph sẽ chặn tool này và tự động gọi hr_scoring_node thay vì chạy logic trong này.
+    return "Đang tiến hành chấm điểm ứng viên... Xin chờ trong giây lát."
 
 # Registered tool list — order matters for bind_tools()
-HR_TOOLS = [get_candidate_details, get_cv_summary, send_interview_email, search_candidates_by_criteria]
+HR_TOOLS = [get_candidate_details, get_cv_summary, send_interview_email, search_candidates_by_criteria, evaluate_candidates]

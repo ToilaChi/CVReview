@@ -43,9 +43,13 @@ public class FinalizeApplicationService {
 
     @Transactional
     public FinalizeApplicationResponse finalizeApplication(FinalizeApplicationRequest request) {
-        // 1. Re-validate score threshold (defense in depth — chatbot-service is the
-        //    authoritative scorer, but we guard against forged requests)
-        if (request.getScore() == null || request.getScore() < SCORE_THRESHOLD) {
+        // 1. Re-validate: must have a passing overallStatus (defense in depth)
+        if (request.getOverallStatus() == null ||
+                request.getOverallStatus() == MatchStatus.POOR_FIT) {
+            throw new CustomException(ErrorCode.SCORE_BELOW_THRESHOLD);
+        }
+        // technicalScore must exist
+        if (request.getTechnicalScore() == null || request.getTechnicalScore() < SCORE_THRESHOLD) {
             throw new CustomException(ErrorCode.SCORE_BELOW_THRESHOLD);
         }
 
@@ -125,7 +129,8 @@ public class FinalizeApplicationService {
         app.setDriveFileUrl(master.getDriveFileUrl());
         app.setCvContent(master.getCvContent());
         // Application CV inherits the Drive file and embedding from Master CV.
-        // EMBEDDED status reflects that this CV is already indexed in Qdrant via the Master.
+        // EMBEDDED status reflects that this CV is already indexed in Qdrant via the
+        // Master.
         app.setCvStatus(CVStatus.EMBEDDED);
         app.setUpdatedAt(now);
         return app;
@@ -137,24 +142,15 @@ public class FinalizeApplicationService {
         analysis.setCandidateCV(applicationCv);
         analysis.setPositionId(position.getId());
         analysis.setPositionName(position.getName() + " " + position.getLanguage() + " " + position.getLevel());
+        analysis.setTechnicalScore(request.getTechnicalScore());
+        analysis.setExperienceScore(request.getExperienceScore());
+        analysis.setOverallStatus(request.getOverallStatus());
         analysis.setFeedback(request.getFeedback());
         analysis.setSkillMatch(request.getSkillMatch());
         analysis.setSkillMiss(request.getSkillMiss());
-        // Derive a MatchStatus from the numeric score provided by the chatbot
-        analysis.setOverallStatus(deriveMatchStatus(request.getScore()));
+        analysis.setLearningPath(request.getLearningPath());
         analysis.setAnalyzedAt(now);
         analysis.setAnalysisMethod("CHATBOT");
         return analysis;
-    }
-
-    /**
-     * Maps the numeric score from the chatbot into a MatchStatus category.
-     * Thresholds mirror the evaluation rubric defined in the chatbot prompt.
-     */
-    private MatchStatus deriveMatchStatus(int score) {
-        if (score >= 85) return MatchStatus.EXCELLENT_MATCH;
-        if (score >= 70) return MatchStatus.GOOD_MATCH;
-        if (score >= 50) return MatchStatus.POTENTIAL;
-        return MatchStatus.POOR_FIT;
     }
 }

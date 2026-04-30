@@ -50,10 +50,29 @@ _EMAIL_CONFIRM_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
+# Pattern to extract an explicit number from HR query (e.g. "top 10", "5 CVs")
+_TOP_N_PATTERN = re.compile(r"\b(?:top\s*)?(\d+)\b", re.IGNORECASE)
+
+_HR_DEFAULT_TOP_N = 10  # Fallback when HR does not specify a number
+
 
 def _is_cv_count_query(query: str) -> bool:
     """Tầng 1: Detect CV/resume count queries to route to get_cv_summary tool."""
     return bool(_CV_COUNT_PATTERN.search(query))
+
+
+def _extract_top_n_from_query(query: str) -> int:
+    """
+    Parse the number of candidates HR wants (e.g. 'top 5', '10 ứng viên').
+    Returns the first non-zero integer found, capped at 50 to prevent runaway fetches.
+    Falls back to _HR_DEFAULT_TOP_N when no number is present.
+    """
+    matches = _TOP_N_PATTERN.findall(query)
+    for m in matches:
+        n = int(m)
+        if n > 0:
+            return min(n, 50)
+    return _HR_DEFAULT_TOP_N
 
 
 # ---------------------------------------------------------------------------
@@ -81,6 +100,9 @@ class HRChatState(TypedDict):
 
     # Email confirmation flow state
     pending_emails: Optional[List[Dict[str, Any]]]  # email args pending HR confirmation
+
+    # Scoring flow state
+    pending_scoring_candidates: Optional[List[Dict[str, Any]]]  # candidates queued for scoring
 
     # Session memory
     conversation_history: List[Dict[str, Any]]
@@ -213,6 +235,7 @@ async def retrieve_hr_context_node(state: HRChatState) -> HRChatState:
       CANDIDATE_MODE → filter applied_position_ids contains position_id + sourceType=CANDIDATE
 
     Skips Qdrant retrieval for Tầng 1 CV count queries (data comes from SQL).
+    Dynamic top_n is parsed from the HR query so responses like 'top 5' or 'top 10' are honoured.
     """
     if state.get("is_cv_count_query"):
         state["cv_context"] = []
@@ -220,17 +243,20 @@ async def retrieve_hr_context_node(state: HRChatState) -> HRChatState:
         return state
 
     query = state["query"]
+    top_n = _extract_top_n_from_query(query)
+    print(f"[HR Retrieve] mode={state['mode']}, top_n={top_n}")
 
     if state["mode"] == "HR_MODE":
         result = await retriever.retrieve_for_hr_mode_hr(
             query=query,
             position_id=state["position_id"],
+            top_n=top_n,
         )
     else:
-        # Phase 3: pass position_id directly — retriever handles the Qdrant filter
         result = await retriever.retrieve_for_hr_mode_candidate(
             query=query,
             position_id=state["position_id"],
+            top_n=top_n,
         )
 
     state["cv_context"] = result.get("cv_context", [])
@@ -440,6 +466,7 @@ Guidelines:
 - When HR requests detailed candidate information, invoke the `get_candidate_details` tool.
 - When HR asks about CV count or statistics, invoke the `get_cv_summary` tool.
 - When HR wants to filter/rank candidates, invoke the `search_candidates_by_criteria` tool.
+- When HR requests to score/evaluate/chấm điểm candidates, invoke the `evaluate_candidates` tool.
 - NEVER reveal raw UUIDs or system IDs to HR in your response.
 {_ADAPTIVE_INSTRUCTION}{pending_note}"""
 
@@ -577,6 +604,7 @@ async def llm_hr_reasoning_node(state: HRChatState) -> HRChatState:
 
             # Exactly 1 match — fill in resolved data, then ask HR to confirm
             matched = matches[0]
+            tool_args["app_cv_id"]       = int(matched.get("appCvId") or 0)
             tool_args["candidate_id"]    = str(matched.get("candidateId") or matched.get("appCvId", ""))
             tool_args["candidate_email"] = tool_args.get("candidate_email") or matched.get("candidateEmail", "")
             tool_args["candidate_name"]  = matched.get("candidateName", candidate_name)
@@ -584,6 +612,31 @@ async def llm_hr_reasoning_node(state: HRChatState) -> HRChatState:
             # Store pending email
             new_pending_emails.append(tool_args)
             continue  # Do NOT execute the tool yet
+
+        # -----------------------------------------------------------------------
+        # Intercept evaluate_candidates tool — route to hr_scoring_node
+        # -----------------------------------------------------------------------
+        if tool_name == "evaluate_candidates":
+            # Populate pending_scoring_candidates from current cv_context + sql_metadata
+            cv_id_to_meta = state.get("cv_id_to_meta", {})
+            cv_ids_in_context: set = set()
+            for chunk in state.get("cv_context", []):
+                cid = chunk.get("payload", {}).get("cvId")
+                if cid is not None:
+                    cv_ids_in_context.add(cid)
+
+            pending = []
+            for cv_id in cv_ids_in_context:
+                meta = cv_id_to_meta.get(cv_id, {})
+                pending.append({
+                    "cvId":          cv_id,
+                    "appCvId":       meta.get("appCvId"),
+                    "candidateName": meta.get("candidateName", f"CV-{cv_id}"),
+                })
+
+            state["pending_scoring_candidates"] = pending
+            print(f"[Scoring] Intercepted evaluate_candidates → {len(pending)} candidate(s) queued")
+            continue  # Do not execute the mock tool; hr_scoring_node will handle it
 
         # -----------------------------------------------------------------------
         # All other tools — execute normally
@@ -618,6 +671,125 @@ async def llm_hr_reasoning_node(state: HRChatState) -> HRChatState:
     final_response = await llm_no_tools.ainvoke(messages)
     state["llm_response"] = _extract_llm_text(final_response.content)
 
+    return state
+
+
+# ---------------------------------------------------------------------------
+# Node 5b — HR Scoring Node (triggered when evaluate_candidates is called)
+# ---------------------------------------------------------------------------
+
+async def hr_scoring_node(state: HRChatState) -> HRChatState:
+    """
+    Scores each candidate in state['pending_scoring_candidates'] against the JD.
+    Flow: LLM scoring prompt → save to DB via /applications/evaluate → return scorecard.
+    """
+    candidates = state.get("pending_scoring_candidates") or []
+    jd_context  = state.get("jd_context", [])
+
+    if not candidates:
+        state["llm_response"] = "Không có ứng viên nào trong ngữ cảnh hiện tại để chấm điểm. Vui lòng thực hiện tìm kiếm trước."
+        state["pending_scoring_candidates"] = None
+        return state
+
+    # Build JD text for the scoring prompt
+    jd_text = "\n\n".join(
+        c.get("payload", {}).get("text", "") for c in jd_context
+    ).strip() or "(JD not available)"
+
+    llm = _build_llm(temperature=0.1)  # low temp for deterministic scoring
+    scoring_results = []
+    saved_count = 0
+
+    for candidate in candidates:
+        cv_id   = candidate.get("cvId")
+        app_cv_id = candidate.get("appCvId")
+        name    = candidate.get("candidateName", f"CV-{cv_id}")
+
+        # Gather all chunks for this candidate from cv_context
+        cv_chunks = [
+            c for c in state.get("cv_context", [])
+            if c.get("payload", {}).get("cvId") == cv_id
+        ]
+        cv_text = "\n\n".join(
+            f"[{c.get('payload',{}).get('section','?')}]\n{c.get('payload',{}).get('text','')}"
+            for c in cv_chunks
+        ).strip() or "(CV content not available)"
+
+        scoring_prompt = f"""You are a senior technical recruiter performing a structured CV evaluation.
+
+## Job Description:
+{jd_text}
+
+## Candidate CV ({name}):
+{cv_text}
+
+Evaluate this candidate and respond with ONLY a JSON object (no markdown) in this exact format:
+{{
+  "technicalScore": <integer 0-100>,
+  "experienceScore": <integer 0-100>,
+  "overallStatus": "<EXCELLENT_MATCH|GOOD_MATCH|POTENTIAL|POOR_FIT>",
+  "feedback": "<2-3 sentence summary>",
+  "skillMatch": "<comma-separated matched skills>",
+  "skillMiss": "<comma-separated missing skills or 'None'>",
+  "learningPath": "<recommended path if POTENTIAL/POOR_FIT, else null>"
+}}"""
+
+        try:
+            response = await llm.ainvoke([HumanMessage(content=scoring_prompt)])
+            raw = _extract_llm_text(response.content).strip()
+
+            # Strip markdown code fences if LLM adds them
+            if raw.startswith("```"):
+                raw = raw.split("\n", 1)[-1].rsplit("```", 1)[0].strip()
+
+            import json as _json
+            score_data = _json.loads(raw)
+
+            # Persist to DB if we have an appCvId
+            if app_cv_id:
+                try:
+                    await recruitment_api.evaluate_application(
+                        app_cv_id=app_cv_id,
+                        position_id=state["position_id"],
+                        technical_score=score_data.get("technicalScore", 0),
+                        experience_score=score_data.get("experienceScore", 0),
+                        overall_status=score_data.get("overallStatus", "POOR_FIT"),
+                        feedback=score_data.get("feedback", ""),
+                        skill_match=score_data.get("skillMatch", ""),
+                        skill_miss=score_data.get("skillMiss", ""),
+                        learning_path=score_data.get("learningPath"),
+                        session_id=state["session_id"],
+                    )
+                    saved_count += 1
+                except Exception as save_err:
+                    print(f"[Scoring] Failed to save score for {name}: {save_err}")
+
+            status_icon = {
+                "EXCELLENT_MATCH": "🌟",
+                "GOOD_MATCH": "✅",
+                "POTENTIAL": "🟡",
+                "POOR_FIT": "❌",
+            }.get(score_data.get("overallStatus", ""), "•")
+
+            scoring_results.append(
+                f"**{name}** {status_icon}\n"
+                f"• Kỹ thuật: {score_data.get('technicalScore')}/100 | "
+                f"Kinh nghiệm: {score_data.get('experienceScore')}/100\n"
+                f"• Nhận xét: {score_data.get('feedback')}\n"
+                f"• Phù hợp: {score_data.get('skillMatch')}\n"
+                f"• Còn thiếu: {score_data.get('skillMiss')}"
+            )
+        except Exception as e:
+            scoring_results.append(f"**{name}**: Lỗi khi chấm điểm — {str(e)}")
+            print(f"[Scoring] Error scoring {name}: {e}")
+
+    summary_header = (
+        f"📊 **Kết quả chấm điểm {len(scoring_results)} ứng viên** "
+        f"(đã lưu {saved_count}/{len(scoring_results)} vào hệ thống):\n"
+    )
+    state["llm_response"] = summary_header + "\n\n".join(scoring_results)
+    state["pending_scoring_candidates"] = None
+    state["function_calls"] = [{"name": "hr_scoring", "candidates_scored": len(scoring_results), "saved": saved_count}]
     return state
 
 
@@ -687,6 +859,7 @@ def create_hr_graph():
     workflow.add_node("retrieve_hr_context",     retrieve_hr_context_node)
     workflow.add_node("build_hr_prompts",        build_hr_prompts_node)
     workflow.add_node("llm_hr_reasoning",        llm_hr_reasoning_node)
+    workflow.add_node("hr_scoring",              hr_scoring_node)
     workflow.add_node("save_hr_turn",            save_hr_turn_node)
     workflow.add_node("format_hr_response",      format_hr_response_node)
 
@@ -695,7 +868,19 @@ def create_hr_graph():
     workflow.add_edge("load_candidate_scope",    "retrieve_hr_context")
     workflow.add_edge("retrieve_hr_context",     "build_hr_prompts")
     workflow.add_edge("build_hr_prompts",        "llm_hr_reasoning")
-    workflow.add_edge("llm_hr_reasoning",        "save_hr_turn")
+
+    # Conditional routing: if scoring was triggered, go to hr_scoring_node first
+    def _route_after_reasoning(state: HRChatState) -> str:
+        if state.get("pending_scoring_candidates"):
+            return "hr_scoring"
+        return "save_hr_turn"
+
+    workflow.add_conditional_edges(
+        "llm_hr_reasoning",
+        _route_after_reasoning,
+        {"hr_scoring": "hr_scoring", "save_hr_turn": "save_hr_turn"}
+    )
+    workflow.add_edge("hr_scoring",              "save_hr_turn")
     workflow.add_edge("save_hr_turn",            "format_hr_response")
     workflow.add_edge("format_hr_response",      END)
 
@@ -719,24 +904,25 @@ class HRChatbot:
         mode: Literal["HR_MODE", "CANDIDATE_MODE"]
     ) -> Dict[str, Any]:
         initial_state: HRChatState = {
-            "query":                query,
-            "hr_id":                hr_id,
-            "session_id":           session_id,
-            "position_id":          position_id,
-            "mode":                 mode,
-            "is_cv_count_query":    False,
-            "sql_metadata":         [],
-            "cv_id_to_meta":        {},
-            "pending_emails":       None,
-            "conversation_history": [],
-            "cv_context":           [],
-            "retrieval_stats":      {},
-            "system_prompt":        "",
-            "user_prompt":          "",
-            "llm_response":         "",
-            "function_calls":       None,
-            "final_answer":         "",
-            "metadata":             {},
+            "query":                       query,
+            "hr_id":                       hr_id,
+            "session_id":                  session_id,
+            "position_id":                 position_id,
+            "mode":                        mode,
+            "is_cv_count_query":           False,
+            "sql_metadata":                [],
+            "cv_id_to_meta":               {},
+            "pending_emails":              None,
+            "pending_scoring_candidates":  None,
+            "conversation_history":        [],
+            "cv_context":                  [],
+            "retrieval_stats":             {},
+            "system_prompt":               "",
+            "user_prompt":                 "",
+            "llm_response":                "",
+            "function_calls":              None,
+            "final_answer":                "",
+            "metadata":                    {},
         }
 
         final_state = await self.graph.ainvoke(initial_state, {"recursion_limit": 50})
